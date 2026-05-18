@@ -1,0 +1,13 @@
+name: opal
+version: 0.1.0
+
+authors:
+  - Mike Oz <kozloffsky@hotmail.com>
+
+targets:
+  opal:
+    main: src/opal.cr
+
+crystal: ">= 1.18.2"
+
+license: MIT
