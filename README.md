@@ -1,32 +1,24 @@
 # Opal
 
-A high-performance HTTP router and lightweight API framework for Crystal.
+Opal is a high-performance HTTP router and lightweight API layer for Crystal.
 
-A high-performance HTTP router for Crystal with Trie-based route matching and URL parameter support.
+It is built on top of Crystal's standard `HTTP::Handler` stack and focuses on:
 
-## Features
+- trie-based path matching
+- path parameter extraction
+- method-aware routing with `404` / `405` handling
+- lightweight API handlers via `LF::APIRoute`
+- small dependency injection container for request-scoped services
 
-- ⚡ **Fast Route Matching**: O(k) complexity where k is the path length (not dependent on number of routes)
-- 🎯 **URL Parameters**: Dynamic path segments using `:param_name` syntax
-- 🔀 **Multiple Parameters**: Support for multiple params per route
-- 🌐 **HTTP Method Routing**: GET, POST, PUT, DELETE, PATCH on the same path
-- ✅ **Automatic Status Codes**: 404 Not Found, 405 Method Not Allowed
-- 📊 **Priority Matching**: Exact paths take priority over parameter matches
-- 🔧 **Zero Dependencies**: Uses only Crystal stdlib
+## Status
 
-## Architecture
+The router core, `APIRoute`, and DI container are covered by specs in this repository.
 
-The router uses a **Radix Tree (Trie)** data structure for efficient route matching:
+Current verified test status:
 
-1. **Trie Module**: Core radix tree implementation
-   - `Node`: Represents a URL segment in the tree
-   - `MatchResult`: Contains matched node and extracted parameters
-   - `Handler`: Proc that receives context and route parameters
-
-2. **LF Module**: HTTP routing layer
-   - `Router`: Main routing class with Trie-based matching
-   - `LFApi`: HTTP::Handler wrapper for middleware integration
-   - Convenience methods: `get()`, `post()`, `put()`, `delete()`, `patch()`
+- `107 examples`
+- `0 failures`
+- `0 errors`
 
 ## Installation
 
@@ -34,215 +26,326 @@ Add this to your application's `shard.yml`:
 
 ```yaml
 dependencies:
-  ametist:
+  opal:
     github: your-username/opal
 ```
 
-## Usage
+Then install shards:
 
-### Basic Router
+```bash
+shards install
+```
+
+## Core API
+
+Opal exposes three main layers:
+
+1. `LF::Router`
+   Low-level router with explicit handlers.
+
+2. `LF::LFApi`
+   `HTTP::Handler` wrapper around a router with consistent HTTP error handling.
+
+3. `LF::APIRoute`
+   Macro-based API route definition with parameter binding and optional DI lookup.
+
+## Basic Router
 
 ```crystal
 require "opal"
 
 router = LF::Router.new
 
-# Simple route
-router.get("/") do |ctx, params|
-  ctx.response.content_type = "text/plain"
-  ctx.response.print "Welcome!"
+router.get("/") do |ctx, _params|
+  ctx.response.print "Welcome"
 end
 
-# Route with parameter
 router.get("/users/:id") do |ctx, params|
-  user_id = params["id"]
-  ctx.response.print "User ID: #{user_id}"
+  ctx.response.print "User #{params["id"]}"
 end
 
-# Multiple parameters
-router.get("/posts/:post_id/comments/:comment_id") do |ctx, params|
-  ctx.response.print "Post: #{params["post_id"]}, Comment: #{params["comment_id"]}"
-end
-
-# Different HTTP methods
-router.post("/users") do |ctx, params|
+router.post("/users") do |ctx, _params|
   ctx.response.status = HTTP::Status::CREATED
-  ctx.response.print "User created"
+  ctx.response.print "created"
 end
 
-router.delete("/users/:id") do |ctx, params|
-  ctx.response.print "User #{params["id"]} deleted"
-end
+server = HTTP::Server.new([
+  HTTP::LogHandler.new,
+  router,
+])
 
-# Start server
-server = HTTP::Server.new([router])
 server.bind_tcp(8080)
 server.listen
 ```
 
-### Using LFApi Wrapper
+## LFApi
+
+`LF::LFApi` wraps `LF::Router` and converts `LF::BadRequest`, `LF::NotFound`, and other internal exceptions into HTTP responses.
 
 ```crystal
+require "opal"
+
 app = LF::LFApi.new do |router|
-  router.get("/hello") do |ctx, params|
-    ctx.response.print "Hello World!"
-  end
-  
   router.get("/hello/:name") do |ctx, params|
-    ctx.response.print "Hello, #{params["name"]}!"
+    ctx.response.print "Hello, #{params["name"]}"
   end
 end
 
-# Use as HTTP::Handler
-server = HTTP::Server.new([HTTP::LogHandler.new, app])
+server = HTTP::Server.new([
+  HTTP::LogHandler.new,
+  app,
+])
+
 server.bind_tcp(8080)
 server.listen
 ```
 
-### JSON Responses
+## APIRoute
+
+`LF::APIRoute` is the higher-level API surface. It supports:
+
+- route params
+- query params
+- `HTTP::Request`
+- DI lookup from `context.state`
+- JSON body parsing for `JSON::Serializable`
+- `LF::Response` return types such as `LF::JSONResponse`
+
+### Example
 
 ```crystal
-class User
+require "opal"
+
+class UserPayload
   include JSON::Serializable
-  property id : Int32
+
   property name : String
 end
 
-router.get("/api/users/:id") do |ctx, params|
-  user = User.new(
-    id: params["id"].to_i,
-    name: "John Doe"
-  )
-  
-  ctx.response.content_type = "application/json"
-  user.to_json(ctx.response)
+class UserView
+  include JSON::Serializable
+
+  property id : Int32
+  property name : String
+
+  def initialize(@id : Int32, @name : String)
+  end
+end
+
+class UsersApi
+  include LF::APIRoute
+
+  @[LF::APIRoute::Get("/users/:id")]
+  def show(id : Int32)
+    LF::JSONResponse.create(UserView.new(id, "User #{id}"))
+  end
+
+  @[LF::APIRoute::Post("/users")]
+  def create(payload : UserPayload)
+    LF::JSONResponse.create(UserView.new(1, payload.name))
+  end
+end
+
+app = LF::LFApi.new do |router|
+  UsersApi.new.setup_routes(router)
 end
 ```
 
-### All HTTP Methods
+## DI Container
+
+The built-in DI container lives under `LF::DI`.
+
+### Registering beans manually
 
 ```crystal
-router.get("/resource/:id") { |ctx, params| ... }
-router.post("/resource") { |ctx, params| ... }
-router.put("/resource/:id") { |ctx, params| ... }
-router.patch("/resource/:id") { |ctx, params| ... }
-router.delete("/resource/:id") { |ctx, params| ... }
+root = LF::DI::AnnotationApplicationContext.new
+
+root.add_bean(name: "greeting_service", scope: "request", type: GreetingService) do |_ctx|
+  GreetingService.new("Hello")
+end
+```
+
+### Request scope
+
+`LF::APIRoute` expects `context.state` to contain an `LF::DI::AnnotationApplicationContext`.
+
+A common pattern is to create request-scoped child contexts in middleware:
+
+```crystal
+class RequestScopeHandler
+  include HTTP::Handler
+
+  def initialize(@root : LF::DI::AnnotationApplicationContext)
+  end
+
+  def call(context)
+    scope = @root.enter_scope("request")
+    context.state = scope
+    call_next(context)
+  ensure
+    scope.exit
+  end
+end
+```
+
+### Autowired services
+
+You can also declare services with `@[LF::DI::Service]` and register `LF::DI::AutowiredApplicationConfig`.
+
+Autowiring currently works like this:
+
+1. resolve by argument name and type
+2. if not found, fall back to type lookup
+3. if multiple beans of the same type exist, raise `LF::DI::AmbiguousBeanError`
+
+### Lifecycle callbacks
+
+Beans can opt into lifecycle hooks by implementing:
+
+- `LF::DI::Initializable#after_properties_set`
+- `LF::DI::Disposable#destroy`
+
+Lifecycle behavior:
+
+- init runs after instance creation and before cache commit
+- init runs exactly once per created instance
+- child-owned disposable instances are destroyed on `scope.exit`
+- root-owned disposable singletons are destroyed on `root.shutdown`
+- destroy order is reverse creation order within the owning context
+
+Example:
+
+```crystal
+class RequestResource
+  include LF::DI::Initializable
+  include LF::DI::Disposable
+
+  def after_properties_set : Nil
+    puts "resource ready"
+  end
+
+  def destroy : Nil
+    puts "resource cleaned up"
+  end
+end
+
+root = LF::DI::AnnotationApplicationContext.new
+
+root.add_bean(name: "request_resource", scope: "request", type: RequestResource) do |_ctx|
+  RequestResource.new
+end
+
+scope = root.enter_scope("request")
+scope.get_bean("request_resource", RequestResource)
+scope.exit
+
+root.shutdown
+```
+
+## Integration Pattern
+
+Opal is easiest to integrate anywhere that already uses Crystal's `HTTP::Handler` chain.
+
+That includes:
+
+- plain `HTTP::Server`
+- custom middleware stacks
+- frameworks that expose handler-compatible extension points
+
+Minimal pattern:
+
+```crystal
+server = HTTP::Server.new([
+  HTTP::LogHandler.new,
+  SomeMiddleware.new,
+  app_or_router,
+])
+```
+
+Where `app_or_router` can be either:
+
+- `LF::Router`
+- `LF::LFApi`
+
+## Examples
+
+The repository includes these examples:
+
+- [examples/router_example.cr](/home/mike/opal/examples/router_example.cr)
+  Basic router + JSON response example.
+
+- [examples/api_route_di_example.cr](/home/mike/opal/examples/api_route_di_example.cr)
+  `APIRoute` with request-scoped DI and `LF::JSONResponse`.
+
+- [examples/di_lifecycle_example.cr](/home/mike/opal/examples/di_lifecycle_example.cr)
+  Standalone lifecycle example showing `after_properties_set`, `exit`, and `shutdown`.
+
+- [examples/handler_stack_example.cr](/home/mike/opal/examples/handler_stack_example.cr)
+  Integration through a normal `HTTP::Handler` middleware stack.
+
+- [examples/todo_api_sqlite](/home/mike/opal/examples/todo_api_sqlite/README.md)
+  Standalone Todo API project with SQLite persistence.
+
+Run them with:
+
+```bash
+crystal run examples/router_example.cr
+crystal run examples/api_route_di_example.cr
+crystal run examples/handler_stack_example.cr
+```
+
+For the standalone SQLite Todo API example, run commands from `examples/todo_api_sqlite`:
+
+```bash
+shards install
+crystal run src/todo_api_sqlite_example.cr
 ```
 
 ## Route Matching Rules
 
-1. **Exact matches take priority** over parameter matches:
-   ```crystal
-   router.get("/users/list") { ... }  # Matches /users/list
-   router.get("/users/:id") { ... }    # Matches /users/123, /users/456, etc.
-   ```
+Current route behavior covered by specs:
 
-2. **Parameters must have values** - empty segments won't match:
-   ```crystal
-   # /users/:id matches /users/123
-   # /users/:id does NOT match /users/ or /users
-   ```
+- exact matches win over parameter matches
+- root path `/` is supported
+- trailing slashes are normalized
+- repeated slashes are normalized
+- extra path segments do not match
+- multiple HTTP methods may share the same path
+- unsupported methods return `405 Method Not Allowed`
 
-3. **Multiple methods on same path** are supported:
-   ```crystal
-   router.get("/data") { ... }
-   router.post("/data") { ... }
-   # GET /data returns 200, POST /data returns 200
-   # PUT /data returns 405 Method Not Allowed
-   ```
+## Responses
 
-## Performance
+Opal includes these response helpers:
 
-The Trie-based approach provides **O(k)** lookup time where k is the path length:
+- `LF::TextResponse.create("...")`
+- `LF::JSONResponse.create(serializable_object)`
 
-- **Not affected** by the number of routes in your application
-- **Constant time** for each path segment
-- **Memory efficient** due to prefix compression
-- **Fast parameter extraction** during traversal
+If an `APIRoute` method returns an `LF::Response`, Opal writes it to the HTTP response.
 
-Compared to linear scanning (O(n) where n = number of routes), this is significantly faster for applications with many routes.
+## Error Types
 
-## HTTP Status Codes
+### HTTP layer
 
-The router automatically handles:
+- `LF::BadRequest`
+- `LF::NotFound`
+- `LF::InternalServerError`
 
-- `200 OK` - Route found and handler executed
-- `404 Not Found` - No matching route
-- `405 Method Not Allowed` - Route exists but method not registered
+### DI layer
+
+- `LF::DI::BeanNotFoundError`
+- `LF::DI::BeanTypeMismatchError`
+- `LF::DI::DuplicateBeanError`
+- `LF::DI::ScopeMismatchError`
+- `LF::DI::AmbiguousBeanError`
 
 ## Testing
 
-```crystal
-crystal spec spec/opal_spec.cr
-```
-
-## Example
-
-See `examples/router_example.cr` for a complete working example.
+Run the full test suite:
 
 ```bash
-crystal run examples/router_example.cr
+crystal spec
 ```
-
-## API Reference
-
-### Trie::Node
-
-```crystal
-# Add a route to the tree
-add_route(path : String, handler : Handler, methods : Set(String) = Set{"GET"})
-
-# Search for a matching route
-search(path : String) : MatchResult
-```
-
-### LF::Router
-
-```crystal
-# HTTP method helpers
-get(path : String, &handler : HTTP::Server::Context, Hash(String, String) -> Nil)
-post(path : String, &handler : HTTP::Server::Context, Hash(String, String) -> Nil)
-put(path : String, &handler : HTTP::Server::Context, Hash(String, String) -> Nil)
-delete(path : String, &handler : HTTP::Server::Context, Hash(String, String) -> Nil)
-patch(path : String, &handler : HTTP::Server::Context, Hash(String, String) -> Nil)
-
-# Generic add method
-add(path : String, methods : Set(String) = Set{"GET"}, &handler)
-
-# Call method (implements HTTP::Handler)
-call(context : HTTP::Server::Context)
-```
-
-### LF::LFApi
-
-```crystal
-# Initialize with block
-LFApi.new(&block : Router -> Nil)
-
-# Call method (implements HTTP::Handler)
-call(context : HTTP::Server::Context)
-```
-
-## Future Enhancements
-
-Potential future features (not yet implemented):
-
-- Wildcard routes (`/files/*filepath`)
-- Route groups with prefixes
-- Middleware support per route
-- Query string parameter helpers
-- Request body parsing helpers
-- FastAPI-style automatic parameter injection (experimental)
 
 ## License
 
-See LICENSE file.
-
-## Contributing
-
-1. Fork it
-2. Create your feature branch (`git checkout -b my-new-feature`)
-3. Run tests (`crystal spec`)
-4. Commit your changes (`git commit -am 'Add some feature'`)
-5. Push to the branch (`git push origin my-new-feature`)
-6. Create a new Pull Request
+See [LICENSE](/home/mike/opal/LICENSE).

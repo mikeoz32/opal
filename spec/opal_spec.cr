@@ -54,8 +54,370 @@ class TestResourceJsonResponse
   end
 end
 
+class TestCounterService
+  getter id : Int32
+
+  @@next_id = 0
+
+  def initialize
+    @@next_id += 1
+    @id = @@next_id
+  end
+
+  def self.reset
+    @@next_id = 0
+  end
+end
+
+class TestGreetingService
+  getter message : String
+
+  def initialize(@message : String)
+  end
+end
+
+class TestConfigWithBeans
+  include LF::DI::ApplicationConfig
+
+  @[LF::DI::Bean]
+  def greeting_service : TestGreetingService
+    TestGreetingService.new("hello")
+  end
+
+  @[LF::DI::Bean(name: "custom_counter")]
+  def counter_service : TestCounterService
+    TestCounterService.new
+  end
+end
+
+@[LF::DI::Service]
+class AutoLeafService
+  def value : String
+    "leaf"
+  end
+end
+
+@[LF::DI::Service]
+class AutoParentService
+  getter auto_leaf_service : AutoLeafService
+
+  def initialize(@auto_leaf_service : AutoLeafService)
+  end
+
+  def value : String
+    "parent->#{auto_leaf_service.value}"
+  end
+end
+
+@[LF::DI::Service]
+class AutoMiddleService
+  getter auto_leaf_service : AutoLeafService
+
+  def initialize(@auto_leaf_service : AutoLeafService)
+  end
+
+  def value : String
+    "middle->#{auto_leaf_service.value}"
+  end
+end
+
+@[LF::DI::Service]
+class AutoTopService
+  getter auto_parent_service : AutoParentService
+  getter auto_middle_service : AutoMiddleService
+
+  def initialize(@auto_parent_service : AutoParentService, @auto_middle_service : AutoMiddleService)
+  end
+
+  def value : String
+    "#{auto_parent_service.value}|#{auto_middle_service.value}"
+  end
+end
+
+@[LF::DI::Service]
+class AutoMismatchedArgService
+  def initialize(@leaf : AutoLeafService)
+  end
+
+  def value : String
+    @leaf.value
+  end
+end
+
+class TestLifecycleBean
+  include LF::DI::Initializable
+  include LF::DI::Disposable
+
+  getter init_called = false
+  getter destroy_called = false
+
+  def after_properties_set : Nil
+    @init_called = true
+  end
+
+  def destroy : Nil
+    @destroy_called = true
+  end
+end
+
+class TestInitCounterBean
+  include LF::DI::Initializable
+
+  @@init_calls = 0
+
+  def self.reset
+    @@init_calls = 0
+  end
+
+  def self.init_calls
+    @@init_calls
+  end
+
+  def after_properties_set : Nil
+    @@init_calls += 1
+  end
+end
+
+class TestFailingInitBean
+  include LF::DI::Initializable
+
+  @@instances = 0
+
+  def self.reset
+    @@instances = 0
+  end
+
+  def self.instances
+    @@instances
+  end
+
+  def initialize
+    @@instances += 1
+  end
+
+  def after_properties_set : Nil
+    raise "init boom"
+  end
+end
+
+class TestDisposableCounterBean
+  include LF::DI::Disposable
+
+  @@destroy_calls = 0
+
+  def self.reset
+    @@destroy_calls = 0
+  end
+
+  def self.destroy_calls
+    @@destroy_calls
+  end
+
+  def destroy : Nil
+    @@destroy_calls += 1
+  end
+end
+
+class TestFailingDisposableBean
+  include LF::DI::Disposable
+
+  def destroy : Nil
+    raise "destroy boom"
+  end
+end
+
+class TestOrderedDisposableBean
+  include LF::DI::Disposable
+
+  @@destroy_order = [] of String
+
+  def self.reset
+    @@destroy_order = [] of String
+  end
+
+  def self.destroy_order
+    @@destroy_order
+  end
+
+  def initialize(@label : String)
+  end
+
+  def destroy : Nil
+    @@destroy_order << @label
+  end
+end
+
+@[LF::DI::Service]
+class AutoLifecycleLeafService
+  include LF::DI::Initializable
+  include LF::DI::Disposable
+
+  @@init_calls = 0
+  @@destroy_calls = 0
+  @@lifecycle_trace = [] of String
+
+  def self.reset
+    @@init_calls = 0
+    @@destroy_calls = 0
+    @@lifecycle_trace = [] of String
+  end
+
+  def self.init_calls
+    @@init_calls
+  end
+
+  def self.destroy_calls
+    @@destroy_calls
+  end
+
+  def self.lifecycle_trace
+    @@lifecycle_trace
+  end
+
+  def after_properties_set : Nil
+    @@init_calls += 1
+  end
+
+  def destroy : Nil
+    @@destroy_calls += 1
+    @@lifecycle_trace << "leaf"
+  end
+end
+
+@[LF::DI::Service]
+class AutoLifecycleParentService
+  include LF::DI::Initializable
+  include LF::DI::Disposable
+
+  getter auto_lifecycle_leaf_service : AutoLifecycleLeafService
+
+  @@init_calls = 0
+  @@destroy_calls = 0
+
+  def self.reset
+    @@init_calls = 0
+    @@destroy_calls = 0
+  end
+
+  def self.init_calls
+    @@init_calls
+  end
+
+  def self.destroy_calls
+    @@destroy_calls
+  end
+
+  def initialize(@auto_lifecycle_leaf_service : AutoLifecycleLeafService)
+  end
+
+  def after_properties_set : Nil
+    @@init_calls += 1
+  end
+
+  def destroy : Nil
+    @@destroy_calls += 1
+    AutoLifecycleLeafService.lifecycle_trace << "parent"
+  end
+end
+
+class TestDependentConfig
+  include LF::DI::ApplicationConfig
+
+  @[LF::DI::Bean]
+  def greeting_service : TestGreetingService
+    TestGreetingService.new("hello")
+  end
+
+  @[LF::DI::Bean]
+  def decorated_message(greeting_service : TestGreetingService) : String
+    "#{greeting_service.message}, world"
+  end
+end
+
+class TestTypeFallbackConfig
+  include LF::DI::ApplicationConfig
+
+  @[LF::DI::Bean]
+  def fallback_greeting : TestGreetingService
+    TestGreetingService.new("fallback")
+  end
+
+  @[LF::DI::Bean]
+  def decorated_message(greeting_service : TestGreetingService) : String
+    "#{greeting_service.message}, world"
+  end
+end
+
+class TestNamePreferredConfig
+  include LF::DI::ApplicationConfig
+
+  @[LF::DI::Bean]
+  def greeting_service : TestGreetingService
+    TestGreetingService.new("named")
+  end
+
+  @[LF::DI::Bean]
+  def alternate_greeting : TestGreetingService
+    TestGreetingService.new("alternate")
+  end
+
+  @[LF::DI::Bean]
+  def decorated_message(greeting_service : TestGreetingService) : String
+    greeting_service.message
+  end
+end
+
+class TestTypeMismatchFallbackConfig
+  include LF::DI::ApplicationConfig
+
+  @[LF::DI::Bean]
+  def greeting_service : String
+    "wrong type"
+  end
+
+  @[LF::DI::Bean]
+  def backup_greeting : TestGreetingService
+    TestGreetingService.new("backup")
+  end
+
+  @[LF::DI::Bean]
+  def decorated_message(greeting_service : TestGreetingService) : String
+    greeting_service.message
+  end
+end
+
+class TestAmbiguousTypeFallbackConfig
+  include LF::DI::ApplicationConfig
+
+  @[LF::DI::Bean]
+  def primary_greeting : TestGreetingService
+    TestGreetingService.new("primary")
+  end
+
+  @[LF::DI::Bean]
+  def secondary_greeting : TestGreetingService
+    TestGreetingService.new("secondary")
+  end
+
+  @[LF::DI::Bean]
+  def decorated_message(greeting : TestGreetingService) : String
+    greeting.message
+  end
+end
+
 describe "Trie" do
   describe "Node" do
+    it "matches the root route" do
+      t = Trie::Node.new
+      dummy_handler = ->(ctx : HTTP::Server::Context, params : Hash(String, String)) { }
+
+      t.add_route("/", dummy_handler)
+
+      result = t.search("/")
+      result.node.should_not be_nil
+      result.params.should be_empty
+    end
+
     it "adds and searches exact routes" do
       t = Trie::Node.new
       dummy_handler = ->(ctx : HTTP::Server::Context, params : Hash(String, String)) { }
@@ -139,10 +501,662 @@ describe "Trie" do
       result.node.should_not be_nil
       result.params["id"].should eq("123")
     end
+
+    it "preserves parameter names across sibling dynamic routes" do
+      t = Trie::Node.new
+      dummy_handler = ->(ctx : HTTP::Server::Context, params : Hash(String, String)) { }
+
+      t.add_route("/users/:id", dummy_handler)
+      t.add_route("/users/:name/details", dummy_handler)
+
+      result = t.search("/users/alice")
+      result.node.should_not be_nil
+      result.params["id"].should eq("alice")
+
+      result = t.search("/users/bob/details")
+      result.node.should_not be_nil
+      result.params["name"].should eq("bob")
+    end
+
+    it "matches routes with trailing slashes" do
+      t = Trie::Node.new
+      dummy_handler = ->(ctx : HTTP::Server::Context, params : Hash(String, String)) { }
+
+      t.add_route("/users/:id", dummy_handler)
+      t.add_route("/reports/daily", dummy_handler)
+
+      result = t.search("/users/42/")
+      result.node.should_not be_nil
+      result.params["id"].should eq("42")
+
+      result = t.search("/reports/daily/")
+      result.node.should_not be_nil
+      result.params.should be_empty
+    end
+
+    it "does not match paths with extra segments" do
+      t = Trie::Node.new
+      dummy_handler = ->(ctx : HTTP::Server::Context, params : Hash(String, String)) { }
+
+      t.add_route("/users/:id", dummy_handler)
+      t.add_route("/reports/daily", dummy_handler)
+
+      t.search("/users/42/details").node.should be_nil
+      t.search("/reports/daily/archive").node.should be_nil
+    end
+
+    it "normalizes repeated slashes in paths" do
+      t = Trie::Node.new
+      dummy_handler = ->(ctx : HTTP::Server::Context, params : Hash(String, String)) { }
+
+      t.add_route("/users/:id", dummy_handler)
+      t.add_route("/reports/daily", dummy_handler)
+
+      result = t.search("//users//42//")
+      result.node.should_not be_nil
+      result.params["id"].should eq("42")
+
+      result = t.search("//reports///daily")
+      result.node.should_not be_nil
+      result.params.should be_empty
+    end
+
+    it "prioritizes exact top-level routes over parameter routes" do
+      t = Trie::Node.new
+      dummy_handler = ->(ctx : HTTP::Server::Context, params : Hash(String, String)) { }
+
+      t.add_route("/:page", dummy_handler)
+      t.add_route("/about", dummy_handler)
+
+      result = t.search("/about")
+      result.node.should_not be_nil
+      result.params.should be_empty
+
+      result = t.search("/contact")
+      result.node.should_not be_nil
+      result.params["page"].should eq("contact")
+    end
+
+    it "prioritizes exact nested routes over parameter routes at the same depth" do
+      t = Trie::Node.new
+      dummy_handler = ->(ctx : HTTP::Server::Context, params : Hash(String, String)) { }
+
+      t.add_route("/files/:id/edit", dummy_handler)
+      t.add_route("/files/new/edit", dummy_handler)
+
+      result = t.search("/files/new/edit")
+      result.node.should_not be_nil
+      result.params.should be_empty
+
+      result = t.search("/files/123/edit")
+      result.node.should_not be_nil
+      result.params["id"].should eq("123")
+    end
+
+    it "backtracks across multiple parameter children at the same depth" do
+      t = Trie::Node.new
+      dummy_handler = ->(ctx : HTTP::Server::Context, params : Hash(String, String)) { }
+
+      t.add_route("/users/:id/profile", dummy_handler)
+      t.add_route("/users/:name/settings", dummy_handler)
+
+      result = t.search("/users/alice/settings")
+      result.node.should_not be_nil
+      result.params["name"].should eq("alice")
+
+      result = t.search("/users/42/profile")
+      result.node.should_not be_nil
+      result.params["id"].should eq("42")
+    end
+  end
+end
+
+describe "LF::DI" do
+  it "registers and resolves singleton beans" do
+    TestCounterService.reset
+    context = LF::DI::AnnotationApplicationContext.new
+
+    context.add_bean(name: "counter", type: TestCounterService) do |_ctx|
+      TestCounterService.new
+    end
+
+    first = context.get_bean("counter", TestCounterService)
+    second = context.get_bean("counter", TestCounterService)
+
+    first.should be(second)
+    first.id.should eq(1)
+  end
+
+  it "creates a new instance for prototype beans" do
+    TestCounterService.reset
+    context = LF::DI::AnnotationApplicationContext.new
+
+    context.add_bean(name: "counter", scope: "prototype", type: TestCounterService) do |_ctx|
+      TestCounterService.new
+    end
+
+    first = context.get_bean("counter", TestCounterService)
+    second = context.get_bean("counter", TestCounterService)
+
+    first.should_not be(second)
+    first.id.should eq(1)
+    second.id.should eq(2)
+  end
+
+  it "resolves request-scoped beans from a parent context" do
+    context = LF::DI::AnnotationApplicationContext.new
+
+    context.add_bean(name: "greeting", scope: "request", type: TestGreetingService) do |_ctx|
+      TestGreetingService.new("from parent")
+    end
+
+    child = context.enter_scope("request")
+    bean = child.get_bean("greeting", TestGreetingService)
+
+    bean.message.should eq("from parent")
+  end
+
+  it "does not allow child contexts to register beans" do
+    context = LF::DI::AnnotationApplicationContext.new
+    child = context.enter_scope("request")
+
+    expect_raises(LF::DI::ChildContextMutationError, "Child context can not add beans") do
+      child.add_bean(name: "greeting", type: TestGreetingService) do |_ctx|
+        TestGreetingService.new("nope")
+      end
+    end
+  end
+
+  it "clears cached instances on exit for child contexts" do
+    TestCounterService.reset
+    context = LF::DI::AnnotationApplicationContext.new
+
+    context.add_bean(name: "counter", scope: "request", type: TestCounterService) do |_ctx|
+      TestCounterService.new
+    end
+
+    child = context.enter_scope("request")
+    first = child.get_bean("counter", TestCounterService)
+    second = child.get_bean("counter", TestCounterService)
+    second.should be(first)
+
+    child.exit
+
+    third = child.get_bean("counter", TestCounterService)
+    third.should_not be(first)
+    third.id.should eq(2)
+  end
+
+  it "raises when a bean is missing" do
+    context = LF::DI::AnnotationApplicationContext.new
+
+    expect_raises(LF::DI::BeanNotFoundError, "Bean not found: name=missing, type=TestGreetingService") do
+      context.get_bean("missing", TestGreetingService)
+    end
+  end
+
+  it "registers bean factories from ApplicationConfig" do
+    TestCounterService.reset
+    context = LF::DI::AnnotationApplicationContext.new
+
+    context.register(TestConfigWithBeans.new)
+
+    greeting = context.get_bean("greeting_service", TestGreetingService)
+    counter = context.get_bean("custom_counter", TestCounterService)
+
+    greeting.message.should eq("hello")
+    counter.id.should eq(1)
+  end
+
+  it "resolves bean factory dependencies from ApplicationConfig" do
+    context = LF::DI::AnnotationApplicationContext.new
+
+    context.register(TestDependentConfig.new)
+
+    context.get_bean("decorated_message", String).should eq("hello, world")
+  end
+
+  it "falls back to resolving bean factory dependencies by type when name lookup misses" do
+    context = LF::DI::AnnotationApplicationContext.new
+
+    context.register(TestTypeFallbackConfig.new)
+
+    context.get_bean("decorated_message", String).should eq("fallback, world")
+  end
+
+  it "prefers name-based bean resolution over type fallback" do
+    context = LF::DI::AnnotationApplicationContext.new
+
+    context.register(TestNamePreferredConfig.new)
+
+    context.get_bean("decorated_message", String).should eq("named")
+  end
+
+  it "falls back to type-based resolution when name lookup finds the wrong type" do
+    context = LF::DI::AnnotationApplicationContext.new
+
+    context.register(TestTypeMismatchFallbackConfig.new)
+
+    context.get_bean("decorated_message", String).should eq("backup")
+  end
+
+  it "allows prototype beans to be resolved from a different child scope" do
+    TestCounterService.reset
+    context = LF::DI::AnnotationApplicationContext.new
+
+    context.add_bean(name: "counter", scope: "prototype", type: TestCounterService) do |_ctx|
+      TestCounterService.new
+    end
+
+    child = context.enter_scope("request")
+    first = child.get_bean("counter", TestCounterService)
+    second = child.get_bean("counter", TestCounterService)
+
+    first.should_not be(second)
+    first.id.should eq(1)
+    second.id.should eq(2)
+  end
+
+  it "raises on scope mismatch for non-prototype beans" do
+    context = LF::DI::AnnotationApplicationContext.new
+
+    context.add_bean(name: "greeting", scope: "request", type: TestGreetingService) do |_ctx|
+      TestGreetingService.new("scoped")
+    end
+
+    child = context.enter_scope("session")
+
+    expect_raises(LF::DI::ScopeMismatchError, "Scope mismatch: name=greeting, bean_scope=request, caller_scope=session") do
+      child.get_bean("greeting", TestGreetingService)
+    end
+  end
+
+  it "does not allow entering a singleton child scope" do
+    context = LF::DI::AnnotationApplicationContext.new
+
+    expect_raises(LF::DI::InvalidChildScopeError, "Singleton scope is not allowed for child contexts") do
+      context.enter_scope("singleton")
+    end
+  end
+
+  it "supports resolving beans through to_t" do
+    context = LF::DI::AnnotationApplicationContext.new
+
+    context.add_bean(name: "greeting", type: TestGreetingService) do |_ctx|
+      TestGreetingService.new("typed")
+    end
+
+    context.to_t("greeting", TestGreetingService).message.should eq("typed")
+  end
+
+  it "raises on duplicate bean names" do
+    context = LF::DI::AnnotationApplicationContext.new
+
+    context.add_bean(name: "greeting", type: TestGreetingService) do |_ctx|
+      TestGreetingService.new("first")
+    end
+
+    expect_raises(LF::DI::DuplicateBeanError, "Bean already registered: name=greeting") do
+      context.add_bean(name: "greeting", type: TestGreetingService) do |_ctx|
+        TestGreetingService.new("second")
+      end
+    end
+  end
+
+  it "raises on bean type mismatch" do
+    context = LF::DI::AnnotationApplicationContext.new
+
+    context.add_bean(name: "greeting", type: TestGreetingService) do |_ctx|
+      TestGreetingService.new("hello")
+    end
+
+    expect_raises(LF::DI::BeanTypeMismatchError, "Bean type mismatch: name=greeting, expected=String") do
+      context.get_bean("greeting", String)
+    end
+  end
+
+  it "raises when type fallback finds multiple matching beans" do
+    context = LF::DI::AnnotationApplicationContext.new
+
+    context.register(TestAmbiguousTypeFallbackConfig.new)
+
+    expect_raises(LF::DI::AmbiguousBeanError, "Ambiguous beans for type TestGreetingService: primary_greeting, secondary_greeting") do
+      context.get_bean("decorated_message", String)
+    end
+  end
+
+  it "tracks ownership metadata for root-owned singleton instances" do
+    context = LF::DI::AnnotationApplicationContext.new
+
+    context.add_bean(name: "greeting", type: TestGreetingService) do |_ctx|
+      TestGreetingService.new("root")
+    end
+
+    instance = context.get_bean_instance("greeting", TestGreetingService)
+    instance.owner_scope.should eq("singleton")
+    instance.owner_context_id.should eq(context.object_id)
+  end
+
+  it "tracks ownership metadata for child-owned scoped instances" do
+    context = LF::DI::AnnotationApplicationContext.new
+
+    context.add_bean(name: "greeting", scope: "request", type: TestGreetingService) do |_ctx|
+      TestGreetingService.new("request")
+    end
+
+    child = context.enter_scope("request")
+    instance = child.get_bean_instance("greeting", TestGreetingService)
+
+    instance.owner_scope.should eq("request")
+    instance.owner_context_id.should eq(child.object_id)
+  end
+
+  it "defines lifecycle-specific DI error types" do
+    init_error = LF::DI::BeanInitializationError.new("bean_name", "BeanType", "request", "boom")
+    destroy_error = LF::DI::BeanDestructionError.new("destroy failed: 2 errors")
+
+    init_error.should be_a(LF::DI::Error)
+    destroy_error.should be_a(LF::DI::Error)
+    init_error.message.not_nil!.should contain("phase=init")
+  end
+
+  it "allows beans to opt into lifecycle callback interfaces" do
+    bean = TestLifecycleBean.new
+    bean.after_properties_set
+    bean.destroy
+
+    bean.init_called.should be_true
+    bean.destroy_called.should be_true
+  end
+
+  it "invokes init callback exactly once for singleton beans" do
+    TestInitCounterBean.reset
+    context = LF::DI::AnnotationApplicationContext.new
+
+    context.add_bean(name: "init_singleton", type: TestInitCounterBean) do |_ctx|
+      TestInitCounterBean.new
+    end
+
+    first = context.get_bean("init_singleton", TestInitCounterBean)
+    second = context.get_bean("init_singleton", TestInitCounterBean)
+
+    first.should be(second)
+    TestInitCounterBean.init_calls.should eq(1)
+  end
+
+  it "invokes init callback for every prototype instance creation" do
+    TestInitCounterBean.reset
+    context = LF::DI::AnnotationApplicationContext.new
+
+    context.add_bean(name: "init_prototype", scope: "prototype", type: TestInitCounterBean) do |_ctx|
+      TestInitCounterBean.new
+    end
+
+    context.get_bean("init_prototype", TestInitCounterBean)
+    context.get_bean("init_prototype", TestInitCounterBean)
+
+    TestInitCounterBean.init_calls.should eq(2)
+  end
+
+  it "raises BeanInitializationError and does not cache instance when init callback fails" do
+    TestFailingInitBean.reset
+    context = LF::DI::AnnotationApplicationContext.new
+
+    context.add_bean(name: "failing_init", type: TestFailingInitBean) do |_ctx|
+      TestFailingInitBean.new
+    end
+
+    expect_raises(LF::DI::BeanInitializationError, "phase=init, bean_name=failing_init") do
+      context.get_bean("failing_init", TestFailingInitBean)
+    end
+
+    expect_raises(LF::DI::BeanInitializationError, "phase=init, bean_name=failing_init") do
+      context.get_bean("failing_init", TestFailingInitBean)
+    end
+
+    TestFailingInitBean.instances.should eq(2)
+  end
+
+  it "destroys child-owned disposable instances on child exit" do
+    TestDisposableCounterBean.reset
+    context = LF::DI::AnnotationApplicationContext.new
+
+    context.add_bean(name: "disposable_request", scope: "request", type: TestDisposableCounterBean) do |_ctx|
+      TestDisposableCounterBean.new
+    end
+
+    child = context.enter_scope("request")
+    child.get_bean("disposable_request", TestDisposableCounterBean)
+
+    child.exit
+
+    TestDisposableCounterBean.destroy_calls.should eq(1)
+  end
+
+  it "does not destroy root-owned singleton disposable instances on child exit" do
+    TestDisposableCounterBean.reset
+    context = LF::DI::AnnotationApplicationContext.new
+
+    context.add_bean(name: "disposable_singleton", type: TestDisposableCounterBean) do |_ctx|
+      TestDisposableCounterBean.new
+    end
+
+    root_instance = context.get_bean("disposable_singleton", TestDisposableCounterBean)
+    child = context.enter_scope("request")
+    child_instance = child.get_bean("disposable_singleton", TestDisposableCounterBean)
+
+    child_instance.should be(root_instance)
+
+    child.exit
+
+    TestDisposableCounterBean.destroy_calls.should eq(0)
+  end
+
+  it "destroys root-owned singleton disposable instances on shutdown" do
+    TestDisposableCounterBean.reset
+    context = LF::DI::AnnotationApplicationContext.new
+
+    context.add_bean(name: "root_disposable_singleton", type: TestDisposableCounterBean) do |_ctx|
+      TestDisposableCounterBean.new
+    end
+
+    context.get_bean("root_disposable_singleton", TestDisposableCounterBean)
+    context.shutdown
+
+    TestDisposableCounterBean.destroy_calls.should eq(1)
+  end
+
+  it "aggregates destroy failures on shutdown as BeanDestructionError" do
+    context = LF::DI::AnnotationApplicationContext.new
+
+    context.add_bean(name: "failing_disposable", type: TestFailingDisposableBean) do |_ctx|
+      TestFailingDisposableBean.new
+    end
+
+    context.get_bean("failing_disposable", TestFailingDisposableBean)
+
+    expect_raises(LF::DI::BeanDestructionError, "phase=destroy") do
+      context.shutdown
+    end
+  end
+
+  it "destroys root-owned disposable instances in reverse creation order on shutdown" do
+    TestOrderedDisposableBean.reset
+    context = LF::DI::AnnotationApplicationContext.new
+
+    context.add_bean(name: "first", type: TestOrderedDisposableBean) do |_ctx|
+      TestOrderedDisposableBean.new("first")
+    end
+    context.add_bean(name: "second", type: TestOrderedDisposableBean) do |_ctx|
+      TestOrderedDisposableBean.new("second")
+    end
+
+    context.get_bean("first", TestOrderedDisposableBean)
+    context.get_bean("second", TestOrderedDisposableBean)
+
+    context.shutdown
+
+    TestOrderedDisposableBean.destroy_order.should eq(["second", "first"])
+  end
+
+  it "destroys child-owned disposable instances in reverse creation order on exit" do
+    TestOrderedDisposableBean.reset
+    context = LF::DI::AnnotationApplicationContext.new
+
+    context.add_bean(name: "first", scope: "request", type: TestOrderedDisposableBean) do |_ctx|
+      TestOrderedDisposableBean.new("first")
+    end
+    context.add_bean(name: "second", scope: "request", type: TestOrderedDisposableBean) do |_ctx|
+      TestOrderedDisposableBean.new("second")
+    end
+
+    child = context.enter_scope("request")
+    child.get_bean("first", TestOrderedDisposableBean)
+    child.get_bean("second", TestOrderedDisposableBean)
+
+    child.exit
+
+    TestOrderedDisposableBean.destroy_order.should eq(["second", "first"])
+  end
+end
+
+describe "LF::DI::AutowiredApplicationConfig" do
+  it "registers annotated services as beans" do
+    context = LF::DI::AnnotationApplicationContext.new
+
+    context.register(LF::DI::AutowiredApplicationConfig.new)
+
+    leaf = context.get_bean("auto_leaf_service", AutoLeafService)
+
+    leaf.value.should eq("leaf")
+  end
+
+  it "resolves constructor dependencies between annotated services" do
+    context = LF::DI::AnnotationApplicationContext.new
+
+    context.register(LF::DI::AutowiredApplicationConfig.new)
+
+    parent = context.get_bean("auto_parent_service", AutoParentService)
+
+    parent.value.should eq("parent->leaf")
+    parent.auto_leaf_service.should be(context.get_bean("auto_leaf_service", AutoLeafService))
+  end
+
+  it "resolves multi-level constructor dependencies" do
+    context = LF::DI::AnnotationApplicationContext.new
+
+    context.register(LF::DI::AutowiredApplicationConfig.new)
+
+    top = context.get_bean("auto_top_service", AutoTopService)
+
+    top.value.should eq("parent->leaf|middle->leaf")
+    top.auto_parent_service.should be(context.get_bean("auto_parent_service", AutoParentService))
+    top.auto_middle_service.should be(context.get_bean("auto_middle_service", AutoMiddleService))
+  end
+
+  it "resolves services with multiple constructor arguments" do
+    context = LF::DI::AnnotationApplicationContext.new
+
+    context.register(LF::DI::AutowiredApplicationConfig.new)
+
+    top = context.get_bean("auto_top_service", AutoTopService)
+
+    top.auto_parent_service.auto_leaf_service.should be(context.get_bean("auto_leaf_service", AutoLeafService))
+    top.auto_middle_service.auto_leaf_service.should be(context.get_bean("auto_leaf_service", AutoLeafService))
+  end
+
+  it "falls back to type-based resolution when constructor argument names do not match bean names" do
+    context = LF::DI::AnnotationApplicationContext.new
+
+    context.register(LF::DI::AutowiredApplicationConfig.new)
+
+    context.get_bean("auto_mismatched_arg_service", AutoMismatchedArgService).value.should eq("leaf")
+  end
+
+  it "raises on snake_case bean name collisions between annotated services" do
+    source = <<-CRYSTAL
+      require "../src/opal"
+
+      @[LF::DI::Service]
+      class AutoURLService
+      end
+
+      @[LF::DI::Service]
+      class AutoUrlService
+      end
+
+      context = LF::DI::AnnotationApplicationContext.new
+
+      begin
+        context.register(LF::DI::AutowiredApplicationConfig.new)
+        puts "NO_ERROR"
+        exit 1
+      rescue e : LF::DI::DuplicateBeanError
+        puts e.class
+        puts e.message
+      end
+    CRYSTAL
+
+    path = "/home/mike/opal/spec/tmp_autowired_collision_#{UUID.random}.cr"
+    File.write(path, source)
+    output = IO::Memory.new
+    status = Process.run("crystal", ["run", path], output: output, error: output)
+    File.delete(path) if File.exists?(path)
+
+    status.success?.should be_true
+    output.to_s.should contain("LF::DI::DuplicateBeanError")
+    output.to_s.should contain("Bean already registered: name=auto_url_service")
+  end
+
+  it "invokes lifecycle init callbacks for autowired services in constructor graph" do
+    AutoLifecycleLeafService.reset
+    AutoLifecycleParentService.reset
+    context = LF::DI::AnnotationApplicationContext.new
+
+    context.register(LF::DI::AutowiredApplicationConfig.new)
+    context.get_bean("auto_lifecycle_parent_service", AutoLifecycleParentService)
+
+    AutoLifecycleLeafService.init_calls.should eq(1)
+    AutoLifecycleParentService.init_calls.should eq(1)
+  end
+
+  it "invokes lifecycle destroy callbacks for autowired singletons on shutdown in reverse order" do
+    AutoLifecycleLeafService.reset
+    AutoLifecycleParentService.reset
+    context = LF::DI::AnnotationApplicationContext.new
+
+    context.register(LF::DI::AutowiredApplicationConfig.new)
+    context.get_bean("auto_lifecycle_parent_service", AutoLifecycleParentService)
+    context.shutdown
+
+    AutoLifecycleParentService.destroy_calls.should eq(1)
+    AutoLifecycleLeafService.destroy_calls.should eq(1)
+    AutoLifecycleLeafService.lifecycle_trace.should eq(["parent", "leaf"])
   end
 end
 
 describe "LF::Router" do
+  it "routes the root path correctly" do
+    router = LF::Router.new
+
+    router.get("/") do |ctx, _params|
+      ctx.response.content_type = "text/plain"
+      ctx.response.print "root"
+    end
+
+    io = IO::Memory.new
+    request = HTTP::Request.new("GET", "/")
+    response = HTTP::Server::Response.new(io)
+    context = HTTP::Server::Context.new(request, response)
+
+    router.call(context)
+    response.close
+
+    response.status.should eq(HTTP::Status::OK)
+    body = io.to_s.split("\r\n\r\n", 2)[1]
+    body.should eq("root")
+  end
+
   it "routes GET requests correctly" do
     router = LF::Router.new
 
@@ -235,6 +1249,278 @@ describe "LF::Router" do
     response.close
     body = io.to_s.split("\r\n\r\n", 2)[1]
     body.should eq("POST data")
+  end
+
+  it "supports registering multiple methods with add" do
+    router = LF::Router.new
+
+    router.add("/bulk", Set{"GET", "POST"}) do |ctx, _params|
+      ctx.response.print ctx.request.method
+    end
+
+    ["GET", "POST"].each do |method|
+      io = IO::Memory.new
+      request = HTTP::Request.new(method, "/bulk")
+      response = HTTP::Server::Response.new(io)
+      context = HTTP::Server::Context.new(request, response)
+
+      router.call(context)
+      response.close
+
+      response.status.should eq(HTTP::Status::OK)
+      body = io.to_s.split("\r\n\r\n", 2)[1]
+      body.should eq(method)
+    end
+  end
+
+  it "supports multiple methods on the root path" do
+    router = LF::Router.new
+
+    router.get("/") do |ctx, _params|
+      ctx.response.print "GET root"
+    end
+
+    router.post("/") do |ctx, _params|
+      ctx.response.print "POST root"
+    end
+
+    [
+      {"GET", "GET root"},
+      {"POST", "POST root"},
+    ].each do |method, expected_body|
+      io = IO::Memory.new
+      request = HTTP::Request.new(method, "/")
+      response = HTTP::Server::Response.new(io)
+      context = HTTP::Server::Context.new(request, response)
+
+      router.call(context)
+      response.close
+
+      response.status.should eq(HTTP::Status::OK)
+      body = io.to_s.split("\r\n\r\n", 2)[1]
+      body.should eq(expected_body)
+    end
+  end
+
+  it "returns 405 for wrong method on parameterized routes" do
+    router = LF::Router.new
+
+    router.post("/users/:id") do |ctx, _params|
+      ctx.response.print "updated"
+    end
+
+    io = IO::Memory.new
+    request = HTTP::Request.new("GET", "/users/123")
+    response = HTTP::Server::Response.new(io)
+    context = HTTP::Server::Context.new(request, response)
+
+    router.call(context)
+    response.close
+
+    response.status.should eq(HTTP::Status::METHOD_NOT_ALLOWED)
+    body = io.to_s.split("\r\n\r\n", 2)[1]
+    body.should eq("Method Not Allowed")
+  end
+
+  it "returns 405 for wrong method on the root path" do
+    router = LF::Router.new
+
+    router.post("/") do |ctx, _params|
+      ctx.response.print "root post"
+    end
+
+    io = IO::Memory.new
+    request = HTTP::Request.new("GET", "/")
+    response = HTTP::Server::Response.new(io)
+    context = HTTP::Server::Context.new(request, response)
+
+    router.call(context)
+    response.close
+
+    response.status.should eq(HTTP::Status::METHOD_NOT_ALLOWED)
+    body = io.to_s.split("\r\n\r\n", 2)[1]
+    body.should eq("Method Not Allowed")
+  end
+
+  it "matches routes with trailing slashes" do
+    router = LF::Router.new
+
+    router.get("/users/:id") do |ctx, params|
+      ctx.response.print "User #{params["id"]}"
+    end
+
+    io = IO::Memory.new
+    request = HTTP::Request.new("GET", "/users/123/")
+    response = HTTP::Server::Response.new(io)
+    context = HTTP::Server::Context.new(request, response)
+
+    router.call(context)
+    response.close
+
+    response.status.should eq(HTTP::Status::OK)
+    body = io.to_s.split("\r\n\r\n", 2)[1]
+    body.should eq("User 123")
+  end
+
+  it "matches routes regardless of query string contents" do
+    router = LF::Router.new
+
+    router.get("/users/:id") do |ctx, params|
+      ctx.response.print "User #{params["id"]}"
+    end
+
+    io = IO::Memory.new
+    request = HTTP::Request.new("GET", "/users/123?active=true&sort=asc")
+    response = HTTP::Server::Response.new(io)
+    context = HTTP::Server::Context.new(request, response)
+
+    router.call(context)
+    response.close
+
+    response.status.should eq(HTTP::Status::OK)
+    body = io.to_s.split("\r\n\r\n", 2)[1]
+    body.should eq("User 123")
+  end
+
+  it "matches routes with repeated slashes in the request path" do
+    router = LF::Router.new
+
+    router.get("/users/:id") do |ctx, params|
+      ctx.response.print "User #{params["id"]}"
+    end
+
+    io = IO::Memory.new
+    request = HTTP::Request.new("GET", "//users//123//")
+    response = HTTP::Server::Response.new(io)
+    context = HTTP::Server::Context.new(request, response)
+
+    router.call(context)
+    response.close
+
+    response.status.should eq(HTTP::Status::OK)
+    body = io.to_s.split("\r\n\r\n", 2)[1]
+    body.should eq("User 123")
+  end
+
+  it "prioritizes exact routes over parameterized routes for the same prefix" do
+    router = LF::Router.new
+
+    router.get("/users/list") do |ctx, _params|
+      ctx.response.print "exact"
+    end
+
+    router.get("/users/:id") do |ctx, params|
+      ctx.response.print "param #{params["id"]}"
+    end
+
+    io = IO::Memory.new
+    request = HTTP::Request.new("GET", "/users/list")
+    response = HTTP::Server::Response.new(io)
+    context = HTTP::Server::Context.new(request, response)
+
+    router.call(context)
+    response.close
+
+    response.status.should eq(HTTP::Status::OK)
+    body = io.to_s.split("\r\n\r\n", 2)[1]
+    body.should eq("exact")
+  end
+
+  it "prioritizes exact top-level routes over parameterized routes" do
+    router = LF::Router.new
+
+    router.get("/:page") do |ctx, params|
+      ctx.response.print "param #{params["page"]}"
+    end
+
+    router.get("/about") do |ctx, _params|
+      ctx.response.print "exact"
+    end
+
+    io = IO::Memory.new
+    request = HTTP::Request.new("GET", "/about")
+    response = HTTP::Server::Response.new(io)
+    context = HTTP::Server::Context.new(request, response)
+
+    router.call(context)
+    response.close
+
+    response.status.should eq(HTTP::Status::OK)
+    body = io.to_s.split("\r\n\r\n", 2)[1]
+    body.should eq("exact")
+  end
+
+  it "prioritizes exact nested routes over parameterized routes" do
+    router = LF::Router.new
+
+    router.get("/files/:id/edit") do |ctx, params|
+      ctx.response.print "param #{params["id"]}"
+    end
+
+    router.get("/files/new/edit") do |ctx, _params|
+      ctx.response.print "exact"
+    end
+
+    io = IO::Memory.new
+    request = HTTP::Request.new("GET", "/files/new/edit")
+    response = HTTP::Server::Response.new(io)
+    context = HTTP::Server::Context.new(request, response)
+
+    router.call(context)
+    response.close
+
+    response.status.should eq(HTTP::Status::OK)
+    body = io.to_s.split("\r\n\r\n", 2)[1]
+    body.should eq("exact")
+  end
+
+  it "backtracks across multiple parameterized routes at the same depth" do
+    router = LF::Router.new
+
+    router.get("/users/:id/profile") do |ctx, params|
+      ctx.response.print "profile #{params["id"]}"
+    end
+
+    router.get("/users/:name/settings") do |ctx, params|
+      ctx.response.print "settings #{params["name"]}"
+    end
+
+    [
+      {"/users/42/profile", "profile 42"},
+      {"/users/alice/settings", "settings alice"},
+    ].each do |path, expected_body|
+      io = IO::Memory.new
+      request = HTTP::Request.new("GET", path)
+      response = HTTP::Server::Response.new(io)
+      context = HTTP::Server::Context.new(request, response)
+
+      router.call(context)
+      response.close
+
+      response.status.should eq(HTTP::Status::OK)
+      body = io.to_s.split("\r\n\r\n", 2)[1]
+      body.should eq(expected_body)
+    end
+  end
+
+  it "returns 404 when the path has extra segments" do
+    router = LF::Router.new
+
+    router.get("/users/:id") do |ctx, _params|
+      ctx.response.print "user"
+    end
+
+    io = IO::Memory.new
+    request = HTTP::Request.new("GET", "/users/123/details")
+    response = HTTP::Server::Response.new(io)
+    context = HTTP::Server::Context.new(request, response)
+
+    router.call(context)
+    response.close
+
+    response.status.should eq(HTTP::Status::NOT_FOUND)
+    body = io.to_s.split("\r\n\r\n", 2)[1]
+    body.should eq("Not Found")
   end
 
   it "returns 404 for non-existent routes" do

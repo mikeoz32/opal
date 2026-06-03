@@ -1,0 +1,19 @@
+name: todo_api_sqlite_example
+version: 0.1.0
+
+authors:
+  - Opal Example
+
+dependencies:
+  opal:
+    path: ../..
+  sqlite3:
+    github: crystal-lang/crystal-sqlite3
+
+targets:
+  todo_api_sqlite_example:
+    main: src/todo_api_sqlite_example.cr
+
+crystal: ">= 1.18.2"
+
+license: MIT

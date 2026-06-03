@@ -36,6 +36,8 @@ module Trie
     property handlers : Hash(String, Handler) = Hash(String, Handler).new
     property param_name : String = ""
     @param : Bool = false
+    @exact_children : Hash(String, Node) = Hash(String, Node).new
+    @param_children : Array(Node) = Array(Node).new
 
     def dump(indent : Int32 = 0)
       puts "#{" " * indent}#{@path} (#{@priority})"
@@ -50,12 +52,51 @@ module Trie
       @param = value
     end
 
+    protected def segments_for(path : String) : Array(String)
+      path.split("/").reject(&.empty?)
+    end
+
+    protected def exact_child_for(segment : String) : Node?
+      @exact_children[segment]?
+    end
+
+    protected def param_child_for(param_name : String) : Node?
+      @param_children.find { |child| child.param_name == param_name }
+    end
+
+    protected def each_param_child(& : Node ->)
+      @param_children.each do |child|
+        yield child
+      end
+    end
+
+    protected def set_handlers(methods : Set(String), handler : Handler)
+      methods.each do |method|
+        @handlers[method] = handler
+      end
+    end
+
+    protected def attach_exact_child(child : Node)
+      @children << child
+      @exact_children[child.path] = child
+    end
+
+    protected def attach_param_child(child : Node)
+      @children << child
+      @param_children << child
+    end
+
     def add_route(path : String, handler : Handler, methods : Set(String) = Set{"GET"})
       node = self
       @priority += 1
 
       # Split path into segments
-      segments = path.split("/").reject(&.empty?)
+      segments = segments_for(path)
+
+      if segments.empty?
+        node.set_handlers(methods, handler)
+        return
+      end
 
       segments.each_with_index do |segment, idx|
         is_last = idx == segments.size - 1
@@ -65,7 +106,7 @@ module Trie
           param_name = segment[1..-1]
 
           # Look for existing parameter child
-          param_child = node.children.find { |c| c.param? }
+          param_child = node.param_child_for(param_name)
 
           if param_child
             node = param_child
@@ -77,13 +118,13 @@ module Trie
             child.param_name = param_name
             child.priority = @priority
 
-            node.children << child
+            node.attach_param_child(child)
             node = child
           end
         else
           # Regular segment - store without leading slash
           # Look for existing child with exact match
-          existing = node.children.find { |c| !c.param? && c.path == segment }
+          existing = node.exact_child_for(segment)
 
           if existing
             # Exact match found, use this node
@@ -94,7 +135,7 @@ module Trie
             child.path = segment
             child.priority = @priority
 
-            node.children << child
+            node.attach_exact_child(child)
             node = child
           end
         end
@@ -102,9 +143,7 @@ module Trie
         # Set handler on last segment
         if is_last
           # Add handler for each method
-          methods.each do |method|
-            node.handlers[method] = handler
-          end
+          node.set_handlers(methods, handler)
         end
       end
     end
@@ -113,39 +152,36 @@ module Trie
     # Returns a MatchResult containing the matched node and extracted parameters
     def search(path : String) : MatchResult
       result = MatchResult.new
-      segments = path.split("/").reject(&.empty?)
+      segments = segments_for(path)
 
       # If root node has empty path, manually match first segment with children
       if @path.empty?
-        return result if segments.empty?
+        if segments.empty?
+          if !@handlers.empty?
+            result.node = self
+            result.params = Hash(String, String).new
+          end
+          return result
+        end
 
         first_segment = segments[0]
 
         # Try exact matches first
-        @children.each do |child|
-          next if child.param?
-
-          if child.path == first_segment
-            # Exact match
-            if segments.size == 1
-              # This is the final segment
-              if !child.handlers.empty?
-                result.node = child
-                result.params = Hash(String, String).new
-              end
-              return result
-            else
-              # Continue with remaining segments
-              child.search_segments(segments, 1, Hash(String, String).new, result)
-              return result if result.node
+        if child = exact_child_for(first_segment)
+          if segments.size == 1
+            if !child.handlers.empty?
+              result.node = child
+              result.params = Hash(String, String).new
             end
+            return result
+          else
+            child.search_segments(segments, 1, Hash(String, String).new, result)
+            return result if result.node
           end
         end
 
         # Try parameter match
-        @children.each do |child|
-          next unless child.param?
-
+        each_param_child do |child|
           params = Hash(String, String).new
           params[child.param_name] = first_segment
 
@@ -181,26 +217,13 @@ module Trie
       segment = segments[index]
 
       # Try exact match first
-      @children.each do |child|
-        next if child.param?
-
-        if child.path == segment
-          # Exact match - move to next segment
-          child.search_segments(segments, index + 1, params, result)
-          return if result.node
-        elsif segment.starts_with?(child.path) && child.path.size < segment.size
-          # Partial match within same segment - this means the child path is a prefix
-          # We need to continue matching in this same node but with adjusted segment
-          # This handles cases like path "h" matching segment "hello"
-          # But in our segment-based approach, this shouldn't happen
-          # Skip this case as segments should match exactly
-        end
+      if child = exact_child_for(segment)
+        child.search_segments(segments, index + 1, params, result)
+        return if result.node
       end
 
       # Try parameter match
-      @children.each do |child|
-        next unless child.param?
-
+      each_param_child do |child|
         # Extract parameter value (the current segment)
         param_value = segments[index]
         new_params = params.dup
