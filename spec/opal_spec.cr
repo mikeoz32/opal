@@ -54,6 +54,24 @@ class TestResourceJsonResponse
   end
 end
 
+class TestResourceWithRootScopedDI
+  include LF::APIRoute
+
+  @[LF::APIRoute::Get("/root-scoped-di")]
+  def show(greeting_service : TestGreetingService)
+    greeting_service.message
+  end
+end
+
+class TestResourceWithNotFound
+  include LF::APIRoute
+
+  @[LF::APIRoute::Get("/api-missing")]
+  def show
+    raise LF::NotFound.new("api missing")
+  end
+end
+
 class TestCounterService
   getter id : Int32
 
@@ -654,6 +672,19 @@ describe "LF::DI" do
     bean = child.get_bean("greeting", TestGreetingService)
 
     bean.message.should eq("from parent")
+  end
+
+  it "resolves uninitialized singleton beans from child contexts" do
+    context = LF::DI::AnnotationApplicationContext.new
+
+    context.add_bean(name: "greeting", type: TestGreetingService) do |_ctx|
+      TestGreetingService.new("from singleton")
+    end
+
+    child = context.enter_scope("request")
+    bean = child.get_bean("greeting", TestGreetingService)
+
+    bean.message.should eq("from singleton")
   end
 
   it "does not allow child contexts to register beans" do
@@ -1732,6 +1763,48 @@ describe "LF::APIRoute" do
     payload = JSON.parse(parsed.body)
     payload["id"].as_i.should eq(1)
     payload["name"].as_s.should eq("ok")
+  end
+
+  it "resolves root-owned DI arguments from request child scopes" do
+    root = LF::DI::AnnotationApplicationContext.new
+    root.add_bean(name: "greeting_service", type: TestGreetingService) do |_ctx|
+      TestGreetingService.new("from root")
+    end
+
+    app = LF::LFApi.new do |router|
+      TestResourceWithRootScopedDI.new.setup_routes(router)
+    end
+
+    io = IO::Memory.new
+    request = HTTP::Request.new("GET", "/root-scoped-di")
+    response = HTTP::Server::Response.new(io)
+    context = HTTP::Server::Context.new(request, response)
+    context.state = root.enter_scope("request")
+
+    app.call(context)
+    response.close
+
+    response.status.should eq(HTTP::Status::OK)
+    body = io.to_s.split("\r\n\r\n", 2)[1]
+    body.should eq("from root")
+  end
+
+  it "preserves HTTP exceptions raised by route methods" do
+    app = LF::LFApi.new do |router|
+      TestResourceWithNotFound.new.setup_routes(router)
+    end
+
+    io = IO::Memory.new
+    request = HTTP::Request.new("GET", "/api-missing")
+    response = HTTP::Server::Response.new(io)
+    context = HTTP::Server::Context.new(request, response)
+
+    app.call(context)
+    response.close
+
+    response.status.should eq(HTTP::Status::NOT_FOUND)
+    body = io.to_s.split("\r\n\r\n", 2)[1]
+    body.should eq("api missing")
   end
 end
 

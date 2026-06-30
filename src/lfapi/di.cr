@@ -299,7 +299,7 @@ module LF::DI
         factory = factory_meta.as(BeanFactoryImpl(T))
 
         if !caller.nil?
-          if factory.scope != "prototype" && caller.scope != factory.scope
+          if factory.scope != "prototype" && factory.scope != "singleton" && caller.scope != factory.scope
             raise ScopeMismatchError.new(name, factory.scope, caller.scope)
           end
         end
@@ -338,7 +338,9 @@ module LF::DI
       get_bean(name, type)
     end
 
-    delegate has_key?, to: @factories
+    def has_key?(name : String) : Bool
+      @instances.has_key?(name) || !find_factory(name).nil?
+    end
 
     def enter_scope(scope : String)
       self.class.new(self, scope)

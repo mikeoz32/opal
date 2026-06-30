@@ -35,9 +35,19 @@ class UpdateTodoPayload
   property completed : Bool?
 end
 
-class TodoRepository
-  def self.ensure_schema(db : DB::Database)
-    db.exec <<-SQL
+@[LF::DI::Service]
+class TodoDatabase
+  include LF::DI::Initializable
+  include LF::DI::Disposable
+
+  getter db : DB::Database
+
+  def initialize
+    @db = DB.open("sqlite3://./todo.db")
+  end
+
+  def after_properties_set : Nil
+    @db.exec <<-SQL
       CREATE TABLE IF NOT EXISTS todos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
@@ -47,8 +57,15 @@ class TodoRepository
     SQL
   end
 
-  def initialize(@db : DB::Database)
-    self.class.ensure_schema(@db)
+  def destroy : Nil
+    @db.close
+  end
+end
+
+@[LF::DI::Service]
+class TodoRepository
+  def initialize(todo_database : TodoDatabase)
+    @db = todo_database.db
   end
 
   def all : Array(Todo)
@@ -160,17 +177,8 @@ class RequestScopeHandler
   end
 end
 
-db = DB.open("sqlite3://./todo.db")
-TodoRepository.ensure_schema(db)
-
 root = LF::DI::AnnotationApplicationContext.new
-root.add_bean(name: "db", type: DB::Database) do |_ctx|
-  db
-end
-
-root.add_bean(name: "todo_repository", scope: "request", type: TodoRepository) do |_ctx|
-  TodoRepository.new(root.get_bean("db", DB::Database))
-end
+root.register(LF::DI::AutowiredApplicationConfig.new)
 
 app = LF::LFApi.new do |router|
   TodoApi.new.setup_routes(router)
@@ -191,4 +199,8 @@ puts "  POST   /todos"
 puts "  PUT    /todos/:id"
 puts "  DELETE /todos/:id"
 
-server.listen
+begin
+  server.listen
+ensure
+  root.shutdown
+end
