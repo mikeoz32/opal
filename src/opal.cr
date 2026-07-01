@@ -285,9 +285,7 @@ module LF
                  else
                    ctx.response.print result
                  end
-               rescue e : LF::BadRequest
-                 raise e
-               rescue e : LF::InternalServerError
+               rescue e : LF::HTTPException
                  raise e
                rescue e : Exception
                  raise LF::InternalServerError.new("Error processing request: #{e.message}")
