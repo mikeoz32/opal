@@ -1,5 +1,7 @@
 /.shards/
-/docs/
+/docs/*
+!/docs/adr/
+!/docs/adr/**
 /.cache/
 examples/todo_api_sqlite/bin/
 examples/todo_api_sqlite/todo.db
