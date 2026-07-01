@@ -1,3 +1,5 @@
 /.shards/
-/docs/
+/docs/*
+!/docs/adr/
+!/docs/adr/**
 /.cache/
