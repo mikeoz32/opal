@@ -72,7 +72,7 @@ The bootstrap result should expose the root context and provide an explicit shut
 Add a configuration marker for classes that participate in application bootstrap.
 
 ```crystal
-@[LF::DI::Configuration]
+@[LF::Application::Configuration]
 class AppConfig
   include LF::DI::ApplicationConfig
 
@@ -91,7 +91,7 @@ Application bootstrap v1 should:
 
 1. Create the root `LF::DI::AnnotationApplicationContext`.
 2. Register `LF::DI::AutowiredApplicationConfig`.
-3. Register all discovered `@[LF::DI::Configuration]` classes.
+3. Register all discovered `@[LF::Application::Configuration]` classes.
 4. Return an application/context object that can be shut down explicitly.
 5. Ensure shutdown delegates to the root context.
 
@@ -126,7 +126,7 @@ These capabilities should build on the application layer after the bootstrap con
 ### Annotations
 
 - `@[LF::Application]`
-- `@[LF::DI::Configuration]`
+- `@[LF::Application::Configuration]`
 
 ### Runtime types
 
@@ -141,7 +141,7 @@ The final names should be validated during implementation. The important contrac
 Configuration classes remain ordinary Crystal classes:
 
 ```crystal
-@[LF::DI::Configuration]
+@[LF::Application::Configuration]
 class DataConfig
   include LF::DI::ApplicationConfig
 
@@ -174,7 +174,7 @@ This preserves the existing `@[LF::DI::Bean]` model and avoids adding database-s
 ## Implementation Plan (High-Level)
 
 1. Add `@[LF::Application]` marker annotation.
-2. Add `@[LF::DI::Configuration]` marker annotation.
+2. Add `@[LF::Application::Configuration]` marker annotation.
 3. Add a small application bootstrap type/module.
 4. Generate a compile-time bootstrap plan for discovered configuration classes.
 5. Register `LF::DI::AutowiredApplicationConfig` by default.
@@ -186,7 +186,7 @@ This preserves the existing `@[LF::DI::Bean]` model and avoids adding database-s
 ## Testing Strategy
 
 - Unit tests for configuration discovery.
-- Tests that `@[LF::DI::Configuration]` classes are registered automatically during application bootstrap.
+- Tests that `@[LF::Application::Configuration]` classes are registered automatically during application bootstrap.
 - Tests that explicit DI registration still works without the application layer.
 - Tests that `LF::DI::AutowiredApplicationConfig` is registered by default.
 - Tests that shutdown delegates to the root context.
