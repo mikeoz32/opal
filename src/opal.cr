@@ -4,6 +4,7 @@ require "fiber"
 require "uuid"
 
 require "./lfapi/di"
+require "./lfapi/application"
 require "./lfapi/trie"
 
 # Lighting FastAPI
