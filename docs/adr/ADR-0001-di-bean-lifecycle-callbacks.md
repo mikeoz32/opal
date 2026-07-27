@@ -1,9 +1,9 @@
 # ADR-0001: DI Bean Lifecycle Callbacks (Init/Destroy)
 
-- Status: Proposed
+- Status: Accepted (partially implemented)
 - Date: 2026-05-24
 - Deciders: Opal maintainers
-- Related: `LF::DI` container, `LF::APIRoute` integration
+- Related: `LF::DI` container, `LF::HTTP::Controller` integration
 
 ## Context
 
@@ -30,24 +30,23 @@ No extra phases in v1.
 
 ### 2) How callbacks are declared
 
-Beans define lifecycle behavior themselves via:
-
-- interface-based callbacks
-- annotation-based callbacks
+Beans define lifecycle behavior themselves. Interface-based callbacks are
+implemented in v1; annotation-based callbacks remain a follow-up.
 
 No external lifecycle callback procs for v1.
 
 ### 3) Singleton init policy
 
-- Container-level default init mode (`lazy` or `eager`)
-- Per-bean init mode override
+- Lazy initialization is the current container behavior.
+- Container-level eager mode and per-bean overrides remain follow-up work.
 
 ### 4) Destroy behavior
 
-- Singleton destroy runs automatically via `at_exit`
-- Singleton destroy can also be triggered manually via explicit container close/exit API
+- Singleton destroy is triggered by explicit container `shutdown`/`exit`.
+- Automatic process-level `at_exit` integration remains follow-up work.
 - Destroy order is `LIFO` by creation order
-- Destroy errors are logged and cleanup continues (`best effort`)
+- Destroy errors are aggregated after best-effort cleanup and raised as
+  `BeanDestructionError`.
 
 ### 5) Child/request scopes
 
@@ -74,8 +73,8 @@ No external lifecycle callback procs for v1.
 
 ### Interfaces
 
-- `LF::DI::LifecycleInit` with `init : Nil`
-- `LF::DI::LifecycleDestroy` with `destroy : Nil`
+- `LF::DI::Initializable` with `after_properties_set : Nil`
+- `LF::DI::Disposable` with `destroy : Nil`
 
 ### Annotations
 
@@ -92,8 +91,8 @@ No external lifecycle callback procs for v1.
 Add lifecycle-specific errors:
 
 - `LF::DI::LifecycleConfigurationError`
-- `LF::DI::BeanInitError`
-- `LF::DI::BeanDestroyError`
+- `LF::DI::BeanInitializationError`
+- `LF::DI::BeanDestructionError`
 
 Existing DI errors (`BeanNotFoundError`, `BeanTypeMismatchError`, `DuplicateBeanError`, `ScopeMismatchError`, `AmbiguousBeanError`) remain in use.
 

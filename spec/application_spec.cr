@@ -26,10 +26,42 @@ class ApplicationSpecShutdownProbe
   end
 end
 
-@[LF::Application::Configuration]
-class ApplicationSpecConfiguration
-  include LF::DI::ApplicationConfig
+class ApplicationSpecFailingShutdownProbe
+  include LF::DI::Disposable
 
+  def destroy : Nil
+    raise "shutdown failed"
+  end
+end
+
+class ApplicationSpecOrder
+  @@entries = [] of String
+
+  def self.entries : Array(String)
+    @@entries
+  end
+
+  def self.reset : Nil
+    @@entries.clear
+  end
+end
+
+@[LF::ApplicationConfiguration(priority: 20)]
+class ApplicationSpecHighPriorityConfiguration
+  def initialize
+    ApplicationSpecOrder.entries << "high"
+  end
+end
+
+@[LF::ApplicationConfiguration(priority: -10)]
+class ApplicationSpecLowPriorityConfiguration
+  def initialize
+    ApplicationSpecOrder.entries << "low"
+  end
+end
+
+@[LF::ApplicationConfiguration(priority: 10)]
+class ApplicationSpecConfiguration
   @[LF::DI::Bean]
   def application_spec_value : ApplicationSpecValue
     ApplicationSpecValue.new("configured")
@@ -38,6 +70,11 @@ class ApplicationSpecConfiguration
   @[LF::DI::Bean]
   def application_spec_shutdown_probe : ApplicationSpecShutdownProbe
     ApplicationSpecShutdownProbe.new
+  end
+
+  @[LF::DI::Bean]
+  def application_spec_failing_shutdown_probe : ApplicationSpecFailingShutdownProbe
+    ApplicationSpecFailingShutdownProbe.new
   end
 end
 
@@ -49,54 +86,52 @@ class ApplicationSpecAutowiredService
   end
 end
 
-class ApplicationSpecSubclass < LF::Application
+@[LF::Application(priority: 5)]
+class ApplicationSpecApp
+  def initialize
+    ApplicationSpecOrder.entries << "application"
+  end
+
+  @[LF::DI::Bean]
+  def application_owned_value : String
+    "owned by application"
+  end
 end
 
-describe LF::Application do
-  it "owns and exposes a root annotation application context" do
-    application = LF::Application.bootstrap
+describe LF::ApplicationRuntime do
+  it "constructs configuration providers by descending priority" do
+    ApplicationSpecOrder.reset
 
-    application.context.should be_a(LF::DI::AnnotationApplicationContext)
+    application = ApplicationSpecApp.bootstrap
+
+    ApplicationSpecOrder.entries.should eq(["high", "application", "low"])
+    application.shutdown
+  end
+
+  it "bootstraps the annotated application and resolves configuration beans" do
+    application = ApplicationSpecApp.bootstrap
+
+    application.should be_a(LF::ApplicationRuntime)
+    application.resolve(ApplicationSpecValue).value.should eq("configured")
+    application.resolve("application_owned_value", String).should eq("owned by application")
 
     application.shutdown
   end
 
-  it "uses the exact root context supplied by the caller" do
-    context = LF::DI::AnnotationApplicationContext.new
+  it "registers DI-managed services during bootstrap" do
+    application = ApplicationSpecApp.bootstrap
 
-    application = LF::Application.bootstrap(context)
-
-    application.context.should be(context)
-
-    application.shutdown
-  end
-
-  it "registers annotated application configs and autowired services" do
-    application = LF::Application.bootstrap
-
-    value = application.context.get_bean("application_spec_value", ApplicationSpecValue)
-    service = application.context.get_bean("application_spec_autowired_service", ApplicationSpecAutowiredService)
-
-    value.value.should eq("configured")
-    service.value.should be(value)
+    service = application.resolve(ApplicationSpecAutowiredService)
+    service.value.should be(application.resolve(ApplicationSpecValue))
 
     application.shutdown
   end
 
-  it "bootstraps the receiver subclass without an annotation" do
-    application : ApplicationSpecSubclass = ApplicationSpecSubclass.bootstrap
-
-    application.should be_a(ApplicationSpecSubclass)
-    application.context.get_bean("application_spec_value", ApplicationSpecValue).value.should eq("configured")
-
-    application.shutdown
-  end
-
-  it "keeps a bootstrapped application live until explicit shutdown" do
+  it "keeps a bootstrapped application open until explicit shutdown" do
     ApplicationSpecShutdownProbe.reset
-    application = LF::Application.bootstrap
+    application = ApplicationSpecApp.bootstrap
 
-    application.context.get_bean("application_spec_shutdown_probe", ApplicationSpecShutdownProbe)
+    application.resolve(ApplicationSpecShutdownProbe)
     ApplicationSpecShutdownProbe.destroy_calls.should eq(0)
 
     application.shutdown
@@ -104,27 +139,58 @@ describe LF::Application do
     ApplicationSpecShutdownProbe.destroy_calls.should eq(1)
   end
 
-  it "shuts down after a run block completes" do
+  it "rejects resolution after shutdown" do
+    application = ApplicationSpecApp.bootstrap
+    application.shutdown
+
+    expect_raises(LF::ApplicationRuntime::ClosedError) do
+      application.resolve(ApplicationSpecValue)
+    end
+  end
+
+  it "rejects repeated shutdown" do
+    application = ApplicationSpecApp.bootstrap
+    application.shutdown
+
+    expect_raises(LF::ApplicationRuntime::AlreadyClosedError) do
+      application.shutdown
+    end
+  end
+
+  it "returns the run block result and shuts down" do
     ApplicationSpecShutdownProbe.reset
 
-    LF::Application.run do |application|
-      application.context.get_bean("application_spec_shutdown_probe", ApplicationSpecShutdownProbe)
-      ApplicationSpecShutdownProbe.destroy_calls.should eq(0)
+    result = ApplicationSpecApp.run do |application|
+      application.resolve(ApplicationSpecShutdownProbe)
+      "done"
     end
 
+    result.should eq("done")
     ApplicationSpecShutdownProbe.destroy_calls.should eq(1)
   end
 
-  it "shuts down when a run block raises" do
+  it "re-raises a run block failure after successful shutdown" do
     ApplicationSpecShutdownProbe.reset
 
     expect_raises(Exception, "run failed") do
-      LF::Application.run do |application|
-        application.context.get_bean("application_spec_shutdown_probe", ApplicationSpecShutdownProbe)
+      ApplicationSpecApp.run do |application|
+        application.resolve(ApplicationSpecShutdownProbe)
         raise "run failed"
       end
     end
 
     ApplicationSpecShutdownProbe.destroy_calls.should eq(1)
+  end
+
+  it "preserves block and shutdown failures in RunError" do
+    error = expect_raises(LF::ApplicationRuntime::RunError) do
+      ApplicationSpecApp.run do |application|
+        application.resolve(ApplicationSpecFailingShutdownProbe)
+        raise "run failed"
+      end
+    end
+
+    error.block_error.message.should eq("run failed")
+    error.shutdown_error.should be_a(LF::DI::BeanDestructionError)
   end
 end

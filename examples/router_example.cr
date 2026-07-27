@@ -10,7 +10,7 @@ class User
   end
 end
 
-router = LF::Router.new
+router = LF::HTTP::Router.new
 
 router.get("/") do |ctx, _params|
   ctx.response.content_type = "text/plain"

@@ -18,8 +18,8 @@ crystal run src/todo_api_sqlite_example.cr
 
 Server starts on `http://127.0.0.1:8083`.
 
-The server stack includes a request-scope middleware that sets `context.state` for `LF::APIRoute` dependency resolution.
-`TodoDatabase` and `TodoRepository` are registered through `LF::DI::AutowiredApplicationConfig`, so the example does not need manual `add_bean` calls.
+The server stack includes a request-scope middleware that sets `context.dependency_scope` for `LF::HTTP::Controller` dependency resolution.
+`TodoDatabase` and `TodoRepository` are registered through `LF::DI::ServiceConfiguration`, so the example does not need manual `add_bean` calls.
 
 ## Endpoints
 
