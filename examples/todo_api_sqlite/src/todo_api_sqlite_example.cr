@@ -132,26 +132,26 @@ class TodoApi
 
   @[LF::HTTP::Controller::Get("/todos")]
   def index(todo_repository : TodoRepository)
-    LF::HTTP::JSONResponse.create(TodoListResponse.new(todo_repository.all))
+    TodoListResponse.new(todo_repository.all)
   end
 
   @[LF::HTTP::Controller::Get("/todos/:id")]
   def show(id : Int64, todo_repository : TodoRepository)
     todo = todo_repository.find(id)
     raise LF::HTTP::NotFound.new("Todo not found") unless todo
-    LF::HTTP::JSONResponse.create(todo)
+    todo
   end
 
   @[LF::HTTP::Controller::Post("/todos")]
   def create(payload : CreateTodoPayload, todo_repository : TodoRepository)
-    LF::HTTP::JSONResponse.create(todo_repository.create(payload.title))
+    todo_repository.create(payload.title)
   end
 
   @[LF::HTTP::Controller::Put("/todos/:id")]
   def update(id : Int64, payload : UpdateTodoPayload, todo_repository : TodoRepository)
     todo = todo_repository.update(id, payload.title, payload.completed)
     raise LF::HTTP::NotFound.new("Todo not found") unless todo
-    LF::HTTP::JSONResponse.create(todo)
+    todo
   end
 
   @[LF::HTTP::Controller::Delete("/todos/:id")]

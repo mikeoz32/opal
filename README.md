@@ -107,6 +107,7 @@ server.listen
 - `HTTP::Request`
 - DI lookup from `context.dependency_scope`
 - JSON body parsing for `JSON::Serializable`
+- automatic JSON responses for returned `JSON::Serializable` models
 - `LF::HTTP::Response` return types such as `LF::HTTP::JSONResponse`
 
 ### Example
@@ -135,12 +136,12 @@ class UsersApi
 
   @[LF::HTTP::Controller::Get("/users/:id")]
   def show(id : Int32)
-    LF::HTTP::JSONResponse.create(UserView.new(id, "User #{id}"))
+    UserView.new(id, "User #{id}")
   end
 
   @[LF::HTTP::Controller::Post("/users")]
   def create(payload : UserPayload)
-    LF::HTTP::JSONResponse.create(UserView.new(1, payload.name))
+    UserView.new(1, payload.name)
   end
 end
 
@@ -287,7 +288,7 @@ The repository includes these examples:
   Basic router + JSON response example.
 
 - [examples/api_route_di_example.cr](examples/api_route_di_example.cr)
-  `LF::HTTP::Controller` with request-scoped DI and `LF::HTTP::JSONResponse`.
+  `LF::HTTP::Controller` with request-scoped DI and direct JSON model responses.
 
 - [examples/di_lifecycle_example.cr](examples/di_lifecycle_example.cr)
   Standalone lifecycle example showing `after_properties_set`, `exit`, and `shutdown`.
@@ -336,7 +337,10 @@ Opal includes these response helpers:
 - `LF::HTTP::TextResponse.create("...")`
 - `LF::HTTP::JSONResponse.create(serializable_object)`
 
-If a controller method returns an `LF::HTTP::Response`, Opal writes it to the HTTP response.
+Controller methods may return a `JSON::Serializable` model directly; Opal writes it as
+`application/json`. Explicit `LF::HTTP::Response` implementations remain available when
+the response must control headers, status, or serialization behavior. Strings remain
+plain text; collections are not auto-serialized.
 
 ## Error Types
 

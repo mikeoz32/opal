@@ -21,7 +21,7 @@ class GreetingApi
 
   @[LF::HTTP::Controller::Get("/hello/:name")]
   def show(name : String, greeting_service : GreetingService)
-    LF::HTTP::JSONResponse.create(Message.new("#{greeting_service.prefix}, #{name}"))
+    Message.new("#{greeting_service.prefix}, #{name}")
   end
 
   @[LF::HTTP::Controller::Get("/echo")]
