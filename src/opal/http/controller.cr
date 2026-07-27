@@ -62,6 +62,9 @@ module LF::HTTP::Controller
                 result = {{ method.name }}({% for arg in method.args %}{{ arg.name }},{% end %})
                 if result.is_a?(LF::HTTP::Response)
                   result.as(LF::HTTP::Response).write_to(ctx)
+                elsif result.is_a?(JSON::Serializable)
+                  ctx.response.content_type = "application/json"
+                  result.to_json(ctx.response)
                 else
                   ctx.response.print result
                 end

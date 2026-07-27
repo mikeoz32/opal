@@ -54,12 +54,45 @@ class TestResourceJsonResponse
   end
 end
 
+class TestResourceDirectJson
+  include LF::HTTP::Controller
+
+  @[LF::HTTP::Controller::Get("/direct-json")]
+  def show
+    JsonModel.new(2, "direct")
+  end
+
+  @[LF::HTTP::Controller::Get("/union/:format")]
+  def union(format : String) : JsonModel | String
+    format == "json" ? JsonModel.new(3, "union") : "plain"
+  end
+end
+
+class ToJsonOnlyModel
+  def to_json(io : IO) : Nil
+    io << %({"source":"to_json"})
+  end
+
+  def to_s(io : IO) : Nil
+    io << "plain fallback"
+  end
+end
+
+class TestResourceToJsonOnly
+  include LF::HTTP::Controller
+
+  @[LF::HTTP::Controller::Get("/to-json-only")]
+  def show
+    ToJsonOnlyModel.new
+  end
+end
+
 class TestResourceJsonBody
   include LF::HTTP::Controller
 
   @[LF::HTTP::Controller::Post("/json-body")]
   def create(model : JsonModel)
-    LF::HTTP::JSONResponse.create(model)
+    model
   end
 end
 
@@ -1874,6 +1907,85 @@ describe "LF::HTTP::Controller" do
     payload = JSON.parse(parsed.body)
     payload["id"].as_i.should eq(1)
     payload["name"].as_s.should eq("ok")
+  end
+
+  it "serializes direct JSON::Serializable return values" do
+    app = LF::HTTP::App.new do |router|
+      TestResourceDirectJson.new.setup_routes(router)
+    end
+
+    io = IO::Memory.new
+    context = HTTP::Server::Context.new(
+      HTTP::Request.new("GET", "/direct-json"),
+      HTTP::Server::Response.new(io)
+    )
+
+    app.call(context)
+    context.response.close
+
+    parsed = HTTP::Client::Response.from_io(IO::Memory.new(io.to_s))
+    parsed.status.should eq(HTTP::Status::OK)
+    parsed.content_type.should eq("application/json")
+    payload = JSON.parse(parsed.body)
+    payload["id"].as_i.should eq(2)
+    payload["name"].as_s.should eq("direct")
+  end
+
+  it "serializes the JSON branch of a JSON::Serializable or String return type" do
+    app = LF::HTTP::App.new do |router|
+      TestResourceDirectJson.new.setup_routes(router)
+    end
+
+    io = IO::Memory.new
+    context = HTTP::Server::Context.new(
+      HTTP::Request.new("GET", "/union/json"),
+      HTTP::Server::Response.new(io)
+    )
+
+    app.call(context)
+    context.response.close
+
+    parsed = HTTP::Client::Response.from_io(IO::Memory.new(io.to_s))
+    parsed.content_type.should eq("application/json")
+    JSON.parse(parsed.body)["name"].as_s.should eq("union")
+  end
+
+  it "keeps the String branch of a JSON::Serializable or String return type as text" do
+    app = LF::HTTP::App.new do |router|
+      TestResourceDirectJson.new.setup_routes(router)
+    end
+
+    io = IO::Memory.new
+    context = HTTP::Server::Context.new(
+      HTTP::Request.new("GET", "/union/text"),
+      HTTP::Server::Response.new(io)
+    )
+
+    app.call(context)
+    context.response.close
+
+    parsed = HTTP::Client::Response.from_io(IO::Memory.new(io.to_s))
+    parsed.content_type.should_not eq("application/json")
+    parsed.body.should eq("plain")
+  end
+
+  it "does not auto-serialize types that define to_json without JSON::Serializable" do
+    app = LF::HTTP::App.new do |router|
+      TestResourceToJsonOnly.new.setup_routes(router)
+    end
+
+    io = IO::Memory.new
+    context = HTTP::Server::Context.new(
+      HTTP::Request.new("GET", "/to-json-only"),
+      HTTP::Server::Response.new(io)
+    )
+
+    app.call(context)
+    context.response.close
+
+    parsed = HTTP::Client::Response.from_io(IO::Memory.new(io.to_s))
+    parsed.content_type.should_not eq("application/json")
+    parsed.body.should eq("plain fallback")
   end
 
   it "resolves root-owned DI arguments from request child scopes" do
