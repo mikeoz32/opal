@@ -128,65 +128,50 @@ class TodoRepository
 end
 
 class TodoApi
-  include LF::APIRoute
+  include LF::HTTP::Controller
 
-  @[LF::APIRoute::Get("/todos")]
+  @[LF::HTTP::Controller::Get("/todos")]
   def index(todo_repository : TodoRepository)
-    LF::JSONResponse.create(TodoListResponse.new(todo_repository.all))
+    LF::HTTP::JSONResponse.create(TodoListResponse.new(todo_repository.all))
   end
 
-  @[LF::APIRoute::Get("/todos/:id")]
+  @[LF::HTTP::Controller::Get("/todos/:id")]
   def show(id : Int64, todo_repository : TodoRepository)
     todo = todo_repository.find(id)
-    raise LF::NotFound.new("Todo not found") unless todo
-    LF::JSONResponse.create(todo)
+    raise LF::HTTP::NotFound.new("Todo not found") unless todo
+    LF::HTTP::JSONResponse.create(todo)
   end
 
-  @[LF::APIRoute::Post("/todos")]
+  @[LF::HTTP::Controller::Post("/todos")]
   def create(payload : CreateTodoPayload, todo_repository : TodoRepository)
-    LF::JSONResponse.create(todo_repository.create(payload.title))
+    LF::HTTP::JSONResponse.create(todo_repository.create(payload.title))
   end
 
-  @[LF::APIRoute::Put("/todos/:id")]
+  @[LF::HTTP::Controller::Put("/todos/:id")]
   def update(id : Int64, payload : UpdateTodoPayload, todo_repository : TodoRepository)
     todo = todo_repository.update(id, payload.title, payload.completed)
-    raise LF::NotFound.new("Todo not found") unless todo
-    LF::JSONResponse.create(todo)
+    raise LF::HTTP::NotFound.new("Todo not found") unless todo
+    LF::HTTP::JSONResponse.create(todo)
   end
 
-  @[LF::APIRoute::Delete("/todos/:id")]
+  @[LF::HTTP::Controller::Delete("/todos/:id")]
   def destroy(id : Int64, todo_repository : TodoRepository)
     deleted = todo_repository.delete(id)
-    raise LF::NotFound.new("Todo not found") unless deleted
-    LF::TextResponse.create("deleted")
+    raise LF::HTTP::NotFound.new("Todo not found") unless deleted
+    LF::HTTP::TextResponse.create("deleted")
   end
 end
 
-class RequestScopeHandler
-  include HTTP::Handler
+root = LF::DI::DefaultContainer.new
+root.register(LF::DI::ServiceConfiguration.new)
 
-  def initialize(@root : LF::DI::AnnotationApplicationContext)
-  end
-
-  def call(context)
-    scope = @root.enter_scope("request")
-    context.state = scope
-    call_next(context)
-  ensure
-    scope.try(&.exit)
-  end
-end
-
-root = LF::DI::AnnotationApplicationContext.new
-root.register(LF::DI::AutowiredApplicationConfig.new)
-
-app = LF::LFApi.new do |router|
+app = LF::HTTP::App.new do |router|
   TodoApi.new.setup_routes(router)
 end
 
 server = HTTP::Server.new([
   HTTP::LogHandler.new,
-  RequestScopeHandler.new(root),
+  LF::HTTP::DI::RequestScopeHandler.new(root),
   app,
 ])
 

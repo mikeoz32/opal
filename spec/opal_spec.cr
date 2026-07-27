@@ -13,62 +13,89 @@ class JsonModel
 end
 
 class TestResourceForDI
-  include LF::APIRoute
+  include LF::HTTP::Controller
 
-  @[LF::APIRoute::Get("/test")]
-  def test_endpoint(name : String)
-    "Hello #{name}"
+  @[LF::HTTP::Controller::Get("/test")]
+  def test_endpoint(greeting_service : TestGreetingService)
+    greeting_service.message
   end
 end
 
 class TestAPIWithParams
-  include LF::APIRoute
+  include LF::HTTP::Controller
 
-  @[LF::APIRoute::Get("/users/:id")]
+  @[LF::HTTP::Controller::Get("/users/:id")]
   def get_user(id : Int32)
     "User #{id}"
   end
 
-  @[LF::APIRoute::Get("/items/:item_id")]
+  @[LF::HTTP::Controller::Get("/items/:item_id")]
   def get_item(item_id : Int64)
     "Item #{item_id}"
   end
 
-  @[LF::APIRoute::Get("/products/:product_id")]
+  @[LF::HTTP::Controller::Get("/products/:product_id")]
   def get_product(product_id : UUID)
     "Product #{product_id}"
   end
 
-  @[LF::APIRoute::Get("/settings/:key")]
+  @[LF::HTTP::Controller::Get("/settings/:key")]
   def get_setting(key : String, enabled : Bool)
     "Setting #{key} is #{enabled}"
   end
 end
 
 class TestResourceJsonResponse
-  include LF::APIRoute
+  include LF::HTTP::Controller
 
-  @[LF::APIRoute::Get("/json-response")]
+  @[LF::HTTP::Controller::Get("/json-response")]
   def json_response
-    LF::JSONResponse.create(JsonModel.new(1, "ok"))
+    LF::HTTP::JSONResponse.create(JsonModel.new(1, "ok"))
+  end
+end
+
+class TestResourceJsonBody
+  include LF::HTTP::Controller
+
+  @[LF::HTTP::Controller::Post("/json-body")]
+  def create(model : JsonModel)
+    LF::HTTP::JSONResponse.create(model)
   end
 end
 
 class TestResourceWithRootScopedDI
-  include LF::APIRoute
+  include LF::HTTP::Controller
 
-  @[LF::APIRoute::Get("/root-scoped-di")]
+  @[LF::HTTP::Controller::Get("/root-scoped-di")]
   def show(greeting_service : TestGreetingService)
     greeting_service.message
   end
 end
 
 class TestResourceWithNotFound
-  include LF::APIRoute
+  include LF::HTTP::Controller
 
-  @[LF::APIRoute::Get("/api-missing")]
+  @[LF::HTTP::Controller::Get("/api-missing")]
   def show
-    raise LF::NotFound.new("api missing")
+    raise LF::HTTP::NotFound.new("api missing")
+  end
+end
+
+class TestRequestScopeEndpoint
+  include HTTP::Handler
+
+  def call(context : HTTP::Server::Context) : Nil
+    scope = context.dependency_scope.not_nil!
+    scope.resolve(TestDisposableCounterBean)
+    context.response.print "scoped"
+  end
+end
+
+class TestFailingRequestScopeEndpoint
+  include HTTP::Handler
+
+  def call(context : HTTP::Server::Context) : Nil
+    context.dependency_scope.not_nil!.resolve(TestFailingDisposableBean)
   end
 end
 
@@ -95,7 +122,7 @@ class TestGreetingService
 end
 
 class TestConfigWithBeans
-  include LF::DI::ApplicationConfig
+  include LF::DI::BeanConfiguration
 
   @[LF::DI::Bean]
   def greeting_service : TestGreetingService
@@ -339,7 +366,7 @@ class AutoLifecycleParentService
 end
 
 class TestDependentConfig
-  include LF::DI::ApplicationConfig
+  include LF::DI::BeanConfiguration
 
   @[LF::DI::Bean]
   def greeting_service : TestGreetingService
@@ -353,7 +380,7 @@ class TestDependentConfig
 end
 
 class TestTypeFallbackConfig
-  include LF::DI::ApplicationConfig
+  include LF::DI::BeanConfiguration
 
   @[LF::DI::Bean]
   def fallback_greeting : TestGreetingService
@@ -367,7 +394,7 @@ class TestTypeFallbackConfig
 end
 
 class TestNamePreferredConfig
-  include LF::DI::ApplicationConfig
+  include LF::DI::BeanConfiguration
 
   @[LF::DI::Bean]
   def greeting_service : TestGreetingService
@@ -386,7 +413,7 @@ class TestNamePreferredConfig
 end
 
 class TestTypeMismatchFallbackConfig
-  include LF::DI::ApplicationConfig
+  include LF::DI::BeanConfiguration
 
   @[LF::DI::Bean]
   def greeting_service : String
@@ -405,7 +432,7 @@ class TestTypeMismatchFallbackConfig
 end
 
 class TestAmbiguousTypeFallbackConfig
-  include LF::DI::ApplicationConfig
+  include LF::DI::BeanConfiguration
 
   @[LF::DI::Bean]
   def primary_greeting : TestGreetingService
@@ -423,21 +450,21 @@ class TestAmbiguousTypeFallbackConfig
   end
 end
 
-describe "Trie" do
+describe "LF::Routing::Trie" do
   describe "Node" do
     it "matches the root route" do
-      t = Trie::Node.new
+      t = LF::Routing::Trie::Node.new
       dummy_handler = ->(ctx : HTTP::Server::Context, params : Hash(String, String)) { }
 
       t.add_route("/", dummy_handler)
 
       result = t.search("/")
-      result.node.should_not be_nil
+      result.matched?.should be_true
       result.params.should be_empty
     end
 
     it "adds and searches exact routes" do
-      t = Trie::Node.new
+      t = LF::Routing::Trie::Node.new
       dummy_handler = ->(ctx : HTTP::Server::Context, params : Hash(String, String)) { }
 
       t.add_route("/hello", dummy_handler)
@@ -445,62 +472,62 @@ describe "Trie" do
       t.add_route("/hi/user", dummy_handler)
 
       result = t.search("/hello")
-      result.node.should_not be_nil
+      result.matched?.should be_true
       result.params.should be_empty
 
       result = t.search("/hi")
-      result.node.should_not be_nil
+      result.matched?.should be_true
       result.params.should be_empty
 
       result = t.search("/hi/user")
-      result.node.should_not be_nil
+      result.matched?.should be_true
       result.params.should be_empty
     end
 
     it "matches routes with single parameter" do
-      t = Trie::Node.new
+      t = LF::Routing::Trie::Node.new
       dummy_handler = ->(ctx : HTTP::Server::Context, params : Hash(String, String)) { }
 
       t.add_route("/users/:id", dummy_handler)
 
       result = t.search("/users/42")
-      result.node.should_not be_nil
+      result.matched?.should be_true
       result.params["id"].should eq("42")
 
       result = t.search("/users/john")
-      result.node.should_not be_nil
+      result.matched?.should be_true
       result.params["id"].should eq("john")
     end
 
     it "matches routes with multiple parameters" do
-      t = Trie::Node.new
+      t = LF::Routing::Trie::Node.new
       dummy_handler = ->(ctx : HTTP::Server::Context, params : Hash(String, String)) { }
 
       t.add_route("/api/posts/:post_id/comments/:comment_id", dummy_handler)
 
       result = t.search("/api/posts/42/comments/7")
-      result.node.should_not be_nil
+      result.matched?.should be_true
       result.params["post_id"].should eq("42")
       result.params["comment_id"].should eq("7")
 
       result = t.search("/api/posts/hello-world/comments/99")
-      result.node.should_not be_nil
+      result.matched?.should be_true
       result.params["post_id"].should eq("hello-world")
       result.params["comment_id"].should eq("99")
     end
 
     it "returns nil for non-existent routes" do
-      t = Trie::Node.new
+      t = LF::Routing::Trie::Node.new
       dummy_handler = ->(ctx : HTTP::Server::Context, params : Hash(String, String)) { }
 
       t.add_route("/hello", dummy_handler)
 
       result = t.search("/notfound")
-      result.node.should be_nil
+      result.matched?.should be_false
     end
 
     it "prioritizes exact matches over parameter matches" do
-      t = Trie::Node.new
+      t = LF::Routing::Trie::Node.new
       dummy_handler1 = ->(ctx : HTTP::Server::Context, params : Hash(String, String)) {
         ctx.response.print "exact"
       }
@@ -512,118 +539,118 @@ describe "Trie" do
       t.add_route("/users/:id", dummy_handler2)
 
       result = t.search("/users/list")
-      result.node.should_not be_nil
+      result.matched?.should be_true
       result.params.should be_empty
 
       result = t.search("/users/123")
-      result.node.should_not be_nil
+      result.matched?.should be_true
       result.params["id"].should eq("123")
     end
 
     it "preserves parameter names across sibling dynamic routes" do
-      t = Trie::Node.new
+      t = LF::Routing::Trie::Node.new
       dummy_handler = ->(ctx : HTTP::Server::Context, params : Hash(String, String)) { }
 
       t.add_route("/users/:id", dummy_handler)
       t.add_route("/users/:name/details", dummy_handler)
 
       result = t.search("/users/alice")
-      result.node.should_not be_nil
+      result.matched?.should be_true
       result.params["id"].should eq("alice")
 
       result = t.search("/users/bob/details")
-      result.node.should_not be_nil
+      result.matched?.should be_true
       result.params["name"].should eq("bob")
     end
 
     it "matches routes with trailing slashes" do
-      t = Trie::Node.new
+      t = LF::Routing::Trie::Node.new
       dummy_handler = ->(ctx : HTTP::Server::Context, params : Hash(String, String)) { }
 
       t.add_route("/users/:id", dummy_handler)
       t.add_route("/reports/daily", dummy_handler)
 
       result = t.search("/users/42/")
-      result.node.should_not be_nil
+      result.matched?.should be_true
       result.params["id"].should eq("42")
 
       result = t.search("/reports/daily/")
-      result.node.should_not be_nil
+      result.matched?.should be_true
       result.params.should be_empty
     end
 
     it "does not match paths with extra segments" do
-      t = Trie::Node.new
+      t = LF::Routing::Trie::Node.new
       dummy_handler = ->(ctx : HTTP::Server::Context, params : Hash(String, String)) { }
 
       t.add_route("/users/:id", dummy_handler)
       t.add_route("/reports/daily", dummy_handler)
 
-      t.search("/users/42/details").node.should be_nil
-      t.search("/reports/daily/archive").node.should be_nil
+      t.search("/users/42/details").matched?.should be_false
+      t.search("/reports/daily/archive").matched?.should be_false
     end
 
     it "normalizes repeated slashes in paths" do
-      t = Trie::Node.new
+      t = LF::Routing::Trie::Node.new
       dummy_handler = ->(ctx : HTTP::Server::Context, params : Hash(String, String)) { }
 
       t.add_route("/users/:id", dummy_handler)
       t.add_route("/reports/daily", dummy_handler)
 
       result = t.search("//users//42//")
-      result.node.should_not be_nil
+      result.matched?.should be_true
       result.params["id"].should eq("42")
 
       result = t.search("//reports///daily")
-      result.node.should_not be_nil
+      result.matched?.should be_true
       result.params.should be_empty
     end
 
     it "prioritizes exact top-level routes over parameter routes" do
-      t = Trie::Node.new
+      t = LF::Routing::Trie::Node.new
       dummy_handler = ->(ctx : HTTP::Server::Context, params : Hash(String, String)) { }
 
       t.add_route("/:page", dummy_handler)
       t.add_route("/about", dummy_handler)
 
       result = t.search("/about")
-      result.node.should_not be_nil
+      result.matched?.should be_true
       result.params.should be_empty
 
       result = t.search("/contact")
-      result.node.should_not be_nil
+      result.matched?.should be_true
       result.params["page"].should eq("contact")
     end
 
     it "prioritizes exact nested routes over parameter routes at the same depth" do
-      t = Trie::Node.new
+      t = LF::Routing::Trie::Node.new
       dummy_handler = ->(ctx : HTTP::Server::Context, params : Hash(String, String)) { }
 
       t.add_route("/files/:id/edit", dummy_handler)
       t.add_route("/files/new/edit", dummy_handler)
 
       result = t.search("/files/new/edit")
-      result.node.should_not be_nil
+      result.matched?.should be_true
       result.params.should be_empty
 
       result = t.search("/files/123/edit")
-      result.node.should_not be_nil
+      result.matched?.should be_true
       result.params["id"].should eq("123")
     end
 
     it "backtracks across multiple parameter children at the same depth" do
-      t = Trie::Node.new
+      t = LF::Routing::Trie::Node.new
       dummy_handler = ->(ctx : HTTP::Server::Context, params : Hash(String, String)) { }
 
       t.add_route("/users/:id/profile", dummy_handler)
       t.add_route("/users/:name/settings", dummy_handler)
 
       result = t.search("/users/alice/settings")
-      result.node.should_not be_nil
+      result.matched?.should be_true
       result.params["name"].should eq("alice")
 
       result = t.search("/users/42/profile")
-      result.node.should_not be_nil
+      result.matched?.should be_true
       result.params["id"].should eq("42")
     end
   end
@@ -632,7 +659,7 @@ end
 describe "LF::DI" do
   it "registers and resolves singleton beans" do
     TestCounterService.reset
-    context = LF::DI::AnnotationApplicationContext.new
+    context = LF::DI::DefaultContainer.new
 
     context.add_bean(name: "counter", type: TestCounterService) do |_ctx|
       TestCounterService.new
@@ -647,7 +674,7 @@ describe "LF::DI" do
 
   it "creates a new instance for prototype beans" do
     TestCounterService.reset
-    context = LF::DI::AnnotationApplicationContext.new
+    context = LF::DI::DefaultContainer.new
 
     context.add_bean(name: "counter", scope: "prototype", type: TestCounterService) do |_ctx|
       TestCounterService.new
@@ -662,7 +689,7 @@ describe "LF::DI" do
   end
 
   it "resolves request-scoped beans from a parent context" do
-    context = LF::DI::AnnotationApplicationContext.new
+    context = LF::DI::DefaultContainer.new
 
     context.add_bean(name: "greeting", scope: "request", type: TestGreetingService) do |_ctx|
       TestGreetingService.new("from parent")
@@ -675,7 +702,7 @@ describe "LF::DI" do
   end
 
   it "resolves uninitialized singleton beans from child contexts" do
-    context = LF::DI::AnnotationApplicationContext.new
+    context = LF::DI::DefaultContainer.new
 
     context.add_bean(name: "greeting", type: TestGreetingService) do |_ctx|
       TestGreetingService.new("from singleton")
@@ -688,7 +715,7 @@ describe "LF::DI" do
   end
 
   it "does not allow child contexts to register beans" do
-    context = LF::DI::AnnotationApplicationContext.new
+    context = LF::DI::DefaultContainer.new
     child = context.enter_scope("request")
 
     expect_raises(LF::DI::ChildContextMutationError, "Child context can not add beans") do
@@ -698,37 +725,34 @@ describe "LF::DI" do
     end
   end
 
-  it "clears cached instances on exit for child contexts" do
-    TestCounterService.reset
-    context = LF::DI::AnnotationApplicationContext.new
+  it "closes child contexts on exit" do
+    context = LF::DI::DefaultContainer.new
 
-    context.add_bean(name: "counter", scope: "request", type: TestCounterService) do |_ctx|
-      TestCounterService.new
+    context.add_bean(name: "greeting", scope: "request", type: TestGreetingService) do |_ctx|
+      TestGreetingService.new("request")
     end
 
     child = context.enter_scope("request")
-    first = child.get_bean("counter", TestCounterService)
-    second = child.get_bean("counter", TestCounterService)
-    second.should be(first)
+    child.get_bean("greeting", TestGreetingService)
 
     child.exit
 
-    third = child.get_bean("counter", TestCounterService)
-    third.should_not be(first)
-    third.id.should eq(2)
+    expect_raises(LF::DI::ContextClosedError) do
+      child.get_bean("greeting", TestGreetingService)
+    end
   end
 
   it "raises when a bean is missing" do
-    context = LF::DI::AnnotationApplicationContext.new
+    context = LF::DI::DefaultContainer.new
 
     expect_raises(LF::DI::BeanNotFoundError, "Bean not found: name=missing, type=TestGreetingService") do
       context.get_bean("missing", TestGreetingService)
     end
   end
 
-  it "registers bean factories from ApplicationConfig" do
+  it "registers bean factories from BeanConfiguration" do
     TestCounterService.reset
-    context = LF::DI::AnnotationApplicationContext.new
+    context = LF::DI::DefaultContainer.new
 
     context.register(TestConfigWithBeans.new)
 
@@ -739,16 +763,31 @@ describe "LF::DI" do
     counter.id.should eq(1)
   end
 
-  it "resolves bean factory dependencies from ApplicationConfig" do
-    context = LF::DI::AnnotationApplicationContext.new
+  it "resolves bean factory dependencies from BeanConfiguration" do
+    context = LF::DI::DefaultContainer.new
 
     context.register(TestDependentConfig.new)
 
     context.get_bean("decorated_message", String).should eq("hello, world")
   end
 
+  it "resolves a unique bean by type through the public resolver" do
+    context = LF::DI::DefaultContainer.new
+    context.register(TestConfigWithBeans.new)
+
+    context.resolve(TestGreetingService).message.should eq("hello")
+  end
+
+  it "resolves a named bean with its expected type through the public resolver" do
+    TestCounterService.reset
+    context = LF::DI::DefaultContainer.new
+    context.register(TestConfigWithBeans.new)
+
+    context.resolve("custom_counter", TestCounterService).id.should eq(1)
+  end
+
   it "falls back to resolving bean factory dependencies by type when name lookup misses" do
-    context = LF::DI::AnnotationApplicationContext.new
+    context = LF::DI::DefaultContainer.new
 
     context.register(TestTypeFallbackConfig.new)
 
@@ -756,7 +795,7 @@ describe "LF::DI" do
   end
 
   it "prefers name-based bean resolution over type fallback" do
-    context = LF::DI::AnnotationApplicationContext.new
+    context = LF::DI::DefaultContainer.new
 
     context.register(TestNamePreferredConfig.new)
 
@@ -764,7 +803,7 @@ describe "LF::DI" do
   end
 
   it "falls back to type-based resolution when name lookup finds the wrong type" do
-    context = LF::DI::AnnotationApplicationContext.new
+    context = LF::DI::DefaultContainer.new
 
     context.register(TestTypeMismatchFallbackConfig.new)
 
@@ -773,7 +812,7 @@ describe "LF::DI" do
 
   it "allows prototype beans to be resolved from a different child scope" do
     TestCounterService.reset
-    context = LF::DI::AnnotationApplicationContext.new
+    context = LF::DI::DefaultContainer.new
 
     context.add_bean(name: "counter", scope: "prototype", type: TestCounterService) do |_ctx|
       TestCounterService.new
@@ -789,7 +828,7 @@ describe "LF::DI" do
   end
 
   it "raises on scope mismatch for non-prototype beans" do
-    context = LF::DI::AnnotationApplicationContext.new
+    context = LF::DI::DefaultContainer.new
 
     context.add_bean(name: "greeting", scope: "request", type: TestGreetingService) do |_ctx|
       TestGreetingService.new("scoped")
@@ -803,25 +842,15 @@ describe "LF::DI" do
   end
 
   it "does not allow entering a singleton child scope" do
-    context = LF::DI::AnnotationApplicationContext.new
+    context = LF::DI::DefaultContainer.new
 
     expect_raises(LF::DI::InvalidChildScopeError, "Singleton scope is not allowed for child contexts") do
       context.enter_scope("singleton")
     end
   end
 
-  it "supports resolving beans through to_t" do
-    context = LF::DI::AnnotationApplicationContext.new
-
-    context.add_bean(name: "greeting", type: TestGreetingService) do |_ctx|
-      TestGreetingService.new("typed")
-    end
-
-    context.to_t("greeting", TestGreetingService).message.should eq("typed")
-  end
-
   it "raises on duplicate bean names" do
-    context = LF::DI::AnnotationApplicationContext.new
+    context = LF::DI::DefaultContainer.new
 
     context.add_bean(name: "greeting", type: TestGreetingService) do |_ctx|
       TestGreetingService.new("first")
@@ -835,7 +864,7 @@ describe "LF::DI" do
   end
 
   it "raises on bean type mismatch" do
-    context = LF::DI::AnnotationApplicationContext.new
+    context = LF::DI::DefaultContainer.new
 
     context.add_bean(name: "greeting", type: TestGreetingService) do |_ctx|
       TestGreetingService.new("hello")
@@ -846,8 +875,20 @@ describe "LF::DI" do
     end
   end
 
+  it "raises the same typed mismatch error after the bean is cached" do
+    context = LF::DI::DefaultContainer.new
+    context.add_bean(name: "greeting", type: TestGreetingService) do |_ctx|
+      TestGreetingService.new("hello")
+    end
+    context.get_bean("greeting", TestGreetingService)
+
+    expect_raises(LF::DI::BeanTypeMismatchError, "Bean type mismatch: name=greeting, expected=String") do
+      context.get_bean("greeting", String)
+    end
+  end
+
   it "raises when type fallback finds multiple matching beans" do
-    context = LF::DI::AnnotationApplicationContext.new
+    context = LF::DI::DefaultContainer.new
 
     context.register(TestAmbiguousTypeFallbackConfig.new)
 
@@ -857,7 +898,7 @@ describe "LF::DI" do
   end
 
   it "tracks ownership metadata for root-owned singleton instances" do
-    context = LF::DI::AnnotationApplicationContext.new
+    context = LF::DI::DefaultContainer.new
 
     context.add_bean(name: "greeting", type: TestGreetingService) do |_ctx|
       TestGreetingService.new("root")
@@ -869,7 +910,7 @@ describe "LF::DI" do
   end
 
   it "tracks ownership metadata for child-owned scoped instances" do
-    context = LF::DI::AnnotationApplicationContext.new
+    context = LF::DI::DefaultContainer.new
 
     context.add_bean(name: "greeting", scope: "request", type: TestGreetingService) do |_ctx|
       TestGreetingService.new("request")
@@ -902,7 +943,7 @@ describe "LF::DI" do
 
   it "invokes init callback exactly once for singleton beans" do
     TestInitCounterBean.reset
-    context = LF::DI::AnnotationApplicationContext.new
+    context = LF::DI::DefaultContainer.new
 
     context.add_bean(name: "init_singleton", type: TestInitCounterBean) do |_ctx|
       TestInitCounterBean.new
@@ -917,7 +958,7 @@ describe "LF::DI" do
 
   it "invokes init callback for every prototype instance creation" do
     TestInitCounterBean.reset
-    context = LF::DI::AnnotationApplicationContext.new
+    context = LF::DI::DefaultContainer.new
 
     context.add_bean(name: "init_prototype", scope: "prototype", type: TestInitCounterBean) do |_ctx|
       TestInitCounterBean.new
@@ -929,9 +970,40 @@ describe "LF::DI" do
     TestInitCounterBean.init_calls.should eq(2)
   end
 
+  it "destroys every root-owned prototype instance on shutdown" do
+    TestDisposableCounterBean.reset
+    context = LF::DI::DefaultContainer.new
+
+    context.add_bean(name: "prototype_resource", scope: "prototype", type: TestDisposableCounterBean) do |_ctx|
+      TestDisposableCounterBean.new
+    end
+
+    context.get_bean("prototype_resource", TestDisposableCounterBean)
+    context.get_bean("prototype_resource", TestDisposableCounterBean)
+    context.shutdown
+
+    TestDisposableCounterBean.destroy_calls.should eq(2)
+  end
+
+  it "destroys every child-owned prototype instance on scope exit" do
+    TestDisposableCounterBean.reset
+    context = LF::DI::DefaultContainer.new
+
+    context.add_bean(name: "prototype_resource", scope: "prototype", type: TestDisposableCounterBean) do |_ctx|
+      TestDisposableCounterBean.new
+    end
+
+    child = context.enter_scope("request")
+    child.get_bean("prototype_resource", TestDisposableCounterBean)
+    child.get_bean("prototype_resource", TestDisposableCounterBean)
+    child.exit
+
+    TestDisposableCounterBean.destroy_calls.should eq(2)
+  end
+
   it "raises BeanInitializationError and does not cache instance when init callback fails" do
     TestFailingInitBean.reset
-    context = LF::DI::AnnotationApplicationContext.new
+    context = LF::DI::DefaultContainer.new
 
     context.add_bean(name: "failing_init", type: TestFailingInitBean) do |_ctx|
       TestFailingInitBean.new
@@ -950,7 +1022,7 @@ describe "LF::DI" do
 
   it "destroys child-owned disposable instances on child exit" do
     TestDisposableCounterBean.reset
-    context = LF::DI::AnnotationApplicationContext.new
+    context = LF::DI::DefaultContainer.new
 
     context.add_bean(name: "disposable_request", scope: "request", type: TestDisposableCounterBean) do |_ctx|
       TestDisposableCounterBean.new
@@ -966,7 +1038,7 @@ describe "LF::DI" do
 
   it "does not destroy root-owned singleton disposable instances on child exit" do
     TestDisposableCounterBean.reset
-    context = LF::DI::AnnotationApplicationContext.new
+    context = LF::DI::DefaultContainer.new
 
     context.add_bean(name: "disposable_singleton", type: TestDisposableCounterBean) do |_ctx|
       TestDisposableCounterBean.new
@@ -985,7 +1057,7 @@ describe "LF::DI" do
 
   it "destroys root-owned singleton disposable instances on shutdown" do
     TestDisposableCounterBean.reset
-    context = LF::DI::AnnotationApplicationContext.new
+    context = LF::DI::DefaultContainer.new
 
     context.add_bean(name: "root_disposable_singleton", type: TestDisposableCounterBean) do |_ctx|
       TestDisposableCounterBean.new
@@ -997,8 +1069,47 @@ describe "LF::DI" do
     TestDisposableCounterBean.destroy_calls.should eq(1)
   end
 
+  it "destroys root-owned instances and closes the root on exit" do
+    TestDisposableCounterBean.reset
+    context = LF::DI::DefaultContainer.new
+
+    context.add_bean(name: "root_resource", type: TestDisposableCounterBean) do |_ctx|
+      TestDisposableCounterBean.new
+    end
+
+    context.get_bean("root_resource", TestDisposableCounterBean)
+    context.exit
+
+    TestDisposableCounterBean.destroy_calls.should eq(1)
+    expect_raises(LF::DI::ContextClosedError) do
+      context.get_bean("root_resource", TestDisposableCounterBean)
+    end
+  end
+
+  it "does not recreate beans after shutdown" do
+    context = LF::DI::DefaultContainer.new
+
+    context.add_bean(name: "greeting", type: TestGreetingService) do |_ctx|
+      TestGreetingService.new("closed")
+    end
+
+    context.get_bean("greeting", TestGreetingService)
+    context.shutdown
+
+    expect_raises(LF::DI::ContextClosedError) do
+      context.get_bean("greeting", TestGreetingService)
+    end
+  end
+
+  it "keeps repeated shutdown idempotent" do
+    context = LF::DI::DefaultContainer.new
+
+    context.shutdown
+    context.shutdown
+  end
+
   it "aggregates destroy failures on shutdown as BeanDestructionError" do
-    context = LF::DI::AnnotationApplicationContext.new
+    context = LF::DI::DefaultContainer.new
 
     context.add_bean(name: "failing_disposable", type: TestFailingDisposableBean) do |_ctx|
       TestFailingDisposableBean.new
@@ -1013,7 +1124,7 @@ describe "LF::DI" do
 
   it "destroys root-owned disposable instances in reverse creation order on shutdown" do
     TestOrderedDisposableBean.reset
-    context = LF::DI::AnnotationApplicationContext.new
+    context = LF::DI::DefaultContainer.new
 
     context.add_bean(name: "first", type: TestOrderedDisposableBean) do |_ctx|
       TestOrderedDisposableBean.new("first")
@@ -1032,7 +1143,7 @@ describe "LF::DI" do
 
   it "destroys child-owned disposable instances in reverse creation order on exit" do
     TestOrderedDisposableBean.reset
-    context = LF::DI::AnnotationApplicationContext.new
+    context = LF::DI::DefaultContainer.new
 
     context.add_bean(name: "first", scope: "request", type: TestOrderedDisposableBean) do |_ctx|
       TestOrderedDisposableBean.new("first")
@@ -1051,11 +1162,11 @@ describe "LF::DI" do
   end
 end
 
-describe "LF::DI::AutowiredApplicationConfig" do
+describe "LF::DI::ServiceConfiguration" do
   it "registers annotated services as beans" do
-    context = LF::DI::AnnotationApplicationContext.new
+    context = LF::DI::DefaultContainer.new
 
-    context.register(LF::DI::AutowiredApplicationConfig.new)
+    context.register(LF::DI::ServiceConfiguration.new)
 
     leaf = context.get_bean("auto_leaf_service", AutoLeafService)
 
@@ -1063,9 +1174,9 @@ describe "LF::DI::AutowiredApplicationConfig" do
   end
 
   it "resolves constructor dependencies between annotated services" do
-    context = LF::DI::AnnotationApplicationContext.new
+    context = LF::DI::DefaultContainer.new
 
-    context.register(LF::DI::AutowiredApplicationConfig.new)
+    context.register(LF::DI::ServiceConfiguration.new)
 
     parent = context.get_bean("auto_parent_service", AutoParentService)
 
@@ -1074,9 +1185,9 @@ describe "LF::DI::AutowiredApplicationConfig" do
   end
 
   it "resolves multi-level constructor dependencies" do
-    context = LF::DI::AnnotationApplicationContext.new
+    context = LF::DI::DefaultContainer.new
 
-    context.register(LF::DI::AutowiredApplicationConfig.new)
+    context.register(LF::DI::ServiceConfiguration.new)
 
     top = context.get_bean("auto_top_service", AutoTopService)
 
@@ -1086,9 +1197,9 @@ describe "LF::DI::AutowiredApplicationConfig" do
   end
 
   it "resolves services with multiple constructor arguments" do
-    context = LF::DI::AnnotationApplicationContext.new
+    context = LF::DI::DefaultContainer.new
 
-    context.register(LF::DI::AutowiredApplicationConfig.new)
+    context.register(LF::DI::ServiceConfiguration.new)
 
     top = context.get_bean("auto_top_service", AutoTopService)
 
@@ -1097,9 +1208,9 @@ describe "LF::DI::AutowiredApplicationConfig" do
   end
 
   it "falls back to type-based resolution when constructor argument names do not match bean names" do
-    context = LF::DI::AnnotationApplicationContext.new
+    context = LF::DI::DefaultContainer.new
 
-    context.register(LF::DI::AutowiredApplicationConfig.new)
+    context.register(LF::DI::ServiceConfiguration.new)
 
     context.get_bean("auto_mismatched_arg_service", AutoMismatchedArgService).value.should eq("leaf")
   end
@@ -1116,10 +1227,10 @@ describe "LF::DI::AutowiredApplicationConfig" do
       class AutoUrlService
       end
 
-      context = LF::DI::AnnotationApplicationContext.new
+      context = LF::DI::DefaultContainer.new
 
       begin
-        context.register(LF::DI::AutowiredApplicationConfig.new)
+        context.register(LF::DI::ServiceConfiguration.new)
         puts "NO_ERROR"
         exit 1
       rescue e : LF::DI::DuplicateBeanError
@@ -1142,9 +1253,9 @@ describe "LF::DI::AutowiredApplicationConfig" do
   it "invokes lifecycle init callbacks for autowired services in constructor graph" do
     AutoLifecycleLeafService.reset
     AutoLifecycleParentService.reset
-    context = LF::DI::AnnotationApplicationContext.new
+    context = LF::DI::DefaultContainer.new
 
-    context.register(LF::DI::AutowiredApplicationConfig.new)
+    context.register(LF::DI::ServiceConfiguration.new)
     context.get_bean("auto_lifecycle_parent_service", AutoLifecycleParentService)
 
     AutoLifecycleLeafService.init_calls.should eq(1)
@@ -1154,9 +1265,9 @@ describe "LF::DI::AutowiredApplicationConfig" do
   it "invokes lifecycle destroy callbacks for autowired singletons on shutdown in reverse order" do
     AutoLifecycleLeafService.reset
     AutoLifecycleParentService.reset
-    context = LF::DI::AnnotationApplicationContext.new
+    context = LF::DI::DefaultContainer.new
 
-    context.register(LF::DI::AutowiredApplicationConfig.new)
+    context.register(LF::DI::ServiceConfiguration.new)
     context.get_bean("auto_lifecycle_parent_service", AutoLifecycleParentService)
     context.shutdown
 
@@ -1166,9 +1277,9 @@ describe "LF::DI::AutowiredApplicationConfig" do
   end
 end
 
-describe "LF::Router" do
+describe "LF::HTTP::Router" do
   it "routes the root path correctly" do
-    router = LF::Router.new
+    router = LF::HTTP::Router.new
 
     router.get("/") do |ctx, _params|
       ctx.response.content_type = "text/plain"
@@ -1189,7 +1300,7 @@ describe "LF::Router" do
   end
 
   it "routes GET requests correctly" do
-    router = LF::Router.new
+    router = LF::HTTP::Router.new
 
     router.get("/hello") do |ctx, _params|
       ctx.response.content_type = "text/plain"
@@ -1211,7 +1322,7 @@ describe "LF::Router" do
   end
 
   it "extracts route parameters" do
-    router = LF::Router.new
+    router = LF::HTTP::Router.new
 
     router.get("/users/:id") do |ctx, params|
       ctx.response.content_type = "text/plain"
@@ -1231,7 +1342,7 @@ describe "LF::Router" do
   end
 
   it "extracts multiple parameters" do
-    router = LF::Router.new
+    router = LF::HTTP::Router.new
 
     router.get("/api/posts/:post_id/comments/:comment_id") do |ctx, params|
       ctx.response.content_type = "text/plain"
@@ -1251,7 +1362,7 @@ describe "LF::Router" do
   end
 
   it "supports different HTTP methods on same path" do
-    router = LF::Router.new
+    router = LF::HTTP::Router.new
 
     router.get("/data") do |ctx, _params|
       ctx.response.print "GET data"
@@ -1283,7 +1394,7 @@ describe "LF::Router" do
   end
 
   it "supports registering multiple methods with add" do
-    router = LF::Router.new
+    router = LF::HTTP::Router.new
 
     router.add("/bulk", Set{"GET", "POST"}) do |ctx, _params|
       ctx.response.print ctx.request.method
@@ -1305,7 +1416,7 @@ describe "LF::Router" do
   end
 
   it "supports multiple methods on the root path" do
-    router = LF::Router.new
+    router = LF::HTTP::Router.new
 
     router.get("/") do |ctx, _params|
       ctx.response.print "GET root"
@@ -1334,7 +1445,7 @@ describe "LF::Router" do
   end
 
   it "returns 405 for wrong method on parameterized routes" do
-    router = LF::Router.new
+    router = LF::HTTP::Router.new
 
     router.post("/users/:id") do |ctx, _params|
       ctx.response.print "updated"
@@ -1354,7 +1465,7 @@ describe "LF::Router" do
   end
 
   it "returns 405 for wrong method on the root path" do
-    router = LF::Router.new
+    router = LF::HTTP::Router.new
 
     router.post("/") do |ctx, _params|
       ctx.response.print "root post"
@@ -1374,7 +1485,7 @@ describe "LF::Router" do
   end
 
   it "matches routes with trailing slashes" do
-    router = LF::Router.new
+    router = LF::HTTP::Router.new
 
     router.get("/users/:id") do |ctx, params|
       ctx.response.print "User #{params["id"]}"
@@ -1394,7 +1505,7 @@ describe "LF::Router" do
   end
 
   it "matches routes regardless of query string contents" do
-    router = LF::Router.new
+    router = LF::HTTP::Router.new
 
     router.get("/users/:id") do |ctx, params|
       ctx.response.print "User #{params["id"]}"
@@ -1414,7 +1525,7 @@ describe "LF::Router" do
   end
 
   it "matches routes with repeated slashes in the request path" do
-    router = LF::Router.new
+    router = LF::HTTP::Router.new
 
     router.get("/users/:id") do |ctx, params|
       ctx.response.print "User #{params["id"]}"
@@ -1434,7 +1545,7 @@ describe "LF::Router" do
   end
 
   it "prioritizes exact routes over parameterized routes for the same prefix" do
-    router = LF::Router.new
+    router = LF::HTTP::Router.new
 
     router.get("/users/list") do |ctx, _params|
       ctx.response.print "exact"
@@ -1458,7 +1569,7 @@ describe "LF::Router" do
   end
 
   it "prioritizes exact top-level routes over parameterized routes" do
-    router = LF::Router.new
+    router = LF::HTTP::Router.new
 
     router.get("/:page") do |ctx, params|
       ctx.response.print "param #{params["page"]}"
@@ -1482,7 +1593,7 @@ describe "LF::Router" do
   end
 
   it "prioritizes exact nested routes over parameterized routes" do
-    router = LF::Router.new
+    router = LF::HTTP::Router.new
 
     router.get("/files/:id/edit") do |ctx, params|
       ctx.response.print "param #{params["id"]}"
@@ -1506,7 +1617,7 @@ describe "LF::Router" do
   end
 
   it "backtracks across multiple parameterized routes at the same depth" do
-    router = LF::Router.new
+    router = LF::HTTP::Router.new
 
     router.get("/users/:id/profile") do |ctx, params|
       ctx.response.print "profile #{params["id"]}"
@@ -1535,7 +1646,7 @@ describe "LF::Router" do
   end
 
   it "returns 404 when the path has extra segments" do
-    router = LF::Router.new
+    router = LF::HTTP::Router.new
 
     router.get("/users/:id") do |ctx, _params|
       ctx.response.print "user"
@@ -1555,7 +1666,7 @@ describe "LF::Router" do
   end
 
   it "returns 404 for non-existent routes" do
-    router = LF::Router.new
+    router = LF::HTTP::Router.new
 
     router.get("/hello") do |ctx, _params|
       ctx.response.print "Hello"
@@ -1573,7 +1684,7 @@ describe "LF::Router" do
   end
 
   it "returns 405 for wrong HTTP method" do
-    router = LF::Router.new
+    router = LF::HTTP::Router.new
 
     router.post("/data") do |ctx, _params|
       ctx.response.print "POST only"
@@ -1591,7 +1702,7 @@ describe "LF::Router" do
   end
 
   it "supports all HTTP method convenience methods" do
-    router = LF::Router.new
+    router = LF::HTTP::Router.new
 
     router.get("/get") { |ctx, _| ctx.response.print "GET" }
     router.post("/post") { |ctx, _| ctx.response.print "POST" }
@@ -1613,9 +1724,9 @@ describe "LF::Router" do
   end
 end
 
-describe "LF::LFApi" do
+describe "LF::HTTP::App" do
   it "works as HTTP::Handler" do
-    app = LF::LFApi.new do |router|
+    app = LF::HTTP::App.new do |router|
       router.get("/hello") do |ctx, _params|
         ctx.response.content_type = "text/plain"
         ctx.response.print "Hello from Opal!"
@@ -1635,7 +1746,7 @@ describe "LF::LFApi" do
   end
 
   it "handles JSON responses" do
-    app = LF::LFApi.new do |router|
+    app = LF::HTTP::App.new do |router|
       router.get("/json") do |ctx, _params|
         ctx.response.content_type = "application/json"
         JsonModel.new(1, "John").to_json(ctx.response)
@@ -1652,10 +1763,10 @@ describe "LF::LFApi" do
 
     result_output = io.to_s
     body = if result_output.includes?("\r\n\r\n")
-      result_output.split("\r\n\r\n", 2)[1]
-    else
-      result_output
-    end
+             result_output.split("\r\n\r\n", 2)[1]
+           else
+             result_output
+           end
 
     # Just check the body contains the expected JSON structure
     body.should contain("\"id\"")
@@ -1664,9 +1775,9 @@ describe "LF::LFApi" do
   end
 
   it "returns 400 for BadRequest" do
-    app = LF::LFApi.new do |router|
+    app = LF::HTTP::App.new do |router|
       router.get("/bad") do
-        raise LF::BadRequest.new("bad input")
+        raise LF::HTTP::BadRequest.new("bad input")
       end
     end
 
@@ -1684,9 +1795,9 @@ describe "LF::LFApi" do
   end
 
   it "returns 404 for NotFound" do
-    app = LF::LFApi.new do |router|
+    app = LF::HTTP::App.new do |router|
       router.get("/missing") do
-        raise LF::NotFound.new("missing")
+        raise LF::HTTP::NotFound.new("missing")
       end
     end
 
@@ -1704,7 +1815,7 @@ describe "LF::LFApi" do
   end
 
   it "returns 500 for unexpected errors" do
-    app = LF::LFApi.new do |router|
+    app = LF::HTTP::App.new do |router|
       router.get("/boom") do
         raise "boom"
       end
@@ -1724,10 +1835,10 @@ describe "LF::LFApi" do
   end
 end
 
-describe "LF::APIRoute" do
+describe "LF::HTTP::Controller" do
   it "returns 500 when DI context is not initialized (missing middleware)" do
     # Create API route without DatabaseInjector middleware
-    app = LF::LFApi.new do |router|
+    app = LF::HTTP::App.new do |router|
       TestResourceForDI.new.setup_routes(router)
     end
 
@@ -1735,7 +1846,7 @@ describe "LF::APIRoute" do
     request = HTTP::Request.new("GET", "/test")
     response = HTTP::Server::Response.new(io)
     context = HTTP::Server::Context.new(request, response)
-    # Note: context.state is nil here (no middleware set it)
+    # Note: context.dependency_scope is nil here (no middleware set it)
 
     app.call(context)
     response.close
@@ -1746,7 +1857,7 @@ describe "LF::APIRoute" do
   end
 
   it "renders JSONResponse return values" do
-    app = LF::LFApi.new do |router|
+    app = LF::HTTP::App.new do |router|
       TestResourceJsonResponse.new.setup_routes(router)
     end
 
@@ -1766,12 +1877,12 @@ describe "LF::APIRoute" do
   end
 
   it "resolves root-owned DI arguments from request child scopes" do
-    root = LF::DI::AnnotationApplicationContext.new
+    root = LF::DI::DefaultContainer.new
     root.add_bean(name: "greeting_service", type: TestGreetingService) do |_ctx|
       TestGreetingService.new("from root")
     end
 
-    app = LF::LFApi.new do |router|
+    app = LF::HTTP::App.new do |router|
       TestResourceWithRootScopedDI.new.setup_routes(router)
     end
 
@@ -1779,7 +1890,7 @@ describe "LF::APIRoute" do
     request = HTTP::Request.new("GET", "/root-scoped-di")
     response = HTTP::Server::Response.new(io)
     context = HTTP::Server::Context.new(request, response)
-    context.state = root.enter_scope("request")
+    context.dependency_scope = root.enter_scope("request")
 
     app.call(context)
     response.close
@@ -1790,7 +1901,7 @@ describe "LF::APIRoute" do
   end
 
   it "preserves HTTP exceptions raised by route methods" do
-    app = LF::LFApi.new do |router|
+    app = LF::HTTP::App.new do |router|
       TestResourceWithNotFound.new.setup_routes(router)
     end
 
@@ -1808,133 +1919,220 @@ describe "LF::APIRoute" do
   end
 end
 
+describe LF::HTTP::DI::RequestScopeHandler do
+  it "closes its child scope after the downstream handler returns" do
+    TestDisposableCounterBean.reset
+    root = LF::DI::DefaultContainer.new
+    root.add_bean(name: "request_resource", scope: "request", type: TestDisposableCounterBean) do |_ctx|
+      TestDisposableCounterBean.new
+    end
+
+    handler = LF::HTTP::DI::RequestScopeHandler.new(root)
+    handler.next = TestRequestScopeEndpoint.new
+    io = IO::Memory.new
+    context = HTTP::Server::Context.new(
+      HTTP::Request.new("GET", "/"),
+      HTTP::Server::Response.new(io)
+    )
+
+    handler.call(context)
+
+    TestDisposableCounterBean.destroy_calls.should eq(1)
+    context.dependency_scope.should be_nil
+    root.shutdown
+  end
+
+  it "clears the request context when scoped destruction fails" do
+    root = LF::DI::DefaultContainer.new
+    root.add_bean(name: "failing_resource", scope: "request", type: TestFailingDisposableBean) do |_ctx|
+      TestFailingDisposableBean.new
+    end
+
+    handler = LF::HTTP::DI::RequestScopeHandler.new(root)
+    handler.next = TestFailingRequestScopeEndpoint.new
+    context = HTTP::Server::Context.new(
+      HTTP::Request.new("GET", "/"),
+      HTTP::Server::Response.new(IO::Memory.new)
+    )
+
+    expect_raises(LF::DI::BeanDestructionError) do
+      handler.call(context)
+    end
+
+    context.dependency_scope.should be_nil
+    root.shutdown
+  end
+end
+
 describe "LF Parameter Binding and Type Coercion" do
-  describe "Hash#to_t" do
+  describe "LF::HTTP::ParameterDecoder" do
     it "converts to Int32 successfully" do
       params = {"id" => "42"}
-      result = params.to_t("id", Int32)
+      result = LF::HTTP::ParameterDecoder.decode(params, "id", Int32)
       result.should eq(42)
     end
 
     it "raises BadRequest for invalid Int32" do
       params = {"id" => "abc"}
-      expect_raises(LF::BadRequest, "Invalid value for parameter 'id': expected Int32") do
-        params.to_t("id", Int32)
+      expect_raises(LF::HTTP::BadRequest, "Invalid value for parameter 'id': expected Int32") do
+        LF::HTTP::ParameterDecoder.decode(params, "id", Int32)
       end
     end
 
     it "converts to Int64 successfully" do
       params = {"big_id" => "9223372036854775807"}
-      result = params.to_t("big_id", Int64)
+      result = LF::HTTP::ParameterDecoder.decode(params, "big_id", Int64)
       result.should eq(9223372036854775807_i64)
     end
 
     it "raises BadRequest for invalid Int64" do
       params = {"big_id" => "not_a_number"}
-      expect_raises(LF::BadRequest, "Invalid value for parameter 'big_id': expected Int64") do
-        params.to_t("big_id", Int64)
+      expect_raises(LF::HTTP::BadRequest, "Invalid value for parameter 'big_id': expected Int64") do
+        LF::HTTP::ParameterDecoder.decode(params, "big_id", Int64)
       end
     end
 
     it "converts to Float32 successfully" do
       params = {"price" => "19.99"}
-      result = params.to_t("price", Float32).as(Float32)
+      result = LF::HTTP::ParameterDecoder.decode(params, "price", Float32).as(Float32)
       result.should be_close(19.99_f32, 0.01)
     end
 
     it "raises BadRequest for invalid Float32" do
       params = {"price" => "not_a_float"}
-      expect_raises(LF::BadRequest, "Invalid value for parameter 'price': expected Float32") do
-        params.to_t("price", Float32)
+      expect_raises(LF::HTTP::BadRequest, "Invalid value for parameter 'price': expected Float32") do
+        LF::HTTP::ParameterDecoder.decode(params, "price", Float32)
       end
     end
 
     it "converts to Float64 successfully" do
       params = {"precise" => "3.141592653589793"}
-      result = params.to_t("precise", Float64).as(Float64)
+      result = LF::HTTP::ParameterDecoder.decode(params, "precise", Float64).as(Float64)
       result.should be_close(3.141592653589793, 0.000001)
     end
 
     it "raises BadRequest for invalid Float64" do
       params = {"precise" => "xyz"}
-      expect_raises(LF::BadRequest, "Invalid value for parameter 'precise': expected Float64") do
-        params.to_t("precise", Float64)
+      expect_raises(LF::HTTP::BadRequest, "Invalid value for parameter 'precise': expected Float64") do
+        LF::HTTP::ParameterDecoder.decode(params, "precise", Float64)
       end
     end
 
     it "converts to Bool successfully with 'true'" do
       params = {"active" => "true"}
-      result = params.to_t("active", Bool)
+      result = LF::HTTP::ParameterDecoder.decode(params, "active", Bool)
       result.should eq(true)
     end
 
     it "converts to Bool successfully with 'false'" do
       params = {"active" => "false"}
-      result = params.to_t("active", Bool)
+      result = LF::HTTP::ParameterDecoder.decode(params, "active", Bool)
       result.should eq(false)
     end
 
     it "converts to Bool successfully with '1'" do
       params = {"active" => "1"}
-      result = params.to_t("active", Bool)
+      result = LF::HTTP::ParameterDecoder.decode(params, "active", Bool)
       result.should eq(true)
     end
 
     it "converts to Bool successfully with '0'" do
       params = {"active" => "0"}
-      result = params.to_t("active", Bool)
+      result = LF::HTTP::ParameterDecoder.decode(params, "active", Bool)
       result.should eq(false)
     end
 
     it "converts to Bool successfully with 'yes'" do
       params = {"active" => "yes"}
-      result = params.to_t("active", Bool)
+      result = LF::HTTP::ParameterDecoder.decode(params, "active", Bool)
       result.should eq(true)
     end
 
     it "converts to Bool successfully with 'no'" do
       params = {"active" => "no"}
-      result = params.to_t("active", Bool)
+      result = LF::HTTP::ParameterDecoder.decode(params, "active", Bool)
       result.should eq(false)
     end
 
     it "raises BadRequest for invalid Bool" do
       params = {"active" => "maybe"}
-      expect_raises(LF::BadRequest, "Invalid value for parameter 'active': expected Bool") do
-        params.to_t("active", Bool)
+      expect_raises(LF::HTTP::BadRequest, "Invalid value for parameter 'active': expected Bool") do
+        LF::HTTP::ParameterDecoder.decode(params, "active", Bool)
       end
     end
 
     it "converts to UUID successfully" do
       params = {"request_id" => "550e8400-e29b-41d4-a716-446655440000"}
-      result = params.to_t("request_id", UUID)
+      result = LF::HTTP::ParameterDecoder.decode(params, "request_id", UUID)
       result.should eq(UUID.new("550e8400-e29b-41d4-a716-446655440000"))
     end
 
     it "raises BadRequest for invalid UUID" do
       params = {"request_id" => "not-a-uuid"}
-      expect_raises(LF::BadRequest, "Invalid value for parameter 'request_id': expected UUID") do
-        params.to_t("request_id", UUID)
+      expect_raises(LF::HTTP::BadRequest, "Invalid value for parameter 'request_id': expected UUID") do
+        LF::HTTP::ParameterDecoder.decode(params, "request_id", UUID)
       end
     end
 
     it "converts to String successfully" do
       params = {"name" => "John Doe"}
-      result = params.to_t("name", String)
+      result = LF::HTTP::ParameterDecoder.decode(params, "name", String)
       result.should eq("John Doe")
     end
 
     it "raises BadRequest for missing parameter" do
       params = {} of String => String
-      expect_raises(LF::BadRequest, "Missing required parameter 'id'") do
-        params.to_t("id", Int32)
+      expect_raises(LF::HTTP::BadRequest, "Missing required parameter 'id'") do
+        LF::HTTP::ParameterDecoder.decode(params, "id", Int32)
       end
     end
   end
 
   describe "APIRoute parameter binding" do
+    it "binds path and query parameters without a DI context" do
+      app = LF::HTTP::App.new do |router|
+        TestAPIWithParams.new.setup_routes(router)
+      end
+
+      io = IO::Memory.new
+      request = HTTP::Request.new("GET", "/settings/notifications?enabled=true")
+      response = HTTP::Server::Response.new(io)
+      context = HTTP::Server::Context.new(request, response)
+
+      app.call(context)
+      response.close
+
+      response.status.should eq(HTTP::Status::OK)
+      body = io.to_s.split("\r\n\r\n", 2)[1]
+      body.should eq("Setting notifications is true")
+    end
+
+    it "binds JSON request bodies without a DI context" do
+      app = LF::HTTP::App.new do |router|
+        TestResourceJsonBody.new.setup_routes(router)
+      end
+
+      io = IO::Memory.new
+      request = HTTP::Request.new(
+        "POST",
+        "/json-body",
+        HTTP::Headers{"Content-Type" => "application/json"},
+        %({"id":7,"name":"created"})
+      )
+      response = HTTP::Server::Response.new(io)
+      context = HTTP::Server::Context.new(request, response)
+
+      app.call(context)
+      response.close
+
+      response.status.should eq(HTTP::Status::OK)
+      payload = JSON.parse(HTTP::Client::Response.from_io(IO::Memory.new(io.to_s)).body)
+      payload["id"].as_i.should eq(7)
+      payload["name"].as_s.should eq("created")
+    end
+
     it "returns 200 for valid Int32 parameter" do
-      app = LF::LFApi.new do |router|
+      app = LF::HTTP::App.new do |router|
         TestAPIWithParams.new.setup_routes(router)
       end
 
@@ -1942,7 +2140,7 @@ describe "LF Parameter Binding and Type Coercion" do
       request = HTTP::Request.new("GET", "/users/123")
       response = HTTP::Server::Response.new(io)
       context = HTTP::Server::Context.new(request, response)
-      context.state = LF::DI::AnnotationApplicationContext.new
+      context.dependency_scope = LF::DI::DefaultContainer.new
 
       app.call(context)
       response.close
@@ -1953,7 +2151,7 @@ describe "LF Parameter Binding and Type Coercion" do
     end
 
     it "returns 400 for invalid Int32 parameter" do
-      app = LF::LFApi.new do |router|
+      app = LF::HTTP::App.new do |router|
         TestAPIWithParams.new.setup_routes(router)
       end
 
@@ -1961,7 +2159,7 @@ describe "LF Parameter Binding and Type Coercion" do
       request = HTTP::Request.new("GET", "/users/abc")
       response = HTTP::Server::Response.new(io)
       context = HTTP::Server::Context.new(request, response)
-      context.state = LF::DI::AnnotationApplicationContext.new
+      context.dependency_scope = LF::DI::DefaultContainer.new
 
       app.call(context)
       response.close
@@ -1972,7 +2170,7 @@ describe "LF Parameter Binding and Type Coercion" do
     end
 
     it "returns 200 for valid Int64 parameter" do
-      app = LF::LFApi.new do |router|
+      app = LF::HTTP::App.new do |router|
         TestAPIWithParams.new.setup_routes(router)
       end
 
@@ -1980,7 +2178,7 @@ describe "LF Parameter Binding and Type Coercion" do
       request = HTTP::Request.new("GET", "/items/9223372036854775807")
       response = HTTP::Server::Response.new(io)
       context = HTTP::Server::Context.new(request, response)
-      context.state = LF::DI::AnnotationApplicationContext.new
+      context.dependency_scope = LF::DI::DefaultContainer.new
 
       app.call(context)
       response.close
@@ -1991,7 +2189,7 @@ describe "LF Parameter Binding and Type Coercion" do
     end
 
     it "returns 200 for valid UUID parameter" do
-      app = LF::LFApi.new do |router|
+      app = LF::HTTP::App.new do |router|
         TestAPIWithParams.new.setup_routes(router)
       end
 
@@ -1999,7 +2197,7 @@ describe "LF Parameter Binding and Type Coercion" do
       request = HTTP::Request.new("GET", "/products/550e8400-e29b-41d4-a716-446655440000")
       response = HTTP::Server::Response.new(io)
       context = HTTP::Server::Context.new(request, response)
-      context.state = LF::DI::AnnotationApplicationContext.new
+      context.dependency_scope = LF::DI::DefaultContainer.new
 
       app.call(context)
       response.close
@@ -2010,7 +2208,7 @@ describe "LF Parameter Binding and Type Coercion" do
     end
 
     it "returns 400 for invalid UUID parameter" do
-      app = LF::LFApi.new do |router|
+      app = LF::HTTP::App.new do |router|
         TestAPIWithParams.new.setup_routes(router)
       end
 
@@ -2018,7 +2216,7 @@ describe "LF Parameter Binding and Type Coercion" do
       request = HTTP::Request.new("GET", "/products/not-a-uuid")
       response = HTTP::Server::Response.new(io)
       context = HTTP::Server::Context.new(request, response)
-      context.state = LF::DI::AnnotationApplicationContext.new
+      context.dependency_scope = LF::DI::DefaultContainer.new
 
       app.call(context)
       response.close
@@ -2029,7 +2227,7 @@ describe "LF Parameter Binding and Type Coercion" do
     end
 
     it "returns 200 for valid Bool parameter (true)" do
-      app = LF::LFApi.new do |router|
+      app = LF::HTTP::App.new do |router|
         TestAPIWithParams.new.setup_routes(router)
       end
 
@@ -2037,7 +2235,7 @@ describe "LF Parameter Binding and Type Coercion" do
       request = HTTP::Request.new("GET", "/settings/notifications?enabled=true")
       response = HTTP::Server::Response.new(io)
       context = HTTP::Server::Context.new(request, response)
-      context.state = LF::DI::AnnotationApplicationContext.new
+      context.dependency_scope = LF::DI::DefaultContainer.new
 
       app.call(context)
       response.close
@@ -2048,7 +2246,7 @@ describe "LF Parameter Binding and Type Coercion" do
     end
 
     it "returns 200 for valid Bool parameter (false)" do
-      app = LF::LFApi.new do |router|
+      app = LF::HTTP::App.new do |router|
         TestAPIWithParams.new.setup_routes(router)
       end
 
@@ -2056,7 +2254,7 @@ describe "LF Parameter Binding and Type Coercion" do
       request = HTTP::Request.new("GET", "/settings/notifications?enabled=false")
       response = HTTP::Server::Response.new(io)
       context = HTTP::Server::Context.new(request, response)
-      context.state = LF::DI::AnnotationApplicationContext.new
+      context.dependency_scope = LF::DI::DefaultContainer.new
 
       app.call(context)
       response.close
@@ -2067,7 +2265,7 @@ describe "LF Parameter Binding and Type Coercion" do
     end
 
     it "returns 400 for invalid Bool parameter" do
-      app = LF::LFApi.new do |router|
+      app = LF::HTTP::App.new do |router|
         TestAPIWithParams.new.setup_routes(router)
       end
 
@@ -2075,7 +2273,7 @@ describe "LF Parameter Binding and Type Coercion" do
       request = HTTP::Request.new("GET", "/settings/notifications?enabled=maybe")
       response = HTTP::Server::Response.new(io)
       context = HTTP::Server::Context.new(request, response)
-      context.state = LF::DI::AnnotationApplicationContext.new
+      context.dependency_scope = LF::DI::DefaultContainer.new
 
       app.call(context)
       response.close
@@ -2086,7 +2284,7 @@ describe "LF Parameter Binding and Type Coercion" do
     end
 
     it "returns 400 for missing required parameter" do
-      app = LF::LFApi.new do |router|
+      app = LF::HTTP::App.new do |router|
         TestAPIWithParams.new.setup_routes(router)
       end
 
@@ -2094,7 +2292,7 @@ describe "LF Parameter Binding and Type Coercion" do
       request = HTTP::Request.new("GET", "/settings/notifications")
       response = HTTP::Server::Response.new(io)
       context = HTTP::Server::Context.new(request, response)
-      context.state = LF::DI::AnnotationApplicationContext.new
+      context.dependency_scope = LF::DI::DefaultContainer.new
 
       app.call(context)
       response.close
