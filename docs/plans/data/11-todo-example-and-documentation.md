@@ -165,7 +165,9 @@ Required documentation topics:
 - owned versus borrowed DataSource;
 - why EntityManager is transaction-local;
 - exact entity state and flush semantics;
-- generated versus runtime work;
+- generated versus runtime work, including static query shapes and explicit
+  `DynamicQuery`;
+- `crystal-db` ownership of prepared statements and their cache;
 - repository composition with explicit manager parameter;
 - converters and DB-compatible value types;
 - optimistic locking and rollback caveat;
@@ -191,8 +193,9 @@ Review query-count specs for:
 - repeated find uses no second SELECT;
 - SELECT never auto-flushes;
 - one entity operation emits one write;
-- static CRUD operation templates are generated once and dialect statement
-  plans are not rebuilt per execution;
+- static CRUD and query shapes execute final generated SQL without runtime
+  rendering;
+- direct bind tuples preserve placeholder order without a bind metadata walk;
 - no listener path executes when none are configured.
 
 No separate benchmark suite is required for v1.

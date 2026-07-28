@@ -9,7 +9,8 @@ instance-scoped observability on top of the dialect contract from Plan 02.
 **Architecture:** `DataSource` delegates pool and transaction mechanics to
 `crystal-db`. It creates a transaction-local manager through an internal
 factory seam; Plan 05 replaces the placeholder with `EntityManager` without
-changing the public transaction API.
+changing the public transaction API. It stores only an abstract dialect
+reference and does not own SQL-plan or prepared-statement caches.
 
 **Prerequisite:** Plans 01 and 02 are merged. No Application work is required.
 
@@ -122,28 +123,25 @@ Write one failing spec per behavior:
 
 Use `DB::Database#transaction`; do not manually emulate commit/rollback.
 
-## Task 5: Add A Per-DataSource Static Plan Cache
+## Task 5: Verify Statement-Preparation Ownership
 
 **Files**
 
-- Create: `src/opal/data/sql/plan_cache.cr`
-- Create: `spec/data/sql/plan_cache_spec.cr`
+- Modify: `spec/data/data_source_spec.cr`
 
-DataSource owns one fiber-safe cache keyed by Plan 02's `SQL::PlanKey`.
-`fetch(key) { compile }` compiles a missing static CRUD/find plan once and
-reuses the same immutable plan across transactions and connections belonging to
-that DataSource.
+Prove the ownership boundary rather than adding another cache:
 
-The cache:
+- DataSource stores the supplied `LF::Data::Dialect` reference;
+- each EntityManager receives that same reference;
+- DataSource contains no plan cache or statement cache;
+- SQL execution goes through the checked-out `DB::Connection`;
+- repeated identical SQL remains eligible for `crystal-db`'s per-connection
+  prepared-statement cache;
+- closing DataSource closes only resources described by its database ownership
+  mode.
 
-- is never global or class-level;
-- stores no bind values or entity instances;
-- does not cache dynamic query expressions;
-- is cleared when the DataSource closes;
-- does not cache a failed compilation;
-- compiles once under concurrent fiber access.
-
-EntityManager receives access to this cache through its constructor in Plan 05.
+Do not retain `DB::Statement` instances. Their validity and cache lifetime
+belong to the connection and driver.
 
 ## Verification
 
@@ -151,7 +149,6 @@ EntityManager receives access to this cache through its constructor in Plan 05.
 CRYSTAL_CACHE_DIR=/tmp/opal-crystal-cache crystal spec \
   spec/data/errors_spec.cr \
   spec/data/listener_spec.cr \
-  spec/data/sql/plan_cache_spec.cr \
   spec/data/data_source_spec.cr --no-color
 CRYSTAL_CACHE_DIR=/tmp/opal-crystal-cache crystal spec --no-color
 git diff --check
@@ -167,7 +164,8 @@ rg -n "LF::Application|LF::DI|LF::HTTP|YAML|sqlite3" \
 ```
 
 DataSource may reference only the abstract `LF::Data::Dialect`, never
-`LF::Data::Dialects::SQLite` or the concrete driver.
+`LF::Data::Dialects::SQLite` or the concrete driver. It must not define a plan
+cache or retain prepared statements.
 
 Commit as:
 

@@ -86,12 +86,13 @@ Do not infer detached state from a non-nil ID.
 1. validates manager is usable;
 2. converts and checks the identity map;
 3. returns the existing object without SQL when found;
-4. otherwise fetches the dialect-compiled find plan from the DataSource cache
-   and executes it;
-5. hydrates exactly zero or one row;
-6. registers a loaded object as Managed;
-7. returns `nil` for no row;
-8. raises if more than one row is returned.
+4. otherwise calls `@dialect.find_plan(T)`;
+5. executes `plan.sql` with the generated ID bind tuple through the active
+   connection;
+6. hydrates exactly zero or one row;
+7. registers a loaded object as Managed;
+8. returns `nil` for no row;
+9. raises if more than one row is returned.
 
 Tests verify query count, same-object identity, assigned/generated ID types,
 strict mapping failure, and different entity classes sharing equal ID values.
@@ -123,8 +124,8 @@ Rules:
 - Create: `spec/data/entity_manager_insert_spec.cr`
 
 Test assigned ID, generated Int64 ID, generated Int32 overflow, nilable fields,
-converters, uniqueness failure, and listener event. Fetch the compiled
-`InsertPlan` from the DataSource cache.
+converters, uniqueness failure, and listener event. Obtain the compile-time
+specialized plan with `@dialect.insert_plan(T)`.
 
 Execution branches only on `GeneratedKeySource`:
 
@@ -138,6 +139,16 @@ for `ReturningRow` so EntityManager does not encode a SQLite-only assumption.
 Apply generated ID only after the statement succeeds. Register database
 identity only after a valid ID exists. A duplicate assigned ID failure remains
 the original driver error and marks the manager failed.
+
+All branches pass generated tuples directly:
+
+```crystal
+result = connection.exec(plan.sql, *entity.__lf_insert_args)
+```
+
+The `ReturningRow` branch uses `connection.query` with the same tuple. UPDATE
+and DELETE use `@dialect.update_plan(T)`/`delete_plan(T)` and their generated
+tuples. EntityManager never renders SQL or traverses runtime bind metadata.
 
 ## Task 6: Execute UPDATE And DELETE
 
@@ -181,9 +192,10 @@ The database transaction rollback is owned by DataSource, not EntityManager.
 - Delete: temporary no-op manager implementation from Plan 03
 - Modify: `spec/data/data_source_spec.cr`
 
-DataSource creates the real manager with transaction connection, dialect, and
-listener dispatcher. Normal block return invokes `flush` before `crystal-db`
-commits. Exception skips automatic flush. Manager closes in `ensure`.
+DataSource creates the real manager with transaction connection, its abstract
+dialect reference, and listener dispatcher. Normal block return invokes
+`flush` before `crystal-db` commits. Exception skips automatic flush. Manager
+closes in `ensure`.
 
 Regression specs prove:
 
