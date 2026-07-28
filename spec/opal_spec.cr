@@ -15,9 +15,12 @@ end
 class TestResourceForDI
   include LF::HTTP::Controller
 
+  def initialize(@test_greeting_service : TestGreetingService)
+  end
+
   @[LF::HTTP::Controller::Get("/test")]
-  def test_endpoint(greeting_service : TestGreetingService)
-    greeting_service.message
+  def test_endpoint
+    @test_greeting_service.message
   end
 end
 
@@ -99,9 +102,12 @@ end
 class TestResourceWithRootScopedDI
   include LF::HTTP::Controller
 
+  def initialize(@greeting_service : TestGreetingService)
+  end
+
   @[LF::HTTP::Controller::Get("/root-scoped-di")]
-  def show(greeting_service : TestGreetingService)
-    greeting_service.message
+  def show
+    @greeting_service.message
   end
 end
 
@@ -129,6 +135,28 @@ class TestFailingRequestScopeEndpoint
 
   def call(context : HTTP::Server::Context) : Nil
     context.dependency_scope.not_nil!.resolve(TestFailingDisposableBean)
+  end
+end
+
+class TestNoopRequestScopeEndpoint
+  include HTTP::Handler
+
+  def call(context : HTTP::Server::Context) : Nil
+    context.response.print "ok"
+  end
+end
+
+class TestScopeProvider
+  include LF::DI::ScopeProvider
+
+  getter entered_scopes = [] of String
+
+  def initialize(@root : LF::DI::DefaultContainer)
+  end
+
+  def enter_scope(scope : String) : LF::DI::Container
+    @entered_scopes << scope
+    @root.enter_scope(scope)
   end
 end
 
@@ -1871,8 +1899,9 @@ end
 describe "LF::HTTP::Controller" do
   it "returns 500 when DI context is not initialized (missing middleware)" do
     # Create API route without DatabaseInjector middleware
+    root = LF::DI::DefaultContainer.new
     app = LF::HTTP::App.new do |router|
-      TestResourceForDI.new.setup_routes(router)
+      TestResourceForDI.setup_routes(router, root)
     end
 
     io = IO::Memory.new
@@ -1890,17 +1919,21 @@ describe "LF::HTTP::Controller" do
   end
 
   it "renders JSONResponse return values" do
+    root = LF::DI::DefaultContainer.new
     app = LF::HTTP::App.new do |router|
-      TestResourceJsonResponse.new.setup_routes(router)
+      TestResourceJsonResponse.setup_routes(router, root)
     end
 
     io = IO::Memory.new
     request = HTTP::Request.new("GET", "/json-response")
     response = HTTP::Server::Response.new(io)
     context = HTTP::Server::Context.new(request, response)
+    context.dependency_scope = root.enter_scope("request")
 
     app.call(context)
     response.close
+    context.dependency_scope.not_nil!.exit
+    root.shutdown
 
     response.status.should eq(HTTP::Status::OK)
     parsed = HTTP::Client::Response.from_io(IO::Memory.new(io.to_s))
@@ -1910,8 +1943,9 @@ describe "LF::HTTP::Controller" do
   end
 
   it "serializes direct JSON::Serializable return values" do
+    root = LF::DI::DefaultContainer.new
     app = LF::HTTP::App.new do |router|
-      TestResourceDirectJson.new.setup_routes(router)
+      TestResourceDirectJson.setup_routes(router, root)
     end
 
     io = IO::Memory.new
@@ -1919,9 +1953,12 @@ describe "LF::HTTP::Controller" do
       HTTP::Request.new("GET", "/direct-json"),
       HTTP::Server::Response.new(io)
     )
+    context.dependency_scope = root.enter_scope("request")
 
     app.call(context)
     context.response.close
+    context.dependency_scope.not_nil!.exit
+    root.shutdown
 
     parsed = HTTP::Client::Response.from_io(IO::Memory.new(io.to_s))
     parsed.status.should eq(HTTP::Status::OK)
@@ -1932,8 +1969,9 @@ describe "LF::HTTP::Controller" do
   end
 
   it "serializes the JSON branch of a JSON::Serializable or String return type" do
+    root = LF::DI::DefaultContainer.new
     app = LF::HTTP::App.new do |router|
-      TestResourceDirectJson.new.setup_routes(router)
+      TestResourceDirectJson.setup_routes(router, root)
     end
 
     io = IO::Memory.new
@@ -1941,9 +1979,12 @@ describe "LF::HTTP::Controller" do
       HTTP::Request.new("GET", "/union/json"),
       HTTP::Server::Response.new(io)
     )
+    context.dependency_scope = root.enter_scope("request")
 
     app.call(context)
     context.response.close
+    context.dependency_scope.not_nil!.exit
+    root.shutdown
 
     parsed = HTTP::Client::Response.from_io(IO::Memory.new(io.to_s))
     parsed.content_type.should eq("application/json")
@@ -1951,8 +1992,9 @@ describe "LF::HTTP::Controller" do
   end
 
   it "keeps the String branch of a JSON::Serializable or String return type as text" do
+    root = LF::DI::DefaultContainer.new
     app = LF::HTTP::App.new do |router|
-      TestResourceDirectJson.new.setup_routes(router)
+      TestResourceDirectJson.setup_routes(router, root)
     end
 
     io = IO::Memory.new
@@ -1960,9 +2002,12 @@ describe "LF::HTTP::Controller" do
       HTTP::Request.new("GET", "/union/text"),
       HTTP::Server::Response.new(io)
     )
+    context.dependency_scope = root.enter_scope("request")
 
     app.call(context)
     context.response.close
+    context.dependency_scope.not_nil!.exit
+    root.shutdown
 
     parsed = HTTP::Client::Response.from_io(IO::Memory.new(io.to_s))
     parsed.content_type.should_not eq("application/json")
@@ -1970,8 +2015,9 @@ describe "LF::HTTP::Controller" do
   end
 
   it "does not auto-serialize types that define to_json without JSON::Serializable" do
+    root = LF::DI::DefaultContainer.new
     app = LF::HTTP::App.new do |router|
-      TestResourceToJsonOnly.new.setup_routes(router)
+      TestResourceToJsonOnly.setup_routes(router, root)
     end
 
     io = IO::Memory.new
@@ -1979,9 +2025,12 @@ describe "LF::HTTP::Controller" do
       HTTP::Request.new("GET", "/to-json-only"),
       HTTP::Server::Response.new(io)
     )
+    context.dependency_scope = root.enter_scope("request")
 
     app.call(context)
     context.response.close
+    context.dependency_scope.not_nil!.exit
+    root.shutdown
 
     parsed = HTTP::Client::Response.from_io(IO::Memory.new(io.to_s))
     parsed.content_type.should_not eq("application/json")
@@ -1995,7 +2044,7 @@ describe "LF::HTTP::Controller" do
     end
 
     app = LF::HTTP::App.new do |router|
-      TestResourceWithRootScopedDI.new.setup_routes(router)
+      TestResourceWithRootScopedDI.setup_routes(router, root)
     end
 
     io = IO::Memory.new
@@ -2006,6 +2055,8 @@ describe "LF::HTTP::Controller" do
 
     app.call(context)
     response.close
+    context.dependency_scope.not_nil!.exit
+    root.shutdown
 
     response.status.should eq(HTTP::Status::OK)
     body = io.to_s.split("\r\n\r\n", 2)[1]
@@ -2013,17 +2064,21 @@ describe "LF::HTTP::Controller" do
   end
 
   it "preserves HTTP exceptions raised by route methods" do
+    root = LF::DI::DefaultContainer.new
     app = LF::HTTP::App.new do |router|
-      TestResourceWithNotFound.new.setup_routes(router)
+      TestResourceWithNotFound.setup_routes(router, root)
     end
 
     io = IO::Memory.new
     request = HTTP::Request.new("GET", "/api-missing")
     response = HTTP::Server::Response.new(io)
     context = HTTP::Server::Context.new(request, response)
+    context.dependency_scope = root.enter_scope("request")
 
     app.call(context)
     response.close
+    context.dependency_scope.not_nil!.exit
+    root.shutdown
 
     response.status.should eq(HTTP::Status::NOT_FOUND)
     body = io.to_s.split("\r\n\r\n", 2)[1]
@@ -2032,6 +2087,22 @@ describe "LF::HTTP::Controller" do
 end
 
 describe LF::HTTP::DI::RequestScopeHandler do
+  it "depends only on the DI scope provider contract" do
+    root = LF::DI::DefaultContainer.new
+    provider = TestScopeProvider.new(root)
+    handler = LF::HTTP::DI::RequestScopeHandler.new(provider, "http_request")
+    handler.next = TestNoopRequestScopeEndpoint.new
+    context = HTTP::Server::Context.new(
+      HTTP::Request.new("GET", "/"),
+      HTTP::Server::Response.new(IO::Memory.new)
+    )
+
+    handler.call(context)
+
+    provider.entered_scopes.should eq(["http_request"])
+    root.shutdown
+  end
+
   it "closes its child scope after the downstream handler returns" do
     TestDisposableCounterBean.reset
     root = LF::DI::DefaultContainer.new
@@ -2201,27 +2272,32 @@ describe "LF Parameter Binding and Type Coercion" do
   end
 
   describe "APIRoute parameter binding" do
-    it "binds path and query parameters without a DI context" do
+    it "binds path and query parameters through a request-scoped controller" do
+      root = LF::DI::DefaultContainer.new
       app = LF::HTTP::App.new do |router|
-        TestAPIWithParams.new.setup_routes(router)
+        TestAPIWithParams.setup_routes(router, root)
       end
 
       io = IO::Memory.new
       request = HTTP::Request.new("GET", "/settings/notifications?enabled=true")
       response = HTTP::Server::Response.new(io)
       context = HTTP::Server::Context.new(request, response)
+      context.dependency_scope = root.enter_scope("request")
 
       app.call(context)
       response.close
+      context.dependency_scope.not_nil!.exit
+      root.shutdown
 
       response.status.should eq(HTTP::Status::OK)
       body = io.to_s.split("\r\n\r\n", 2)[1]
       body.should eq("Setting notifications is true")
     end
 
-    it "binds JSON request bodies without a DI context" do
+    it "binds JSON request bodies through a request-scoped controller" do
+      root = LF::DI::DefaultContainer.new
       app = LF::HTTP::App.new do |router|
-        TestResourceJsonBody.new.setup_routes(router)
+        TestResourceJsonBody.setup_routes(router, root)
       end
 
       io = IO::Memory.new
@@ -2233,9 +2309,12 @@ describe "LF Parameter Binding and Type Coercion" do
       )
       response = HTTP::Server::Response.new(io)
       context = HTTP::Server::Context.new(request, response)
+      context.dependency_scope = root.enter_scope("request")
 
       app.call(context)
       response.close
+      context.dependency_scope.not_nil!.exit
+      root.shutdown
 
       response.status.should eq(HTTP::Status::OK)
       payload = JSON.parse(HTTP::Client::Response.from_io(IO::Memory.new(io.to_s)).body)
@@ -2244,18 +2323,21 @@ describe "LF Parameter Binding and Type Coercion" do
     end
 
     it "returns 200 for valid Int32 parameter" do
+      root = LF::DI::DefaultContainer.new
       app = LF::HTTP::App.new do |router|
-        TestAPIWithParams.new.setup_routes(router)
+        TestAPIWithParams.setup_routes(router, root)
       end
 
       io = IO::Memory.new
       request = HTTP::Request.new("GET", "/users/123")
       response = HTTP::Server::Response.new(io)
       context = HTTP::Server::Context.new(request, response)
-      context.dependency_scope = LF::DI::DefaultContainer.new
+      context.dependency_scope = root.enter_scope("request")
 
       app.call(context)
       response.close
+      context.dependency_scope.not_nil!.exit
+      root.shutdown
 
       response.status.should eq(HTTP::Status::OK)
       body = io.to_s.split("\r\n\r\n", 2)[1]
@@ -2263,18 +2345,21 @@ describe "LF Parameter Binding and Type Coercion" do
     end
 
     it "returns 400 for invalid Int32 parameter" do
+      root = LF::DI::DefaultContainer.new
       app = LF::HTTP::App.new do |router|
-        TestAPIWithParams.new.setup_routes(router)
+        TestAPIWithParams.setup_routes(router, root)
       end
 
       io = IO::Memory.new
       request = HTTP::Request.new("GET", "/users/abc")
       response = HTTP::Server::Response.new(io)
       context = HTTP::Server::Context.new(request, response)
-      context.dependency_scope = LF::DI::DefaultContainer.new
+      context.dependency_scope = root.enter_scope("request")
 
       app.call(context)
       response.close
+      context.dependency_scope.not_nil!.exit
+      root.shutdown
 
       response.status.should eq(HTTP::Status::BAD_REQUEST)
       body = io.to_s.split("\r\n\r\n", 2)[1]
@@ -2282,18 +2367,21 @@ describe "LF Parameter Binding and Type Coercion" do
     end
 
     it "returns 200 for valid Int64 parameter" do
+      root = LF::DI::DefaultContainer.new
       app = LF::HTTP::App.new do |router|
-        TestAPIWithParams.new.setup_routes(router)
+        TestAPIWithParams.setup_routes(router, root)
       end
 
       io = IO::Memory.new
       request = HTTP::Request.new("GET", "/items/9223372036854775807")
       response = HTTP::Server::Response.new(io)
       context = HTTP::Server::Context.new(request, response)
-      context.dependency_scope = LF::DI::DefaultContainer.new
+      context.dependency_scope = root.enter_scope("request")
 
       app.call(context)
       response.close
+      context.dependency_scope.not_nil!.exit
+      root.shutdown
 
       response.status.should eq(HTTP::Status::OK)
       body = io.to_s.split("\r\n\r\n", 2)[1]
@@ -2301,18 +2389,21 @@ describe "LF Parameter Binding and Type Coercion" do
     end
 
     it "returns 200 for valid UUID parameter" do
+      root = LF::DI::DefaultContainer.new
       app = LF::HTTP::App.new do |router|
-        TestAPIWithParams.new.setup_routes(router)
+        TestAPIWithParams.setup_routes(router, root)
       end
 
       io = IO::Memory.new
       request = HTTP::Request.new("GET", "/products/550e8400-e29b-41d4-a716-446655440000")
       response = HTTP::Server::Response.new(io)
       context = HTTP::Server::Context.new(request, response)
-      context.dependency_scope = LF::DI::DefaultContainer.new
+      context.dependency_scope = root.enter_scope("request")
 
       app.call(context)
       response.close
+      context.dependency_scope.not_nil!.exit
+      root.shutdown
 
       response.status.should eq(HTTP::Status::OK)
       body = io.to_s.split("\r\n\r\n", 2)[1]
@@ -2320,18 +2411,21 @@ describe "LF Parameter Binding and Type Coercion" do
     end
 
     it "returns 400 for invalid UUID parameter" do
+      root = LF::DI::DefaultContainer.new
       app = LF::HTTP::App.new do |router|
-        TestAPIWithParams.new.setup_routes(router)
+        TestAPIWithParams.setup_routes(router, root)
       end
 
       io = IO::Memory.new
       request = HTTP::Request.new("GET", "/products/not-a-uuid")
       response = HTTP::Server::Response.new(io)
       context = HTTP::Server::Context.new(request, response)
-      context.dependency_scope = LF::DI::DefaultContainer.new
+      context.dependency_scope = root.enter_scope("request")
 
       app.call(context)
       response.close
+      context.dependency_scope.not_nil!.exit
+      root.shutdown
 
       response.status.should eq(HTTP::Status::BAD_REQUEST)
       body = io.to_s.split("\r\n\r\n", 2)[1]
@@ -2339,18 +2433,21 @@ describe "LF Parameter Binding and Type Coercion" do
     end
 
     it "returns 200 for valid Bool parameter (true)" do
+      root = LF::DI::DefaultContainer.new
       app = LF::HTTP::App.new do |router|
-        TestAPIWithParams.new.setup_routes(router)
+        TestAPIWithParams.setup_routes(router, root)
       end
 
       io = IO::Memory.new
       request = HTTP::Request.new("GET", "/settings/notifications?enabled=true")
       response = HTTP::Server::Response.new(io)
       context = HTTP::Server::Context.new(request, response)
-      context.dependency_scope = LF::DI::DefaultContainer.new
+      context.dependency_scope = root.enter_scope("request")
 
       app.call(context)
       response.close
+      context.dependency_scope.not_nil!.exit
+      root.shutdown
 
       response.status.should eq(HTTP::Status::OK)
       body = io.to_s.split("\r\n\r\n", 2)[1]
@@ -2358,18 +2455,21 @@ describe "LF Parameter Binding and Type Coercion" do
     end
 
     it "returns 200 for valid Bool parameter (false)" do
+      root = LF::DI::DefaultContainer.new
       app = LF::HTTP::App.new do |router|
-        TestAPIWithParams.new.setup_routes(router)
+        TestAPIWithParams.setup_routes(router, root)
       end
 
       io = IO::Memory.new
       request = HTTP::Request.new("GET", "/settings/notifications?enabled=false")
       response = HTTP::Server::Response.new(io)
       context = HTTP::Server::Context.new(request, response)
-      context.dependency_scope = LF::DI::DefaultContainer.new
+      context.dependency_scope = root.enter_scope("request")
 
       app.call(context)
       response.close
+      context.dependency_scope.not_nil!.exit
+      root.shutdown
 
       response.status.should eq(HTTP::Status::OK)
       body = io.to_s.split("\r\n\r\n", 2)[1]
@@ -2377,18 +2477,21 @@ describe "LF Parameter Binding and Type Coercion" do
     end
 
     it "returns 400 for invalid Bool parameter" do
+      root = LF::DI::DefaultContainer.new
       app = LF::HTTP::App.new do |router|
-        TestAPIWithParams.new.setup_routes(router)
+        TestAPIWithParams.setup_routes(router, root)
       end
 
       io = IO::Memory.new
       request = HTTP::Request.new("GET", "/settings/notifications?enabled=maybe")
       response = HTTP::Server::Response.new(io)
       context = HTTP::Server::Context.new(request, response)
-      context.dependency_scope = LF::DI::DefaultContainer.new
+      context.dependency_scope = root.enter_scope("request")
 
       app.call(context)
       response.close
+      context.dependency_scope.not_nil!.exit
+      root.shutdown
 
       response.status.should eq(HTTP::Status::BAD_REQUEST)
       body = io.to_s.split("\r\n\r\n", 2)[1]
@@ -2396,18 +2499,21 @@ describe "LF Parameter Binding and Type Coercion" do
     end
 
     it "returns 400 for missing required parameter" do
+      root = LF::DI::DefaultContainer.new
       app = LF::HTTP::App.new do |router|
-        TestAPIWithParams.new.setup_routes(router)
+        TestAPIWithParams.setup_routes(router, root)
       end
 
       io = IO::Memory.new
       request = HTTP::Request.new("GET", "/settings/notifications")
       response = HTTP::Server::Response.new(io)
       context = HTTP::Server::Context.new(request, response)
-      context.dependency_scope = LF::DI::DefaultContainer.new
+      context.dependency_scope = root.enter_scope("request")
 
       app.call(context)
       response.close
+      context.dependency_scope.not_nil!.exit
+      root.shutdown
 
       response.status.should eq(HTTP::Status::BAD_REQUEST)
       body = io.to_s.split("\r\n\r\n", 2)[1]

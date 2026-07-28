@@ -4,7 +4,7 @@ module LF::HTTP::DI
   class RequestScopeHandler
     include ::HTTP::Handler
 
-    def initialize(@root : LF::DI::Container, @scope : String = "request")
+    def initialize(@root : LF::DI::ScopeProvider, @scope : String = "request")
     end
 
     def call(context : ::HTTP::Server::Context) : Nil

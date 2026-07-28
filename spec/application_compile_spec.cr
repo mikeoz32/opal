@@ -65,4 +65,53 @@ describe "application compiler fixtures" do
     result[:status].success?.should be_false
     result[:error].should contain("undefined method 'context' for LF::ApplicationRuntime")
   end
+
+  it "rejects service injection through controller route arguments" do
+    fixture = File.expand_path("fixtures/http/controller_service_argument.cr", __DIR__)
+    result = compile_fixture(fixture)
+
+    result[:status].success?.should be_false
+    result[:error].should contain("Invalid route argument 'service'")
+    result[:error].should contain("inject services through the controller constructor")
+  end
+
+  it "does not retain the legacy controller instance setup API" do
+    fixture = File.expand_path("fixtures/http/legacy_controller_setup.cr", __DIR__)
+    result = compile_fixture(fixture)
+
+    result[:status].success?.should be_false
+    result[:error].should contain("undefined method 'setup_routes' for LegacySetupController")
+  end
+
+  it "supports constructor DI inherited from a controller base class" do
+    fixture = File.expand_path("fixtures/http/inherited_controller_initializer.cr", __DIR__)
+    result = compile_fixture(fixture)
+
+    result[:status].success?.should be_true
+    result[:error].should eq("")
+  end
+
+  it "rejects HTTP autoconfiguration without an application marker" do
+    fixture = File.expand_path("fixtures/http/autoconfig_without_application.cr", __DIR__)
+    result = compile_fixture(fixture)
+
+    result[:status].success?.should be_false
+    result[:error].should contain("@[LF::AutoConfig::HTTP] requires @[LF::Application] on NotAnApplication")
+  end
+
+  it "has no behavior when the optional HTTP file is only required" do
+    fixture = File.expand_path("fixtures/http/autoconfig_without_marker.cr", __DIR__)
+    result = compile_fixture(fixture)
+
+    result[:status].success?.should be_true
+    result[:error].should eq("")
+  end
+
+  it "generates run_http only for an annotated application" do
+    fixture = File.expand_path("fixtures/http/autoconfig_application.cr", __DIR__)
+    result = compile_fixture(fixture)
+
+    result[:status].success?.should be_true
+    result[:error].should eq("")
+  end
 end

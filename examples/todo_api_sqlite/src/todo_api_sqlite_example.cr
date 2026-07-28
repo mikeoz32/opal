@@ -1,4 +1,5 @@
 require "opal"
+require "opal/autoconfig/http"
 require "sqlite3"
 
 class Todo
@@ -42,8 +43,8 @@ class TodoDatabase
 
   getter db : DB::Database
 
-  def initialize
-    @db = DB.open("sqlite3://./todo.db")
+  def initialize(config_service : LF::ConfigService)
+    @db = DB.open(config_service.get("database.url", "sqlite3://./todo.db"))
   end
 
   def after_properties_set : Nil
@@ -130,62 +131,44 @@ end
 class TodoApi
   include LF::HTTP::Controller
 
+  def initialize(@todo_repository : TodoRepository)
+  end
+
   @[LF::HTTP::Controller::Get("/todos")]
-  def index(todo_repository : TodoRepository)
-    TodoListResponse.new(todo_repository.all)
+  def index
+    TodoListResponse.new(@todo_repository.all)
   end
 
   @[LF::HTTP::Controller::Get("/todos/:id")]
-  def show(id : Int64, todo_repository : TodoRepository)
-    todo = todo_repository.find(id)
+  def show(id : Int64)
+    todo = @todo_repository.find(id)
     raise LF::HTTP::NotFound.new("Todo not found") unless todo
     todo
   end
 
   @[LF::HTTP::Controller::Post("/todos")]
-  def create(payload : CreateTodoPayload, todo_repository : TodoRepository)
-    todo_repository.create(payload.title)
+  def create(payload : CreateTodoPayload)
+    @todo_repository.create(payload.title)
   end
 
   @[LF::HTTP::Controller::Put("/todos/:id")]
-  def update(id : Int64, payload : UpdateTodoPayload, todo_repository : TodoRepository)
-    todo = todo_repository.update(id, payload.title, payload.completed)
+  def update(id : Int64, payload : UpdateTodoPayload)
+    todo = @todo_repository.update(id, payload.title, payload.completed)
     raise LF::HTTP::NotFound.new("Todo not found") unless todo
     todo
   end
 
   @[LF::HTTP::Controller::Delete("/todos/:id")]
-  def destroy(id : Int64, todo_repository : TodoRepository)
-    deleted = todo_repository.delete(id)
+  def destroy(id : Int64)
+    deleted = @todo_repository.delete(id)
     raise LF::HTTP::NotFound.new("Todo not found") unless deleted
     LF::HTTP::TextResponse.create("deleted")
   end
 end
 
-root = LF::DI::DefaultContainer.new
-root.register(LF::DI::ServiceConfiguration.new)
-
-app = LF::HTTP::App.new do |router|
-  TodoApi.new.setup_routes(router)
+@[LF::Application]
+@[LF::AutoConfig::HTTP]
+class TodoApplication
 end
 
-server = HTTP::Server.new([
-  HTTP::LogHandler.new,
-  LF::HTTP::DI::RequestScopeHandler.new(root),
-  app,
-])
-
-address = server.bind_tcp(8083)
-puts "Todo API listening on http://#{address}"
-puts "Routes:"
-puts "  GET    /todos"
-puts "  GET    /todos/:id"
-puts "  POST   /todos"
-puts "  PUT    /todos/:id"
-puts "  DELETE /todos/:id"
-
-begin
-  server.listen
-ensure
-  root.shutdown
-end
+TodoApplication.run_http

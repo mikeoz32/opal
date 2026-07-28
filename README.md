@@ -42,10 +42,13 @@ Opal exposes four independent layers:
    `HTTP::Handler` wrapper around a router with consistent HTTP error handling.
 
 3. `LF::HTTP::Controller`
-   Macro-based API route definition with parameter binding and optional DI lookup.
+   Compile-time route definition with request binding and constructor DI.
 
 4. `@[LF::Application]` and `LF::ApplicationRuntime`
    Optional compile-time application assembly and root-container ownership.
+
+5. `require "opal/autoconfig/http"`
+   Optional HTTP controller discovery, server assembly, and lifecycle integration.
 
 ## Basic Router
 
@@ -105,10 +108,13 @@ server.listen
 - route params
 - query params
 - `HTTP::Request`
-- DI lookup from `context.dependency_scope`
 - JSON body parsing for `JSON::Serializable`
 - automatic JSON responses for returned `JSON::Serializable` models
 - `LF::HTTP::Response` return types such as `LF::HTTP::JSONResponse`
+- constructor injection for controller dependencies
+
+Route arguments are request inputs only. Inject services through the controller
+constructor; unsupported route arguments fail at compile time.
 
 ### Example
 
@@ -131,23 +137,45 @@ class UserView
   end
 end
 
+@[LF::DI::Service]
+class UserService
+  def find(id : Int32) : UserView
+    UserView.new(id, "User #{id}")
+  end
+
+  def create(name : String) : UserView
+    UserView.new(1, name)
+  end
+end
+
 class UsersApi
   include LF::HTTP::Controller
 
+  def initialize(@users : UserService)
+  end
+
   @[LF::HTTP::Controller::Get("/users/:id")]
   def show(id : Int32)
-    UserView.new(id, "User #{id}")
+    @users.find(id)
   end
 
   @[LF::HTTP::Controller::Post("/users")]
   def create(payload : UserPayload)
-    UserView.new(1, payload.name)
+    @users.create(payload.name)
   end
 end
 
+root = LF::DI::DefaultContainer.new
+root.register(LF::DI::ServiceConfiguration.new)
+
 app = LF::HTTP::App.new do |router|
-  UsersApi.new.setup_routes(router)
+  UsersApi.setup_routes(router, root)
 end
+
+server = HTTP::Server.new([
+  LF::HTTP::DI::RequestScopeHandler.new(root),
+  app,
+])
 ```
 
 ## DI Container
@@ -166,7 +194,9 @@ end
 
 ### Request scope
 
-Service arguments require `context.dependency_scope` to contain an `LF::DI::Container`. Path, query, request, and JSON body arguments do not require DI.
+Controllers are request-scoped beans. Their constructor dependencies use the
+normal DI resolution rules. Route arguments bind only path, query, request, and
+JSON body values.
 
 A built-in handler creates and closes a child scope around each request:
 
@@ -253,7 +283,53 @@ TodoApplication.run do |application|
 end
 ```
 
-The generated `bootstrap` method owns a fresh root container. `LF::ApplicationRuntime` exposes only `resolve(Type)`, `resolve(name, Type)`, `shutdown`, and state/error contracts; it does not expose the mutable container.
+The generated `bootstrap` method owns a fresh root container.
+`LF::ApplicationRuntime` exposes typed resolution, extension installation,
+shutdown, and state/error contracts; it does not expose the mutable root
+container. Application extensions receive a controlled `LF::ApplicationContext`
+for bean registration and scope creation.
+
+## Configuration
+
+Application bootstrap eagerly registers one immutable `LF::ConfigService`
+singleton. It reads `config/application.yml` by default. A missing default file
+means empty configuration; setting `OPAL_CONFIG` selects an explicit file and a
+missing explicit file is an error.
+
+```yaml
+http:
+  host: 127.0.0.1
+  port: 8080
+```
+
+```crystal
+config.get("http.port")       # YAML::Any
+config.get("http.port", 8080) # Int32
+config.section("http")        # YAML::Any mapping
+```
+
+## HTTP Autoconfiguration
+
+HTTP autoconfiguration is an explicit optional require:
+
+```crystal
+require "opal"
+require "opal/autoconfig/http"
+
+@[LF::Application]
+@[LF::AutoConfig::HTTP]
+class TodoApplication
+end
+
+TodoApplication.run_http
+```
+
+At compile time Opal discovers `LF::HTTP::Controller` includers in
+fully-qualified name order. At startup it builds the controller route table,
+the standard log and request-scope handlers, and an `HTTP::Server`. The server
+uses `http.host` (`0.0.0.0` by default) and `http.port` (`8080` by default).
+`run_http` blocks in `HTTP::Server#listen`; process termination closes the
+server before application DI shutdown.
 
 ## Integration Pattern
 
@@ -358,6 +434,14 @@ plain text; collections are not auto-serialized.
 - `LF::DI::ScopeMismatchError`
 - `LF::DI::AmbiguousBeanError`
 - `LF::DI::ContextClosedError`
+
+### Application layer
+
+- `LF::ConfigService::LoadError`
+- `LF::ConfigService::MissingKeyError`
+- `LF::ApplicationRuntime::ClosedError`
+- `LF::ApplicationRuntime::ShutdownError`
+- `LF::HTTP::AutoConfig::ConfigurationError`
 
 ## Testing
 
