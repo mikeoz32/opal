@@ -1,4 +1,4 @@
-# Data 09: Data Application Autoconfiguration
+# Data 10: Data Application Autoconfiguration
 
 > **For Codex:** REQUIRED SKILLS: `executing-plans`,
 > `test-driven-development`, `systematic-debugging`, and
@@ -8,11 +8,15 @@
 `LF::Application` while keeping Data core independent of Application and DI.
 
 **Architecture:** `opal/autoconfig/data` is an adapter package. It declares a
-marker and a conditional Application extension using Plan 08's generic
+marker and a conditional Application extension using Plan 09's generic
 contract. The extension owns the datasource instance it registers.
 
-**Prerequisite:** Plans 02, 07, and 08 are merged. All standalone Data plans
+**Prerequisite:** Plans 03, 08, and 09 are merged. All standalone Data plans
 must be complete before this Application adapter begins.
+
+The adapter requires `opal/data` and the bundled
+`opal/data/dialects/sqlite` entrypoint. It does not require `sqlite3`; the
+application still chooses and loads its concrete `crystal-db` driver.
 
 ---
 
@@ -67,7 +71,7 @@ test the numeric priority rather than relying on type-name order.
 Parse once during extension configure:
 
 - `database.url` is mandatory and must be String;
-- URI scheme `sqlite3` selects `SQLiteDialect`;
+- URI scheme `sqlite3` selects `LF::Data::Dialects::SQLite`;
 - unsupported scheme is a typed ConfigurationError;
 - `database.migrations.run_on_startup` defaults to false and must be Bool;
 - existing URI query parameters remain untouched for `crystal-db` pool options.
@@ -76,6 +80,11 @@ Do not duplicate pool settings into new YAML keys in v1.
 
 Preserve original causes for malformed URI, missing driver, and DB open errors.
 Never include credentials from the URL in error messages.
+
+Do not add a runtime mutable dialect registry. The adapter uses a compile-time
+generated scheme switch containing only concrete dialect entrypoints it
+explicitly requires. Adding PostgreSQL later changes this adapter package, not
+Data core.
 
 ## Task 3: Register And Own DataSource
 
