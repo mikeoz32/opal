@@ -71,7 +71,9 @@ WHERE "id" = ? AND "version" = ?
 ```
 
 Bind the expected version from manager state, not by re-reading a user-mutated
-field. Exactly one affected row is success. On success:
+field. The generated UPDATE bind tuple contains writable field values, ID, and
+the manager-supplied expected version in dialect placeholder order; it does not
+use runtime bind metadata. Exactly one affected row is success. On success:
 
 1. update the manager's expected version;
 2. write the incremented version to the entity;
@@ -91,8 +93,9 @@ On zero rows:
 
 - Create: `spec/data/optimistic_delete_spec.cr`
 
-DELETE predicates on ID and expected version. One row detaches the entity. Zero
-rows follows the same stale-error and manager-failure rules as UPDATE.
+DELETE predicates on ID and expected version. Its generated tuple contains
+those two values directly. One row detaches the entity. Zero rows follows the
+same stale-error and manager-failure rules as UPDATE.
 
 ## Task 4: Test Real Concurrency
 

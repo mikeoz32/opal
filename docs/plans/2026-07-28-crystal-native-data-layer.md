@@ -26,9 +26,9 @@ therefore ends in a usable, documented, fully tested repository state.
 | Order | Plan | Deliverable | Depends on |
 | --- | --- | --- | --- |
 | 01 | [Foundation and test infrastructure](data/01-foundation-and-test-infrastructure.md) | dependencies, opt-in entrypoint, shared DB test harness | ADR-0005 |
-| 02 | [Dialect contract and SQLite](data/02-dialect-contract-and-sqlite.md) | base SQL operation/plan contract and optional SQLite implementation | 01 |
-| 03 | [DataSource and observability](data/03-datasource-observability.md) | transaction/resource foundation and per-source plan cache | 02 |
-| 04 | [Compile-time entity mapping](data/04-compile-time-entity-mapping.md) | entity metadata, hydration, converters, operation templates | 03 |
+| 02 | [Dialect contract and SQLite](data/02-dialect-contract-and-sqlite.md) | generic compile-time SQL-plan contract and optional SQLite implementation | 01 |
+| 03 | [DataSource and observability](data/03-datasource-observability.md) | transaction/resource foundation and listener dispatch | 02 |
+| 04 | [Compile-time entity mapping](data/04-compile-time-entity-mapping.md) | entity metadata, hydration, converters, direct bind tuples | 03 |
 | 05 | [EntityManager and Unit of Work](data/05-entity-manager-unit-of-work.md) | identity map, states, queued writes, flush | 04 |
 | 06 | [Typed query and bulk DML](data/06-typed-query-and-bulk-dml.md) | typed expressions, SELECT, bulk UPDATE/DELETE | 05 |
 | 07 | [Optimistic locking](data/07-optimistic-locking.md) | version-aware UPDATE/DELETE and stale detection | 05 |
@@ -99,8 +99,14 @@ files, executables, and server processes live under `/tmp` and are removed in
 - No global mutable persistence state is introduced.
 - No query performs an implicit flush.
 - No entity property mutation executes SQL.
-- Static CRUD operation templates are generated at compile time; concrete
-  dialect statement plans are compiled once per DataSource/entity type.
+- Static CRUD SQL is specialized at compile time per entity and concrete
+  dialect.
+- Static query SQL is specialized at compile time per entity, concrete dialect,
+  and query-shape type; runtime values use generated bind tuples.
+- Arbitrary runtime filter structures use only the explicit `DynamicQuery`
+  fallback.
+- Opal owns no SQL-plan or prepared-statement cache; `crystal-db` owns
+  per-connection preparation and caching.
 - Driver and SQL failures preserve their original `DB::Error` types.
 - Every long-lived resource has explicit ownership and idempotent shutdown.
 

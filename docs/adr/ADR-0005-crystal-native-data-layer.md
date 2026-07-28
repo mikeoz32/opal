@@ -39,8 +39,10 @@ block-based resource management, and structural converter protocols.
 - No dependency from Data core to Application, DI, HTTP, or a concrete driver.
 - SQL execution and transaction boundaries must remain observable.
 - Static metadata and CRUD SQL must be generated at compile time.
-- Dynamic query filters may be composed at runtime because their values and
-  shape can depend on request or domain input.
+- Query structure uses compile-time shape types by default; runtime values
+  remain bound parameters.
+- Arbitrary runtime filter collections remain possible through an explicit
+  dynamic-query API.
 - A transaction must own exactly one short-lived persistence context.
 - The first release must avoid snapshots, proxy objects, lazy loading, and
   automatic dirty checking.
@@ -203,7 +205,8 @@ name is exact `snake_case`. `LF::Data::Column` supports:
 Exactly one instance variable must have `LF::Data::Id`. A single-column
 application-assigned ID may use any supported mapped scalar type. A generated
 ID is nilable before its first successful flush and is written through a
-generated private persistence method. Composite IDs are not supported in v1.
+generated framework-internal persistence method. Composite IDs are not
+supported in v1.
 
 An optional `LF::Data::Version` field is a non-nil `Int64` getter initialized to
 zero for new entities. Application code does not receive a public version
@@ -221,10 +224,10 @@ Including `LF::Data::Entity` generates:
 
 - validated table, ID, version, and column metadata;
 - a stable selected-column list;
-- static INSERT, UPDATE, DELETE, and find-by-ID operation templates;
+- direct bind tuples for INSERT, UPDATE, DELETE, and find-by-ID;
 - a result-set hydrator;
 - internal generated-ID and version writers;
-- typed field descriptors under `Entity::Fields`.
+- typed field marker types and descriptors under `Entity::Fields`.
 
 Compilation fails with an actionable entity and field name when:
 
@@ -348,12 +351,12 @@ database and in-memory versions.
 
 ## Typed Query Model
 
-Entity macros generate typed field descriptors:
+Entity macros generate typed field marker types and descriptors:
 
 ```crystal
 Todo::Fields.completed.eq(false)
 Todo::Fields.title.like("%opal%")
-Todo::Fields.id.in([1_i64, 2_i64])
+Todo::Fields.id.in({1_i64, 2_i64})
 ```
 
 Supported v1 expressions are `eq`, `ne`, `lt`, `lte`, `gt`, `gte`, `in`,
@@ -364,6 +367,7 @@ AND.
 ```crystal
 todos = entity_manager.query(Todo)
   .where(Todo::Fields.completed.eq(false))
+  .where(Todo::Fields.title.like("%opal%"))
   .order_by(Todo::Fields.id.desc)
   .limit(20)
   .offset(0)
@@ -374,12 +378,47 @@ Terminal operations are `to_a`, `first?`, `count`, and `exists?`. Queries load
 complete entities using their generated selected-column list. Partial
 projection and join mapping are deferred.
 
-Expressions store converted `DB::Any` values. Dialects render quoted
-identifiers, placeholders, operators, ordering, and pagination. User values
-never enter SQL text.
+Every fluent operation changes the query's static type. For example, the query
+above has a shape equivalent to:
 
-An empty `IN` renders a false expression instead of invalid SQL. Negative limit
-or offset raises `LF::Data::InvalidQueryError`.
+```crystal
+SelectQuery(
+  Todo,
+  And(Eq(Todo::Fields::Completed), Like(Todo::Fields::Title)),
+  OrderBy(Todo::Fields::Id, Desc),
+  WithLimit,
+  WithOffset
+)
+```
+
+The expression structs store only runtime values. The concrete dialect's
+generic method specializes for the entity and query-shape types and emits the
+final SQL string at compile time. The query generates a direct tuple of bind
+values in the same static order:
+
+```sql
+SELECT ... WHERE "completed" = ? AND "title" LIKE ?
+ORDER BY "id" DESC LIMIT ? OFFSET ?
+```
+
+Identifiers, operators, ordering direction, grouping, and placeholder count
+never come from runtime values. Limit and offset are values and therefore use
+placeholders. Query execution passes the generated SQL and tuple to
+`DB::Connection#query` or `#exec`; `crystal-db` owns preparation and
+per-connection prepared-statement caching.
+
+A runtime branch may produce a union of query-shape types. Crystal compiles one
+SQL specialization for each union member. Code that builds an arbitrary number
+of predicates in a loop must opt into `EntityManager#dynamic_query(T)`.
+`DynamicQuery` uses the same typed field descriptors and bound values but
+renders SQL at runtime. It is never selected implicitly.
+
+Fixed-arity `IN` accepts a Tuple and produces a static placeholder count. An
+Array has runtime arity and is accepted only by `DynamicQuery`. An empty static
+Tuple emits a false expression instead of invalid SQL. Negative limit or offset
+raises `LF::Data::InvalidQueryError`.
+
+User values never enter SQL text in either mode.
 
 Typed bulk writes use:
 
@@ -421,21 +460,39 @@ abstract class LF::Data::Dialect
   abstract def name : String
   abstract def quote_identifier(identifier : String) : String
   abstract def placeholder(position : Int32) : String
-  abstract def compile_insert(operation : InsertOperation) : InsertPlan
-  abstract def append_pagination(
-    io : IO,
-    limit : Int32?,
-    offset : Int32?
-  ) : Nil
+
+  abstract def find_plan(entity : T.class) : SQL::StatementPlan forall T
+  abstract def insert_plan(entity : T.class) : SQL::InsertPlan forall T
+  abstract def update_plan(entity : T.class) : SQL::StatementPlan forall T
+  abstract def delete_plan(entity : T.class) : SQL::StatementPlan forall T
+  abstract def select_plan(
+    entity : T.class,
+    shape : S.class
+  ) : SQL::StatementPlan forall T, S
+
   abstract def supports?(capability : DialectCapability) : Bool
 end
 ```
 
-Entity macros generate dialect-neutral operation templates at compile time:
-table/column identifiers, writable fields, predicates, generated-key metadata,
-and bind order. A concrete dialect compiles each static entity operation into a
-statement plan once per DataSource and entity type. The resulting plan is
-cached and reused. Dynamic query expression trees are rendered per execution.
+`StatementPlan` contains only final SQL. `InsertPlan` additionally contains the
+generated-key strategy and optional returned column. It does not contain bind
+values or a runtime bind-order array.
+
+Entity annotations and instance variables remain the single mapping source of
+truth. A concrete dialect implements the generic methods with Crystal macros
+that inspect `T` and, for queries, `S`. Each used
+`Entity + Dialect + QueryShape` combination therefore produces final
+dialect-specific SQL during compilation. Entity- and query-generated methods
+produce direct bind tuples; runtime does not scan metadata, dispatch through
+`BindSlot`, or build static SQL with `String::Builder`.
+
+The abstract dialect reference stored by `DataSource` remains sufficient:
+Crystal specializes and dispatches generic virtual methods to the concrete
+dialect. `DataSource` and `EntityManager` do not need a dialect type parameter.
+
+`quote_identifier` and `placeholder` remain in the base contract for schema
+rendering and the explicit `DynamicQuery` path. Dynamic SQL is rendered per
+execution because its structure is not known to the compiler.
 
 An `InsertPlan` explicitly describes how a generated key is obtained:
 
@@ -606,12 +663,19 @@ subclasses. Autoconfiguration errors use
 ## Performance Constraints
 
 - Entity discovery and mapping metadata are compile-time only.
-- Static CRUD/find operation templates are generated at compile time;
-  dialect-specific statement plans are compiled once per DataSource/entity
-  type and cached.
+- Static CRUD/find SQL is specialized at compile time for each used
+  entity/dialect combination.
+- Static query SQL is specialized at compile time for each used
+  entity/dialect/query-shape combination.
 - There is no per-operation metadata reflection or string-key field lookup.
-- Prepared-statement creation and caching remain delegated to `crystal-db`.
-- Identity maps, operation queues, and query ASTs are transaction-local.
+- Opal has no SQL plan or prepared-statement cache; prepared-statement creation
+  and per-connection caching remain delegated to `crystal-db`.
+- Static execution passes generated bind tuples directly; it performs no SQL
+  rendering, bind-slot traversal, or `Array(DB::Any)` construction.
+- Runtime SQL rendering and dynamic bind arrays exist only behind the explicit
+  `DynamicQuery` API.
+- Identity maps, operation queues, and query value objects are
+  transaction-local.
 - No entity snapshots are allocated.
 - Reading never triggers an implicit write.
 - Listener cost is absent when no listeners are configured.

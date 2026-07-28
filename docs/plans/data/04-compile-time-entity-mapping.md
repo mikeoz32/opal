@@ -3,9 +3,8 @@
 > **For Codex:** REQUIRED SKILLS: `executing-plans`,
 > `test-driven-development`, and `verification-before-completion`.
 
-**Goal:** Generate validated persistence metadata, hydration, dialect-neutral
-static operation templates, and typed field descriptors from ordinary Crystal
-classes.
+**Goal:** Generate validated persistence metadata, hydration, direct CRUD bind
+tuples, and typed field marker types from ordinary Crystal classes.
 
 **Architecture:** A class explicitly includes `LF::Data::Entity`. Its instance
 variables remain the type source of truth. Annotations only override
@@ -40,7 +39,7 @@ end
 `Todo.new` creates a new domain object. Generated hydration restores persisted
 state without invoking that constructor.
 
-## Task 1: Define Mapping Annotations
+## Task 1: Install The Entity Module
 
 **Files**
 
@@ -51,16 +50,12 @@ state without invoking that constructor.
 - Create: `spec/fixtures/data/entities/valid_generated_id.cr`
 - Create: `spec/fixtures/data/entities/valid_assigned_id.cr`
 
-Define:
+Use the `LF::Data::Table`, `Column`, `Id`, and `Version` annotations defined by
+Plan 02; do not introduce aliases or mapping-specific duplicates.
 
-- `LF::Data::Entity` module;
-- `LF::Data::Table`;
-- `LF::Data::Column`;
-- `LF::Data::Id`;
-- `LF::Data::Version`.
-
-`Entity` installs generated methods in the including class using a local
-`macro finished`. Do not use `Object.all_subclasses` or an entity registry.
+Define `LF::Data::Entity`. It installs generated methods in the including class
+using a local `macro finished`. Do not use `Object.all_subclasses` or an entity
+registry.
 
 ## Task 2: Validate Entity Shape At Compile Time
 
@@ -107,9 +102,11 @@ Conventions:
 - use ivar name as default column name;
 - preserve declaration order for selected and written columns.
 
-Generate a typed metadata surface used internally by generic manager methods.
-It exposes table, ID, optional version, persistent columns, and static operation
-templates without runtime `Hash(String, ...)` lookup.
+Generate a typed metadata surface used internally by generic manager and
+dialect methods. Entity annotations and instance variables remain the source of
+truth for table, ID, optional version, and persistent columns. Do not copy the
+mapping into a runtime `Hash(String, ...)` or a second independently maintained
+metadata registry.
 
 Tests cover `Todo`, acronym names, namespaced entities, explicit names, ignored
 fields, nilable fields, and stable declaration order.
@@ -158,27 +155,49 @@ column, and original cause.
 
 Test a constructor that raises if called to prove hydration bypasses it.
 
-## Task 6: Generate Static CRUD Operation Templates
+## Task 6: Generate Direct CRUD Bind Extraction
 
 **Files**
 
 - Create: `spec/data/entity_sql_spec.cr`
 
-Generate immutable templates for:
+Generate framework-internal persistence methods equivalent to:
 
-- full selected column order;
-- select-by-ID shape;
-- INSERT fields excluding generated ID and ignored fields;
-- UPDATE assignments for all writable non-ID/non-version fields;
-- DELETE ID predicate.
+```crystal
+def __lf_insert_args
+  {@title, @completed}
+end
 
-The templates use Plan 02's dialect-neutral SQL operation types. They contain
-no quoted identifiers, placeholders, or values. EntityManager asks the
-DataSource plan cache to compile each template with the active dialect once.
-Runtime must not rediscover fields. Version predicates are added in Plan 07.
+def __lf_update_args
+  {@title, @completed, @id}
+end
 
-Generated ID and version writers are private persistence methods callable only
-through generated generic code, not public domain API.
+def __lf_delete_args
+  {@id}
+end
+```
+
+The real generated tuples apply field converters and use exact inferred tuple
+types. Generated IDs and ignored fields are excluded from INSERT; IDs are
+excluded from assignments and appended as predicates for UPDATE/DELETE.
+Version arguments are added in Plan 07.
+
+The concrete dialect's generic plan method inspects the static entity type and
+the same annotations/instance variables to emit final SQL. Runtime calls:
+
+```crystal
+connection.exec(plan.sql, *entity.__lf_insert_args)
+```
+
+It must not rediscover fields, traverse `BindSlot` objects, build
+`Array(DB::Any)`, or look up values by symbol, index, or column name. Specs
+assert that plan placeholder order and tuple value order match for assigned and
+generated IDs, ignored fields, converters, and nilable fields.
+
+Generated bind, ID, and version methods use a reserved `__lf_` prefix and are
+framework internals, not documented domain API. Crystal does not provide friend
+visibility, so do not falsely mark methods private when EntityManager must call
+them with an explicit receiver.
 
 ## Task 7: Generate Typed Field Descriptors
 
@@ -187,10 +206,11 @@ through generated generic code, not public domain API.
 - Create: `src/opal/data/query/field.cr`
 - Create: `spec/data/query/field_compile_spec.cr`
 
-Generate `Todo::Fields.id`, `title`, and other non-ignored fields. A descriptor
-retains entity type, property type, stored type, column, and converter. At this
-stage test only construction and typed dump behavior; expression methods arrive
-in Plan 06.
+Generate marker types such as `Todo::Fields::Id` and singleton-style descriptor
+accessors `Todo::Fields.id`, `title`, and other non-ignored fields. A descriptor
+type retains entity type, property type, stored type, column, and converter at
+compile time. At this stage test only construction and typed dump behavior;
+expression methods arrive in Plan 06.
 
 ## Verification
 
