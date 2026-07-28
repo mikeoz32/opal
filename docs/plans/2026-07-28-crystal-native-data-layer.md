@@ -99,10 +99,11 @@ files, executables, and server processes live under `/tmp` and are removed in
 - No global mutable persistence state is introduced.
 - No query performs an implicit flush.
 - No entity property mutation executes SQL.
-- Static CRUD SQL is specialized at compile time per entity and concrete
-  dialect.
-- Static query SQL is specialized at compile time per entity, concrete dialect,
-  and query-shape type; runtime values use generated bind tuples.
+- Static CRUD SQL is produced by the shared compiler and specialized at compile
+  time per entity and concrete dialect, using the dialect's static policy.
+- Static query SQL is produced by the shared compiler and specialized at
+  compile time per entity, concrete dialect, and query-shape type; runtime
+  values use generated bind tuples.
 - Arbitrary runtime filter structures use only the explicit `DynamicQuery`
   fallback.
 - Opal owns no SQL-plan or prepared-statement cache; `crystal-db` owns

@@ -62,7 +62,7 @@ version converters in v1.
 - Modify: `src/opal/data/entity_manager.cr`
 - Create: `spec/data/optimistic_update_spec.cr`
 
-Generated SQL semantics:
+Plan 02's shared static compiler already emits the final SQL shape:
 
 ```sql
 UPDATE "todo"
@@ -70,10 +70,12 @@ SET "title" = ?, "version" = "version" + 1
 WHERE "id" = ? AND "version" = ?
 ```
 
-Bind the expected version from manager state, not by re-reading a user-mutated
-field. The generated UPDATE bind tuple contains writable field values, ID, and
-the manager-supplied expected version in dialect placeholder order; it does not
-use runtime bind metadata. Exactly one affected row is success. On success:
+This plan connects that shape to EntityManager execution and generated bind
+tuples. Bind the expected version from manager state, not by re-reading a
+user-mutated field. The generated UPDATE bind tuple contains writable field
+values, ID, and the manager-supplied expected version in dialect placeholder
+order; it does not use runtime bind metadata. Exactly one affected row is
+success. On success:
 
 1. update the manager's expected version;
 2. write the incremented version to the entity;

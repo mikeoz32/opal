@@ -10,10 +10,10 @@ parsing, raw value interpolation, or implicit flush.
 **Architecture:** Generated field marker types and generic expression structs
 encode identifiers, operators, grouping, ordering, pagination presence, and
 placeholder count in the Crystal type. Expression objects retain only runtime
-values. A concrete dialect specializes final SQL for
-`Entity + Dialect + QueryShape`; generated query code supplies a direct bind
-tuple. An explicit `DynamicQuery` handles structures that cannot be known at
-compile time.
+values. Plan 02's shared static plan compiler is extended to specialize final
+SQL for `Entity + ConcreteDialect + QueryShape`, using the concrete dialect's
+static policy; generated query code supplies a direct bind tuple. An explicit
+`DynamicQuery` handles structures that cannot be known at compile time.
 
 **Prerequisite:** Plans 04 and 05 are merged.
 
@@ -96,6 +96,7 @@ expression with no binds.
 **Files**
 
 - Modify: `src/opal/data/dialect.cr`
+- Modify: `src/opal/data/sql/static_plan_compiler.cr`
 - Modify: `src/opal/data/dialects/sqlite.cr`
 - Create: `spec/data/query/static_sql_spec.cr`
 - Modify: `spec/data/dialects/returning_probe_spec.cr`
@@ -123,7 +124,9 @@ Use distinct method names if required to avoid overload ambiguity with
 entity-instance UPDATE/DELETE plans, but preserve this separation in the type
 contract.
 
-SQLite macros inspect `T` and `S` and emit a complete SQL literal. Cover:
+The shared compiler's installed generic methods inspect `T` and `S`, then apply
+the including dialect's static policy to emit a complete SQL literal. SQLite
+tests cover:
 
 - every comparison operator;
 - nested grouping and explicit parentheses;
