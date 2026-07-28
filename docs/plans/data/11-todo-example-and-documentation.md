@@ -1,4 +1,4 @@
-# Data 10: Todo Example And Public Documentation
+# Data 11: Todo Example And Public Documentation
 
 > **For Codex:** REQUIRED SKILLS: `executing-plans`,
 > `test-driven-development`, `systematic-debugging`, and
@@ -12,7 +12,7 @@ versioned migration. Repositories remain stateless application services.
 Application services own transaction boundaries and pass one EntityManager to
 all participating repositories.
 
-**Prerequisite:** Plans 03 through 09 are merged.
+**Prerequisite:** Plans 04 through 10 are merged.
 
 ---
 
@@ -151,6 +151,7 @@ WAL, and SHM files.
 - Modify: `README.md`
 - Modify: `examples/todo_api_sqlite/README.md`
 - Create: `docs/data/getting-started.md`
+- Create: `docs/data/dialects.md`
 - Create: `docs/data/entities.md`
 - Create: `docs/data/transactions-and-repositories.md`
 - Create: `docs/data/queries.md`
@@ -190,7 +191,8 @@ Review query-count specs for:
 - repeated find uses no second SELECT;
 - SELECT never auto-flushes;
 - one entity operation emits one write;
-- static CRUD SQL is not rebuilt from runtime reflection;
+- static CRUD operation templates are generated once and dialect statement
+  plans are not rebuilt per execution;
 - no listener path executes when none are configured.
 
 No separate benchmark suite is required for v1.

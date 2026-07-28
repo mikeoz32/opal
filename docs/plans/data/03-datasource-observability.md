@@ -1,17 +1,17 @@
-# Data 02: DataSource, Dialect, And Observability
+# Data 03: DataSource And Observability
 
 > **For Codex:** REQUIRED SKILLS: `executing-plans`,
 > `test-driven-development`, and `verification-before-completion`.
 
-**Goal:** Implement explicit database ownership and block-based transactions,
-plus the smallest dialect and observability contracts needed by later plans.
+**Goal:** Implement explicit database ownership, block-based transactions, and
+instance-scoped observability on top of the dialect contract from Plan 02.
 
 **Architecture:** `DataSource` delegates pool and transaction mechanics to
 `crystal-db`. It creates a transaction-local manager through an internal
-factory seam; Plan 04 replaces the placeholder with `EntityManager` without
+factory seam; Plan 05 replaces the placeholder with `EntityManager` without
 changing the public transaction API.
 
-**Prerequisite:** Plan 01 is merged. No Application work is required.
+**Prerequisite:** Plans 01 and 02 are merged. No Application work is required.
 
 ---
 
@@ -20,12 +20,12 @@ changing the public transaction API.
 ```crystal
 source = LF::Data::DataSource.open(
   "sqlite3://./app.db",
-  dialect: LF::Data::SQLiteDialect.new
+  dialect: LF::Data::Dialects::SQLite.new
 )
 
 source = LF::Data::DataSource.new(
   database,
-  dialect: LF::Data::SQLiteDialect.new,
+  dialect: LF::Data::Dialects::SQLite.new,
   owns_database: false
 )
 
@@ -55,36 +55,7 @@ this plan:
 Errors are catchable by class and expose operation/cause where relevant.
 Driver errors are not wrapped in `LF::Data::Error`.
 
-## Task 2: Define The Narrow Dialect Contract
-
-**Files**
-
-- Create: `src/opal/data/dialect.cr`
-- Create: `src/opal/data/sqlite_dialect.cr`
-- Create: `spec/data/sqlite_dialect_spec.cr`
-
-Implement:
-
-```crystal
-abstract def quote_identifier(name : String) : String
-abstract def placeholder(index : Int32) : String
-abstract def append_limit_offset(io : IO, limit : Int32?, offset : Int32?) : Nil
-abstract def generated_id(result : DB::ExecResult, type : T.class) : T forall T
-abstract def transactional_ddl? : Bool
-```
-
-SQLite behavior:
-
-- quote with double quotes and double embedded quote characters;
-- reject empty/NUL-containing identifiers;
-- always render `?` placeholders;
-- render `LIMIT` before `OFFSET`, using `LIMIT -1` for offset-only SQLite;
-- convert `last_insert_id` only to supported generated integer types;
-- report transactional DDL support.
-
-Do not add PostgreSQL placeholders, upsert, isolation, native JSON, or locking.
-
-## Task 3: Add Listener Events
+## Task 2: Add Listener Events
 
 **Files**
 
@@ -110,7 +81,7 @@ Tests prove:
 - statement events can be emitted later by manager/query code through one
   internal datasource-owned dispatcher.
 
-## Task 4: Add The Internal Transaction Manager Seam
+## Task 3: Add The Internal Transaction Manager Seam
 
 **Files**
 
@@ -125,10 +96,10 @@ abstract def close : Nil
 ```
 
 DataSource receives an internal factory used by specs. Production construction
-uses a minimal no-op implementation until Plan 04. This protocol is not
+uses a minimal no-op implementation until Plan 05. This protocol is not
 documented or exported as user API.
 
-## Task 5: Implement DataSource Lifecycle
+## Task 4: Implement DataSource Lifecycle
 
 **Files**
 
@@ -151,13 +122,36 @@ Write one failing spec per behavior:
 
 Use `DB::Database#transaction`; do not manually emulate commit/rollback.
 
+## Task 5: Add A Per-DataSource Static Plan Cache
+
+**Files**
+
+- Create: `src/opal/data/sql/plan_cache.cr`
+- Create: `spec/data/sql/plan_cache_spec.cr`
+
+DataSource owns one fiber-safe cache keyed by Plan 02's `SQL::PlanKey`.
+`fetch(key) { compile }` compiles a missing static CRUD/find plan once and
+reuses the same immutable plan across transactions and connections belonging to
+that DataSource.
+
+The cache:
+
+- is never global or class-level;
+- stores no bind values or entity instances;
+- does not cache dynamic query expressions;
+- is cleared when the DataSource closes;
+- does not cache a failed compilation;
+- compiles once under concurrent fiber access.
+
+EntityManager receives access to this cache through its constructor in Plan 05.
+
 ## Verification
 
 ```bash
 CRYSTAL_CACHE_DIR=/tmp/opal-crystal-cache crystal spec \
   spec/data/errors_spec.cr \
-  spec/data/sqlite_dialect_spec.cr \
   spec/data/listener_spec.cr \
+  spec/data/sql/plan_cache_spec.cr \
   spec/data/data_source_spec.cr --no-color
 CRYSTAL_CACHE_DIR=/tmp/opal-crystal-cache crystal spec --no-color
 git diff --check
@@ -166,10 +160,14 @@ git diff --check
 Review the diff for forbidden dependencies:
 
 ```bash
-rg -n "LF::Application|LF::DI|LF::HTTP|YAML|sqlite3" src/opal/data*
+rg -n "LF::Application|LF::DI|LF::HTTP|YAML|sqlite3" \
+  src/opal/data/data_source.cr \
+  src/opal/data/listener.cr \
+  src/opal/data/errors.cr
 ```
 
-Only `SQLiteDialect` naming is allowed; requiring the concrete driver is not.
+DataSource may reference only the abstract `LF::Data::Dialect`, never
+`LF::Data::Dialects::SQLite` or the concrete driver.
 
 Commit as:
 

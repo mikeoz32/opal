@@ -1,4 +1,4 @@
-# Data 07: Forward-Only Migrations
+# Data 08: Forward-Only Migrations
 
 > **For Codex:** REQUIRED SKILLS: `executing-plans`,
 > `test-driven-development`, `systematic-debugging`, and
@@ -12,8 +12,8 @@ never creates or synchronizes schema. Applications explicitly construct a
 `MigrationSet`; a runner executes pending forward migrations through the same
 DataSource infrastructure.
 
-**Prerequisite:** Plan 02 is merged. Entity mapping and Unit of Work are not
-required.
+**Prerequisite:** Plans 02 and 03 are merged. Entity mapping and Unit of Work
+are not required.
 
 ---
 
@@ -91,13 +91,36 @@ invalid defaults, and foreign keys referencing missing local columns.
 No entity type is accepted by the schema DSL. This prevents mapping metadata
 from becoming schema authority.
 
-## Task 3: Render And Execute SQLite Schema Operations
+## Task 3: Add The Schema Renderer Contract
 
 **Files**
 
+- Create: `src/opal/data/schema/renderer.cr`
 - Create: `src/opal/data/schema_editor.cr`
-- Create: `src/opal/data/schema/sqlite_editor.cr`
-- Create: `spec/data/schema/sqlite_editor_spec.cr`
+- Modify: `src/opal/data/dialect.cr`
+- Create: `spec/data/schema/renderer_spec.cr`
+
+`SchemaEditor` validates and sends typed operations to an abstract
+`SchemaRenderer`; it does not contain `case dialect` branches.
+
+Add a default dialect method:
+
+```crystal
+def schema_renderer(connection : DB::Connection) : SchemaRenderer
+  raise UnsupportedSchemaOperationError.new(name, "schema migrations")
+end
+```
+
+Concrete dialects override it when they support migrations. This keeps
+MigrationRunner dependent on the base dialect only.
+
+## Task 4: Render And Execute SQLite Schema Operations
+
+**Files**
+
+- Create: `src/opal/data/dialects/sqlite/schema_renderer.cr`
+- Modify: `src/opal/data/dialects/sqlite.cr`
+- Create: `spec/data/dialects/sqlite/schema_renderer_spec.cr`
 
 Use dialect identifier quoting. Test exact SQL and resulting SQLite schema for
 every operation.
@@ -114,7 +137,7 @@ SQLite capability policy:
 Never emulate unsupported destructive alteration by silently rebuilding a
 table in v1.
 
-## Task 4: Add Migration History
+## Task 5: Add Migration History
 
 **Files**
 
@@ -138,7 +161,7 @@ History behavior:
 
 No source checksum is stored in v1.
 
-## Task 5: Implement MigrationRunner
+## Task 6: Implement MigrationRunner
 
 **Files**
 
@@ -152,16 +175,17 @@ Runner algorithm:
 3. read applied migrations;
 4. validate name matches;
 5. for each pending migration, open one datasource transaction;
-6. construct dialect-specific SchemaEditor on the transaction connection;
-7. invoke `up`;
-8. insert history row in the same transaction;
-9. stop immediately on failure.
+6. ask the DataSource dialect for its SchemaRenderer;
+7. construct SchemaEditor on that renderer and transaction connection;
+8. invoke `up`;
+9. insert history row in the same transaction;
+10. stop immediately on failure.
 
 Test fresh run, repeated no-op, multiple pending versions, failure rollback,
 history atomicity, empty set, migration throwing before SQL, and DB error
 preservation.
 
-## Task 6: Test Concurrent Runners
+## Task 7: Test Concurrent Runners
 
 Use two DataSources against one temporary SQLite file. Coordinate two fibers so
 both observe a pending migration. The history primary key must prevent double
@@ -177,7 +201,8 @@ transactions remain the coordination mechanism.
 CRYSTAL_CACHE_DIR=/tmp/opal-crystal-cache crystal spec \
   spec/data/migration_set_spec.cr \
   spec/data/schema/table_builder_spec.cr \
-  spec/data/schema/sqlite_editor_spec.cr \
+  spec/data/schema/renderer_spec.cr \
+  spec/data/dialects/sqlite/schema_renderer_spec.cr \
   spec/data/migration_history_spec.cr \
   spec/data/migration_runner_spec.cr --no-color
 CRYSTAL_CACHE_DIR=/tmp/opal-crystal-cache crystal spec --no-color

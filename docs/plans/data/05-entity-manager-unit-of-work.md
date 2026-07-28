@@ -1,4 +1,4 @@
-# Data 04: EntityManager And Explicit Unit Of Work
+# Data 05: EntityManager And Explicit Unit Of Work
 
 > **For Codex:** REQUIRED SKILLS: `executing-plans`,
 > `test-driven-development`, `systematic-debugging`, and
@@ -11,7 +11,7 @@ queued persistence, and deterministic flush behavior.
 transaction. It never owns the pool or commit/rollback. It tracks object
 identity separately from database identity and allocates no dirty snapshots.
 
-**Prerequisite:** Plans 02 and 03 are merged.
+**Prerequisite:** Plans 03 and 04 are merged.
 
 ---
 
@@ -86,7 +86,8 @@ Do not infer detached state from a non-nil ID.
 1. validates manager is usable;
 2. converts and checks the identity map;
 3. returns the existing object without SQL when found;
-4. otherwise executes generated find-by-ID SQL;
+4. otherwise fetches the dialect-compiled find plan from the DataSource cache
+   and executes it;
 5. hydrates exactly zero or one row;
 6. registers a loaded object as Managed;
 7. returns `nil` for no row;
@@ -122,8 +123,17 @@ Rules:
 - Create: `spec/data/entity_manager_insert_spec.cr`
 
 Test assigned ID, generated Int64 ID, generated Int32 overflow, nilable fields,
-converters, uniqueness failure, and listener event. Use
-`DB::ExecResult#last_insert_id` through the dialect.
+converters, uniqueness failure, and listener event. Fetch the compiled
+`InsertPlan` from the DataSource cache.
+
+Execution branches only on `GeneratedKeySource`:
+
+- `None`: execute and do not read a generated value;
+- `LastInsertId`: execute and convert `DB::ExecResult#last_insert_id`;
+- `ReturningRow`: query one returned generated column.
+
+Run SQLite integration tests for `LastInsertId` and a fake-connection/unit test
+for `ReturningRow` so EntityManager does not encode a SQLite-only assumption.
 
 Apply generated ID only after the statement succeeds. Register database
 identity only after a valid ID exists. A duplicate assigned ID failure remains
@@ -168,7 +178,7 @@ The database transaction rollback is owned by DataSource, not EntityManager.
 **Files**
 
 - Modify: `src/opal/data/data_source.cr`
-- Delete: temporary no-op manager implementation from Plan 02
+- Delete: temporary no-op manager implementation from Plan 03
 - Modify: `spec/data/data_source_spec.cr`
 
 DataSource creates the real manager with transaction connection, dialect, and

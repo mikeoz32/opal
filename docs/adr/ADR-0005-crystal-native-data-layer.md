@@ -87,7 +87,7 @@ crystal-db
 LF::Data
     ^
     |
-LF::Data::SQLite
+LF::Data::Dialects::SQLite
 
 LF::Application + LF::DI + LF::ConfigService + LF::Data
     ^
@@ -106,6 +106,12 @@ Application integration additionally requires:
 
 ```crystal
 require "opal/autoconfig/data"
+```
+
+Manual SQLite use additionally loads the concrete dialect:
+
+```crystal
+require "opal/data/dialects/sqlite"
 ```
 
 The concrete SQLite driver remains an application dependency:
@@ -127,11 +133,14 @@ transaction-local entity managers.
 Two construction modes make ownership explicit:
 
 ```crystal
-source = LF::Data::DataSource.open(url, dialect: LF::Data::SQLiteDialect.new)
+source = LF::Data::DataSource.open(
+  url,
+  dialect: LF::Data::Dialects::SQLite.new
+)
 
 source = LF::Data::DataSource.new(
   database,
-  dialect: LF::Data::SQLiteDialect.new,
+  dialect: LF::Data::Dialects::SQLite.new,
   owns_database: false
 )
 ```
@@ -212,7 +221,7 @@ Including `LF::Data::Entity` generates:
 
 - validated table, ID, version, and column metadata;
 - a stable selected-column list;
-- static INSERT, UPDATE, DELETE, and find-by-ID SQL templates;
+- static INSERT, UPDATE, DELETE, and find-by-ID operation templates;
 - a result-set hydrator;
 - internal generated-ID and version writers;
 - typed field descriptors under `Entity::Fields`.
@@ -395,22 +404,74 @@ managed entity of one type when that type has no pending entity operations;
 otherwise it raises `EntityStateError`. Application code must call `clear(T)`
 for affected types or abandon the manager before further managed operations.
 
-## Dialects
+## Dialect Architecture
 
-The core dialect contract is deliberately narrow:
+A database driver and a SQL dialect are different dependencies:
 
-- quote an identifier;
-- produce a positional placeholder;
-- render limit and offset;
-- produce generated-ID INSERT behavior;
-- declare supported schema operations and transactional DDL behavior.
+- a `crystal-db` driver opens connections, binds values, executes statements,
+  reads result sets, and reports driver errors;
+- an `LF::Data::Dialect` converts Opal's typed operation model into
+  database-specific SQL and describes how statement results are interpreted.
 
-The SQLite dialect uses double-quoted identifiers, `?` placeholders,
-`DB::ExecResult#last_insert_id`, and SQLite-compatible DDL. Driver-specific
-value conversion remains the driver's responsibility.
+Data core defines only the abstract dialect contract and operation-plan value
+types. It does not require a concrete dialect:
 
-The dialect contract does not attempt to normalize arbitrary SQL, isolation
-levels, native types, JSON operators, upsert syntax, or locking clauses.
+```crystal
+abstract class LF::Data::Dialect
+  abstract def name : String
+  abstract def quote_identifier(identifier : String) : String
+  abstract def placeholder(position : Int32) : String
+  abstract def compile_insert(operation : InsertOperation) : InsertPlan
+  abstract def append_pagination(
+    io : IO,
+    limit : Int32?,
+    offset : Int32?
+  ) : Nil
+  abstract def supports?(capability : DialectCapability) : Bool
+end
+```
+
+Entity macros generate dialect-neutral operation templates at compile time:
+table/column identifiers, writable fields, predicates, generated-key metadata,
+and bind order. A concrete dialect compiles each static entity operation into a
+statement plan once per DataSource and entity type. The resulting plan is
+cached and reused. Dynamic query expression trees are rendered per execution.
+
+An `InsertPlan` explicitly describes how a generated key is obtained:
+
+- no generated key: execute and ignore generated-key data;
+- `LastInsertId`: execute and convert `DB::ExecResult#last_insert_id`;
+- `ReturningRow`: execute as a query and read the declared returned column.
+
+This prevents the base contract from assuming SQLite's last-insert-ID behavior
+and permits a future PostgreSQL dialect to use `RETURNING` without changing
+EntityManager's public API.
+
+The v1 concrete implementation is:
+
+```crystal
+LF::Data::Dialects::SQLite < LF::Data::Dialect
+```
+
+It lives under the optional `opal/data/dialects/sqlite` entrypoint. It uses
+double-quoted identifiers, `?` placeholders, SQLite pagination,
+`LastInsertId`, and SQLite schema rendering. It does not require or register
+the `sqlite3` driver; the application must require that shard itself.
+
+Schema behavior is separated from DML rendering. The base package defines
+typed schema operations and an abstract `SchemaRenderer`. SQLite supplies
+`LF::Data::Dialects::SQLite::SchemaRenderer`. `MigrationRunner` asks its
+DataSource dialect for a schema renderer and raises
+`UnsupportedSchemaOperationError` when a capability is absent.
+
+`DialectCapability` is a closed framework enum for behavior that changes
+execution, initially generated keys, transactional DDL, add column, rename
+column, and foreign-key DDL. It is not a registry of arbitrary vendor features.
+
+The dialect contract does not normalize arbitrary SQL, isolation levels,
+native types, JSON operators, upsert syntax, locking clauses, or driver value
+conversion. PostgreSQL and MySQL dialects are deferred and will receive
+separate execution plans and integration suites.
 
 ## Migrations
 
@@ -545,7 +606,9 @@ subclasses. Autoconfiguration errors use
 ## Performance Constraints
 
 - Entity discovery and mapping metadata are compile-time only.
-- Static CRUD and find SQL are generated once as constants.
+- Static CRUD/find operation templates are generated at compile time;
+  dialect-specific statement plans are compiled once per DataSource/entity
+  type and cached.
 - There is no per-operation metadata reflection or string-key field lookup.
 - Prepared-statement creation and caching remain delegated to `crystal-db`.
 - Identity maps, operation queues, and query ASTs are transaction-local.

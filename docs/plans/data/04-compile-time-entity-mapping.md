@@ -1,16 +1,17 @@
-# Data 03: Compile-Time Entity Mapping
+# Data 04: Compile-Time Entity Mapping
 
 > **For Codex:** REQUIRED SKILLS: `executing-plans`,
 > `test-driven-development`, and `verification-before-completion`.
 
-**Goal:** Generate validated persistence metadata, hydration, static CRUD SQL,
-and typed field descriptors from ordinary Crystal classes.
+**Goal:** Generate validated persistence metadata, hydration, dialect-neutral
+static operation templates, and typed field descriptors from ordinary Crystal
+classes.
 
 **Architecture:** A class explicitly includes `LF::Data::Entity`. Its instance
 variables remain the type source of truth. Annotations only override
 conventions. No global entity discovery or runtime metadata reflection exists.
 
-**Prerequisite:** Plans 01 and 02 are merged.
+**Prerequisite:** Plans 01 through 03 are merged.
 
 ---
 
@@ -107,8 +108,8 @@ Conventions:
 - preserve declaration order for selected and written columns.
 
 Generate a typed metadata surface used internally by generic manager methods.
-It exposes table, ID, optional version, persistent columns, and static SQL
-fragments without runtime `Hash(String, ...)` lookup.
+It exposes table, ID, optional version, persistent columns, and static operation
+templates without runtime `Hash(String, ...)` lookup.
 
 Tests cover `Todo`, acronym names, namespaced entities, explicit names, ignored
 fields, nilable fields, and stable declaration order.
@@ -157,23 +158,24 @@ column, and original cause.
 
 Test a constructor that raises if called to prove hydration bypasses it.
 
-## Task 6: Generate Static CRUD SQL
+## Task 6: Generate Static CRUD Operation Templates
 
 **Files**
 
 - Create: `spec/data/entity_sql_spec.cr`
 
-Generate constants for:
+Generate immutable templates for:
 
-- full selected column list;
-- `SELECT ... WHERE id = ?`;
-- INSERT excluding generated ID and ignored fields;
-- UPDATE of all writable non-ID/non-version fields;
-- DELETE by ID.
+- full selected column order;
+- select-by-ID shape;
+- INSERT fields excluding generated ID and ignored fields;
+- UPDATE assignments for all writable non-ID/non-version fields;
+- DELETE ID predicate.
 
-All identifiers go through the dialect at use time. Static metadata stores
-identifier components and operation templates; runtime must not rediscover
-fields. Version predicates are added in Plan 06.
+The templates use Plan 02's dialect-neutral SQL operation types. They contain
+no quoted identifiers, placeholders, or values. EntityManager asks the
+DataSource plan cache to compile each template with the active dialect once.
+Runtime must not rediscover fields. Version predicates are added in Plan 07.
 
 Generated ID and version writers are private persistence methods callable only
 through generated generic code, not public domain API.
@@ -188,7 +190,7 @@ through generated generic code, not public domain API.
 Generate `Todo::Fields.id`, `title`, and other non-ignored fields. A descriptor
 retains entity type, property type, stored type, column, and converter. At this
 stage test only construction and typed dump behavior; expression methods arrive
-in Plan 05.
+in Plan 06.
 
 ## Verification
 
