@@ -7,12 +7,14 @@
 contract and ship SQLite as the first optional concrete dialect without making
 SQLite part of Data core.
 
-**Architecture:** A concrete dialect implements generic methods whose final SQL
-is specialized by Crystal for the static entity and query-shape types used by
-the program. Plans contain final SQL and result semantics only. Entity/query
-code supplies direct bind tuples at runtime. Drivers remain responsible for
-connections, binding, execution, result conversion, statement preparation, and
-prepared-statement caching.
+**Architecture:** Data core provides a shared compile-time SQL compiler that is
+installed into each concrete dialect. The compiler specializes final SQL for
+the static entity and query-shape types used by the program, applying the
+including dialect's static policy. The policy contains only vendor-specific
+syntax and is not a runtime object or generic API parameter. Plans contain final
+SQL and result semantics only; entity/query code supplies direct bind tuples at
+runtime. Drivers remain responsible for connections, binding, execution,
+result conversion, statement preparation, and prepared-statement caching.
 
 **Prerequisite:** Plan 01 is merged.
 
@@ -132,7 +134,8 @@ generic dispatch still specializes the concrete implementation for `T`.
 
 The generic methods are a compile-time boundary:
 
-- the concrete implementation uses macros to inspect the static type;
+- `SQL::StaticPlanCompiler` installs the methods into the concrete dialect;
+- the installed methods use macros to inspect the static type;
 - the returned SQL is a compile-time-produced string literal;
 - execution does not quote identifiers, append placeholders, or use
   `String::Builder`;
@@ -140,9 +143,14 @@ The generic methods are a compile-time boundary:
   SQL specializations.
 
 Plan 02 uses small test-only annotated entity types to prove this mechanism.
-The dialect macro reads the static type's instance variables and mapping
-annotations directly. Plan 04 installs and validates the complete entity
-contract over that same source of truth.
+The shared compiler reads the static type's instance variables and mapping
+annotations directly. It is installed with `macro included` and `verbatim`;
+calling an external compiler macro from a generic method is forbidden because
+the specialized `T` is otherwise unavailable during macro expansion.
+
+Do not introduce a runtime `EntityShape`, metadata registry, or copied mapping
+table. Plan 04 installs and validates the complete entity contract over the
+same annotations and instance variables.
 
 Initial capabilities describe execution-relevant differences:
 
@@ -160,15 +168,77 @@ Do not add connection creation, URL parsing, type conversion, logging,
 transactions, retries, isolation, application configuration, or a plan cache
 to Dialect.
 
-## Task 3: Add SQLite As An Optional Concrete Dialect
+## Task 3: Add The Shared Static Compiler And SQLite Policy
 
 **Files**
 
-- Create: `src/opal/data/dialects/sqlite.cr`
-- Create: `spec/data/dialects/sqlite_spec.cr`
-- Create: `spec/fixtures/data/sqlite_dialect_without_driver.cr`
+- Create: `src/opal/data/sql/static_plan_compiler.cr`
+- Modify: `src/opal/data/dialects/sqlite.cr`
+- Create: `spec/data/sql/static_plan_compiler_spec.cr`
+- Modify: `spec/data/dialects/sqlite_spec.cr`
+- Modify: `spec/fixtures/data/sqlite_dialect_without_driver.cr`
 
-SQLite behavior:
+`LF::Data::SQL::StaticPlanCompiler` is a compile-time mixin. Its
+`macro included` installs `find_plan`, `insert_plan`, `update_plan`, and
+`delete_plan` into the including concrete dialect. Wrap generated generic
+method bodies in `verbatim` so their specialized `T` is available when the
+method is instantiated.
+
+The compiler owns:
+
+- table/column annotation extraction and default naming;
+- ignored-field exclusion and declaration order;
+- ID, generated-ID, and version field discovery;
+- common SELECT-by-ID, INSERT, UPDATE, and DELETE clause structure;
+- numeric optimistic-version increment and expected-version predicates;
+- deterministic placeholder order;
+- construction of `StatementPlan` and `InsertPlan`.
+
+The compiler does not own connection handling, execution, bind values, runtime
+metadata, prepared statements, or capability discovery.
+
+The including dialect supplies compile-time policy constants for:
+
+- identifier opening/closing delimiters and escape replacement;
+- anonymous-token versus numbered-prefix positional placeholders;
+- empty-INSERT syntax;
+- generated-key source, from which a returned-column clause is derived.
+
+Concrete policy shape:
+
+```crystal
+class SQLite < LF::Data::Dialect
+  module StaticSQLPolicy
+    IDENTIFIER_OPEN        = %(")
+    IDENTIFIER_CLOSE       = %(")
+    IDENTIFIER_ESCAPE_FROM = %(")
+    IDENTIFIER_ESCAPE_TO   = %("")
+    PLACEHOLDER_STYLE      = :anonymous
+    PLACEHOLDER_TOKEN      = "?"
+    EMPTY_INSERT_STYLE     = :default_values
+    GENERATED_KEY_SOURCE   = SQL::GeneratedKeySource::LastInsertId
+  end
+
+  STATIC_SQL_POLICY = StaticSQLPolicy
+  include SQL::StaticPlanCompiler
+end
+```
+
+The compiler resolves `STATIC_SQL_POLICY` from the including `@type` and reads
+its constants during macro expansion. A numbered policy instead defines its
+prefix and first position, for example `$` and `1`. Missing constants and
+unsupported policy values fail compilation with the concrete dialect name.
+
+Keep the policy small. A concrete dialect may override an installed plan method
+when its SQL cannot be represented by these dimensions; do not grow a universal
+SQL feature matrix.
+
+Refactor the existing SQLite generic plan methods into the shared compiler
+without changing the public `LF::Data::Dialect` contract or adding runtime
+indirection. Preserve exact SQL for non-versioned entities and correct the
+versioned UPDATE shape specified below under a regression test.
+
+SQLite policy:
 
 - `name` is `"sqlite"`;
 - identifiers use double quotes and embedded quotes are doubled at compile
@@ -181,11 +251,25 @@ SQLite behavior:
 - transactional DDL, add column, rename column, and foreign keys report their
   explicit v1 capability values.
 
-Test exact SELECT-by-ID, INSERT, UPDATE, DELETE, versioned UPDATE/DELETE,
-reserved-word identifiers, quote-containing identifiers, and empty writable
-column lists using static fixture types. Inspect macro expansion for at least
-one fixture and assert that execution code contains a final SQL literal rather
-than runtime SQL assembly.
+For an entity with `@[Version]`, UPDATE must emit:
+
+```sql
+UPDATE "table"
+SET "field" = ?, "version" = "version" + 1
+WHERE "id" = ? AND "version" = ?
+```
+
+The version column is not a normal `SET ... = ?` bind. INSERT still binds the
+initial version. DELETE constrains ID and expected version.
+
+Runtime `quote_identifier` and `placeholder` must derive from the same policy
+values or have explicit parity specs against static generation.
+
+Test the shared compiler with a test-only policy, then test exact SQLite
+SELECT-by-ID, INSERT, UPDATE, DELETE, versioned UPDATE/DELETE, reserved-word
+identifiers, quote-containing identifiers, and empty writable column lists.
+Inspect macro expansion for at least one fixture and assert that execution code
+contains a final SQL literal rather than runtime SQL assembly.
 
 The compile fixture requires `opal/data/dialects/sqlite` without `sqlite3` and
 must pass `--no-codegen`.
@@ -196,7 +280,9 @@ must pass `--no-codegen`.
 
 - Create: `spec/data/dialects/returning_probe_spec.cr`
 
-Implement a test-only dialect using numbered `$1`, `$2` placeholders and:
+Implement a test-only dialect by installing the same
+`SQL::StaticPlanCompiler` with a policy using numbered `$1`, `$2` placeholders
+and:
 
 ```sql
 INSERT ... RETURNING "id"
@@ -206,6 +292,7 @@ with `GeneratedKeySource::ReturningRow`. This is not a PostgreSQL
 implementation. It proves:
 
 - the same static fixture type produces different SQL for different dialects;
+- shared clause generation does not encode SQLite quoting or placeholders;
 - generic dispatch through an `LF::Data::Dialect` reference reaches the
   concrete specialization;
 - operation plans represent both last-insert-ID and returning-row strategies;
@@ -223,7 +310,8 @@ dialects.
 
 Cover:
 
-1. repeated calls for the same entity/dialect combination return identical SQL;
+1. repeated calls for the same entity/concrete-dialect combination return
+   identical SQL;
 2. two entity shapes produce their own SQL literals;
 3. SQLite and the returning probe produce different SQL from the same shape;
 4. no static execution path allocates a bind-order array;

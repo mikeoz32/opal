@@ -391,10 +391,11 @@ SelectQuery(
 )
 ```
 
-The expression structs store only runtime values. The concrete dialect's
-generic method specializes for the entity and query-shape types and emits the
-final SQL string at compile time. The query generates a direct tuple of bind
-values in the same static order:
+The expression structs store only runtime values. Data core's shared static
+plan compiler is installed into each concrete dialect and specializes for the
+entity and query-shape types. It applies that dialect's static policy and emits
+the final SQL string at compile time. The query generates a direct tuple of
+bind values in the same static order:
 
 ```sql
 SELECT ... WHERE "completed" = ? AND "title" LIKE ?
@@ -452,8 +453,9 @@ A database driver and a SQL dialect are different dependencies:
 - an `LF::Data::Dialect` converts Opal's typed operation model into
   database-specific SQL and describes how statement results are interpreted.
 
-Data core defines only the abstract dialect contract and operation-plan value
-types. It does not require a concrete dialect:
+Data core defines the abstract dialect contract, operation-plan value types,
+and the optional shared static plan compiler. It does not require a concrete
+dialect:
 
 ```crystal
 abstract class LF::Data::Dialect
@@ -479,12 +481,43 @@ generated-key strategy and optional returned column. It does not contain bind
 values or a runtime bind-order array.
 
 Entity annotations and instance variables remain the single mapping source of
-truth. A concrete dialect implements the generic methods with Crystal macros
-that inspect `T` and, for queries, `S`. Each used
-`Entity + Dialect + QueryShape` combination therefore produces final
-dialect-specific SQL during compilation. Entity- and query-generated methods
-produce direct bind tuples; runtime does not scan metadata, dispatch through
-`BindSlot`, or build static SQL with `String::Builder`.
+truth. Data core provides `LF::Data::SQL::StaticPlanCompiler`, a compile-time
+mixin that installs generic CRUD plan methods into a concrete dialect through
+`macro included` and `verbatim`. Installing the methods into the concrete class
+is required because an external macro call cannot retain a generic method's
+specialized `T` reliably.
+
+The compiler inspects `T` and, for queries, `S`. It owns common SQL structure:
+mapping declarations, deterministic column order, standard SELECT/INSERT/
+UPDATE/DELETE clauses, and placeholder order. It does not create a runtime
+entity descriptor, metadata registry, query-plan cache, or second mapping
+source.
+
+Each concrete dialect supplies a small compile-time policy describing only SQL
+variation:
+
+- identifier delimiters and escaping;
+- positional placeholder form;
+- empty-INSERT syntax;
+- generated-key result strategy and optional returned-column clause;
+- later pagination syntax required by static query shapes.
+
+Runtime `quote_identifier` and `placeholder` behavior must derive from the same
+policy or be covered by parity specs so static and dynamic SQL cannot drift. A
+dialect may override an installed generic plan method when its SQL cannot be
+represented by the common policy.
+
+Each used `Entity + ConcreteDialect + QueryShape` combination therefore
+produces final dialect-specific SQL during compilation. `DialectPolicy` is not
+a runtime object or an additional generic parameter; it is compile-time input
+owned by the concrete dialect. Entity- and query-generated methods produce
+direct bind tuples; runtime does not scan metadata, dispatch through `BindSlot`,
+or build static SQL with `String::Builder`.
+
+This compiler is not a `BaseDialect` subclass. `LF::Data::Dialect` remains the
+runtime polymorphic contract, while static SQL generation is a separate
+compile-time collaborator. This avoids pretending that Crystal macros use
+runtime virtual dispatch.
 
 The abstract dialect reference stored by `DataSource` remains sufficient:
 Crystal specializes and dispatches generic virtual methods to the concrete
@@ -664,9 +697,10 @@ subclasses. Autoconfiguration errors use
 
 - Entity discovery and mapping metadata are compile-time only.
 - Static CRUD/find SQL is specialized at compile time for each used
-  entity/dialect combination.
+  entity/concrete-dialect combination, using the dialect's static policy.
 - Static query SQL is specialized at compile time for each used
-  entity/dialect/query-shape combination.
+  entity/concrete-dialect/query-shape combination, using the dialect's static
+  policy.
 - There is no per-operation metadata reflection or string-key field lookup.
 - Opal has no SQL plan or prepared-statement cache; prepared-statement creation
   and per-connection caching remain delegated to `crystal-db`.

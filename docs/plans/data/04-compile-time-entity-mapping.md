@@ -102,11 +102,12 @@ Conventions:
 - use ivar name as default column name;
 - preserve declaration order for selected and written columns.
 
-Generate a typed metadata surface used internally by generic manager and
-dialect methods. Entity annotations and instance variables remain the source of
-truth for table, ID, optional version, and persistent columns. Do not copy the
-mapping into a runtime `Hash(String, ...)` or a second independently maintained
-metadata registry.
+Generate a typed metadata surface used internally by generic manager methods.
+Entity annotations and instance variables remain the source of truth for table,
+ID, optional version, and persistent columns. Plan 02's
+`SQL::StaticPlanCompiler` inspects those same declarations at compile time.
+Do not copy the mapping into a runtime `Hash(String, ...)`, runtime
+`EntityShape`, or a second independently maintained metadata registry.
 
 Tests cover `Todo`, acronym names, namespaced entities, explicit names, ignored
 fields, nilable fields, and stable declaration order.
@@ -182,8 +183,9 @@ types. Generated IDs and ignored fields are excluded from INSERT; IDs are
 excluded from assignments and appended as predicates for UPDATE/DELETE.
 Version arguments are added in Plan 07.
 
-The concrete dialect's generic plan method inspects the static entity type and
-the same annotations/instance variables to emit final SQL. Runtime calls:
+The shared static plan compiler installed into the concrete dialect inspects
+the static entity type and the same annotations/instance variables to emit
+final SQL. Runtime calls:
 
 ```crystal
 connection.exec(plan.sql, *entity.__lf_insert_args)
@@ -193,6 +195,11 @@ It must not rediscover fields, traverse `BindSlot` objects, build
 `Array(DB::Any)`, or look up values by symbol, index, or column name. Specs
 assert that plan placeholder order and tuple value order match for assigned and
 generated IDs, ignored fields, converters, and nilable fields.
+
+Add a cross-layer compile fixture proving that entity-generated tuple order
+matches `SQL::StaticPlanCompiler` placeholder order. This test is the guard
+against drift between the two compile-time consumers of the mapping
+declarations.
 
 Generated bind, ID, and version methods use a reserved `__lf_` prefix and are
 framework internals, not documented domain API. Crystal does not provide friend
