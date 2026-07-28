@@ -1,0 +1,3 @@
+require "db"
+
+DB::Database
