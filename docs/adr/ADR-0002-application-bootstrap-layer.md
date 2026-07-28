@@ -5,6 +5,7 @@
 - Deciders: Opal maintainers
 - Related: `LF::DI`, `LF::HTTP::Router`, `LF::HTTP::App`, future application configuration and data layers
 - Supersedes: the previous proposed application-bootstrap API in this ADR
+- Extended by: ADR-0003 and ADR-0004
 
 ## Context
 

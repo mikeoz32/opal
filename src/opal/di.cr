@@ -71,6 +71,10 @@ module LF::DI
     abstract def destroy : Nil
   end
 
+  module ScopeProvider
+    abstract def enter_scope(scope : String) : Container
+  end
+
   annotation Service
   end
 
@@ -171,6 +175,8 @@ module LF::DI
   end
 
   abstract class Container
+    include ScopeProvider
+
     @configurations : Set(BeanConfiguration) = Set(BeanConfiguration).new
     @factories = Hash(String, BeanFactory).new
     @parent : Container?
@@ -357,7 +363,7 @@ module LF::DI
       @instances.has_key?(name) || !find_factory(name).nil?
     end
 
-    def enter_scope(scope : String)
+    def enter_scope(scope : String) : Container
       ensure_open
       self.class.new(self, scope)
     end

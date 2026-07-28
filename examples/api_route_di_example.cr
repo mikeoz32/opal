@@ -19,14 +19,17 @@ end
 class GreetingApi
   include LF::HTTP::Controller
 
+  def initialize(@greeting_service : GreetingService)
+  end
+
   @[LF::HTTP::Controller::Get("/hello/:name")]
-  def show(name : String, greeting_service : GreetingService)
-    Message.new("#{greeting_service.prefix}, #{name}")
+  def show(name : String)
+    Message.new("#{@greeting_service.prefix}, #{name}")
   end
 
   @[LF::HTTP::Controller::Get("/echo")]
-  def echo(name : String, greeting_service : GreetingService)
-    "#{greeting_service.prefix}, #{name}"
+  def echo(name : String)
+    "#{@greeting_service.prefix}, #{name}"
   end
 end
 
@@ -36,7 +39,7 @@ root.add_bean(name: "greeting_service", scope: "request", type: GreetingService)
 end
 
 app = LF::HTTP::App.new do |router|
-  GreetingApi.new.setup_routes(router)
+  GreetingApi.setup_routes(router, root)
 end
 
 server = HTTP::Server.new([
