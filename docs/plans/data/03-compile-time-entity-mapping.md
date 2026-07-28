@@ -1,4 +1,4 @@
-# Data 04: Compile-Time Entity Mapping
+# Data 03: Compile-Time Entity Mapping
 
 > **For Codex:** REQUIRED SKILLS: `executing-plans`,
 > `test-driven-development`, and `verification-before-completion`.
@@ -10,7 +10,7 @@ and typed field descriptors from ordinary Crystal classes.
 variables remain the type source of truth. Annotations only override
 conventions. No global entity discovery or runtime metadata reflection exists.
 
-**Prerequisite:** Plans 01 and 03 are merged.
+**Prerequisite:** Plans 01 and 02 are merged.
 
 ---
 
@@ -173,7 +173,7 @@ Generate constants for:
 
 All identifiers go through the dialect at use time. Static metadata stores
 identifier components and operation templates; runtime must not rediscover
-fields. Version predicates are added in Plan 07.
+fields. Version predicates are added in Plan 06.
 
 Generated ID and version writers are private persistence methods callable only
 through generated generic code, not public domain API.
@@ -188,7 +188,7 @@ through generated generic code, not public domain API.
 Generate `Todo::Fields.id`, `title`, and other non-ignored fields. A descriptor
 retains entity type, property type, stored type, column, and converter. At this
 stage test only construction and typed dump behavior; expression methods arrive
-in Plan 06.
+in Plan 05.
 
 ## Verification
 

@@ -1,4 +1,4 @@
-# Data 06: Typed Query And Bulk DML
+# Data 05: Typed Query And Bulk DML
 
 > **For Codex:** REQUIRED SKILLS: `executing-plans`,
 > `test-driven-development`, and `verification-before-completion`.
@@ -10,7 +10,7 @@ without method-name parsing, raw value interpolation, or implicit flush.
 them through field converters. Runtime expression nodes represent only the
 dynamic query shape. A dialect renderer produces SQL and ordered bind values.
 
-**Prerequisite:** Plans 04 and 05 are merged.
+**Prerequisite:** Plans 03 and 04 are merged.
 
 ---
 

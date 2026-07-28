@@ -1,4 +1,4 @@
-# Data 02: Conditional Application Autoconfiguration
+# Data 08: Conditional Application Autoconfiguration
 
 > **For Codex:** REQUIRED SKILLS: `executing-plans`,
 > `test-driven-development`, and `verification-before-completion`.
@@ -10,7 +10,9 @@ without adding package-specific logic to Application or DI.
 installation of generic `ApplicationExtension` types. Data will consume this
 contract later; this plan contains no Data references.
 
-**Prerequisite:** Plan 01 is merged.
+**Delivery prerequisite:** Plans 01 through 07 are merged. This contract has no
+code dependency on Data, but it is intentionally delivered only after the
+standalone Data layer is complete and usable without Application.
 
 ---
 

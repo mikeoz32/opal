@@ -151,4 +151,4 @@ build: add crystal-db development foundation
 test(data): add isolated database test support
 ```
 
-Stop for review before Plan 02 or 03.
+Stop for review before Plan 02.

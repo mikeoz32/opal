@@ -12,7 +12,7 @@ versioned migration. Repositories remain stateless application services.
 Application services own transaction boundaries and pass one EntityManager to
 all participating repositories.
 
-**Prerequisite:** Plans 04 through 09 are merged.
+**Prerequisite:** Plans 03 through 09 are merged.
 
 ---
 
