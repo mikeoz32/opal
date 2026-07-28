@@ -1,4 +1,4 @@
-# Data 08: Forward-Only Migrations
+# Data 07: Forward-Only Migrations
 
 > **For Codex:** REQUIRED SKILLS: `executing-plans`,
 > `test-driven-development`, `systematic-debugging`, and
@@ -12,7 +12,7 @@ never creates or synchronizes schema. Applications explicitly construct a
 `MigrationSet`; a runner executes pending forward migrations through the same
 DataSource infrastructure.
 
-**Prerequisite:** Plan 03 is merged. Entity mapping and Unit of Work are not
+**Prerequisite:** Plan 02 is merged. Entity mapping and Unit of Work are not
 required.
 
 ---

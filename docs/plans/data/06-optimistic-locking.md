@@ -1,4 +1,4 @@
-# Data 07: Optimistic Locking
+# Data 06: Optimistic Locking
 
 > **For Codex:** REQUIRED SKILLS: `executing-plans`,
 > `test-driven-development`, `systematic-debugging`, and
@@ -11,7 +11,7 @@ version field without introducing snapshots or automatic persistence.
 version. EntityManager stores the expected loaded version in managed state and
 uses compare-and-increment SQL during explicit flush.
 
-**Prerequisite:** Plans 04 and 05 are merged. Plan 06 is optional.
+**Prerequisite:** Plans 03 and 04 are merged. Plan 05 is optional.
 
 ---
 

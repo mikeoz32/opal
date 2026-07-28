@@ -1,4 +1,4 @@
-# Data 05: EntityManager And Explicit Unit Of Work
+# Data 04: EntityManager And Explicit Unit Of Work
 
 > **For Codex:** REQUIRED SKILLS: `executing-plans`,
 > `test-driven-development`, `systematic-debugging`, and
@@ -11,7 +11,7 @@ queued persistence, and deterministic flush behavior.
 transaction. It never owns the pool or commit/rollback. It tracks object
 identity separately from database identity and allocates no dirty snapshots.
 
-**Prerequisite:** Plans 03 and 04 are merged.
+**Prerequisite:** Plans 02 and 03 are merged.
 
 ---
 
@@ -168,7 +168,7 @@ The database transaction rollback is owned by DataSource, not EntityManager.
 **Files**
 
 - Modify: `src/opal/data/data_source.cr`
-- Delete: temporary no-op manager implementation from Plan 03
+- Delete: temporary no-op manager implementation from Plan 02
 - Modify: `spec/data/data_source_spec.cr`
 
 DataSource creates the real manager with transaction connection, dialect, and

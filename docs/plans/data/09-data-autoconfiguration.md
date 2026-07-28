@@ -8,10 +8,11 @@
 `LF::Application` while keeping Data core independent of Application and DI.
 
 **Architecture:** `opal/autoconfig/data` is an adapter package. It declares a
-marker and a conditional Application extension using Plan 02's generic
+marker and a conditional Application extension using Plan 08's generic
 contract. The extension owns the datasource instance it registers.
 
-**Prerequisite:** Plans 02, 03, and 08 are merged.
+**Prerequisite:** Plans 02, 07, and 08 are merged. All standalone Data plans
+must be complete before this Application adapter begins.
 
 ---
 

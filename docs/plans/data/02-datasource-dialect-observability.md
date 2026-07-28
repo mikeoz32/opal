@@ -1,4 +1,4 @@
-# Data 03: DataSource, Dialect, And Observability
+# Data 02: DataSource, Dialect, And Observability
 
 > **For Codex:** REQUIRED SKILLS: `executing-plans`,
 > `test-driven-development`, and `verification-before-completion`.
@@ -8,10 +8,10 @@ plus the smallest dialect and observability contracts needed by later plans.
 
 **Architecture:** `DataSource` delegates pool and transaction mechanics to
 `crystal-db`. It creates a transaction-local manager through an internal
-factory seam; Plan 05 replaces the placeholder with `EntityManager` without
+factory seam; Plan 04 replaces the placeholder with `EntityManager` without
 changing the public transaction API.
 
-**Prerequisite:** Plan 01 is merged. Plan 02 is not required.
+**Prerequisite:** Plan 01 is merged. No Application work is required.
 
 ---
 
@@ -125,7 +125,7 @@ abstract def close : Nil
 ```
 
 DataSource receives an internal factory used by specs. Production construction
-uses a minimal no-op implementation until Plan 05. This protocol is not
+uses a minimal no-op implementation until Plan 04. This protocol is not
 documented or exported as user API.
 
 ## Task 5: Implement DataSource Lifecycle
