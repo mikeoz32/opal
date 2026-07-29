@@ -4,7 +4,7 @@
 > `test-driven-development`, and `verification-before-completion`.
 
 **Goal:** Generate validated persistence metadata, hydration, direct CRUD bind
-tuples, and typed field marker types from ordinary Crystal classes.
+tuples, and typed field descriptors from ordinary Crystal classes.
 
 **Architecture:** A class explicitly includes `LF::Data::Entity`. Its instance
 variables remain the type source of truth. Annotations only override
@@ -44,7 +44,6 @@ state without invoking that constructor.
 **Files**
 
 - Create: `src/opal/data/entity.cr`
-- Create: `src/opal/data/metadata.cr`
 - Modify: `src/opal/data.cr`
 - Create: `spec/data/entity_compile_spec.cr`
 - Create: `spec/fixtures/data/entities/valid_generated_id.cr`
@@ -83,6 +82,11 @@ Implement and test validation in this order:
 7. version is one non-nil `Int64` ivar with no public setter;
 8. direct fields resolve to portable `DB::Any`;
 9. ignored fields are excluded from all persistence metadata.
+
+Constructor-free hydration initializes ignored fields from their declaration
+default, or to nil when nilable. A non-nil ignored field without a declaration
+default is a compile-time error; assigning it only in a domain constructor is
+insufficient because hydration deliberately bypasses that constructor.
 
 Every error names the entity and offending field/column. Test message fragments,
 not complete compiler output.
@@ -127,9 +131,11 @@ def self.load(result : DB::ResultSet) : T
 def self.dump(value : T) : DB::Any
 ```
 
-Generated code handles nil before invoking the converter. Converter methods
-receive non-nil property values. Compile a real call to both methods so a wrong
-signature is a compile-time error.
+Generated dump code handles nil before invoking the converter, so dump methods
+receive non-nil property values. `DB::ResultSet` is forward-only: load
+converters consume their column directly and therefore own nullable stored-value
+handling when their property is nilable. Compile a real call to both methods so
+a wrong signature is a compile-time error.
 
 Test UUID-as-string, enum-as-string, nilable converted values, load failure,
 dump failure, and absence of a global registry.
@@ -213,11 +219,12 @@ them with an explicit receiver.
 - Create: `src/opal/data/query/field.cr`
 - Create: `spec/data/query/field_compile_spec.cr`
 
-Generate marker types such as `Todo::Fields::Id` and singleton-style descriptor
-accessors `Todo::Fields.id`, `title`, and other non-ignored fields. A descriptor
-type retains entity type, property type, stored type, column, and converter at
-compile time. At this stage test only construction and typed dump behavior;
-expression methods arrive in Plan 06.
+Generate singleton-style descriptor accessors `Todo::Fields.id`, `title`, and
+other non-ignored fields. Each accessor has a distinct
+`Field(EntityType, PropertyType, declaration_index)` type. The declaration index
+is a compile-time generic value, not runtime metadata; the descriptor resolves
+column and converter from the entity ivar annotations. At this stage test only
+construction and typed dump behavior; expression methods arrive in Plan 06.
 
 ## Verification
 

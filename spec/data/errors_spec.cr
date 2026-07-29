@@ -27,4 +27,16 @@ describe LF::Data::Error do
     error.cause.should be(cause)
     error.message.not_nil!.should contain("persist")
   end
+
+  it "exposes mapping context and preserves the driver cause" do
+    cause = Exception.new("invalid column")
+    error = LF::Data::MappingError.new("Todo", "title", "summary", cause)
+
+    error.should be_a(LF::Data::Error)
+    error.entity.should eq("Todo")
+    error.property.should eq("title")
+    error.column.should eq("summary")
+    error.cause.should be(cause)
+    error.message.not_nil!.should contain("Todo#title")
+  end
 end
