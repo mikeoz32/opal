@@ -29,6 +29,20 @@ private class DataSourceListenerProbe
   end
 end
 
+@[LF::Data::Table("datasource_entities")]
+private class DataSourceEntity
+  include LF::Data::Entity
+
+  @[LF::Data::Id(generated: true)]
+  getter id : Int64?
+
+  getter value : String
+
+  def initialize(@value : String)
+    @id = nil
+  end
+end
+
 describe LF::Data::DataSource do
   it "borrows an injected database by default" do
     LF::DataSpecSupport::SQLiteDatabase.with_memory do |database|
@@ -447,6 +461,102 @@ describe LF::Data::DataSource do
       source.should_not contain("PlanCache")
       source.should_not contain("@statement_cache")
       source.should_not contain("@plan_cache")
+    end
+  end
+
+  it "automatically flushes entities after the transaction block returns" do
+    LF::DataSpecSupport::SQLiteDatabase.with_memory do |database|
+      database.exec(
+        "CREATE TABLE datasource_entities " \
+        "(id INTEGER PRIMARY KEY AUTOINCREMENT, value TEXT NOT NULL)"
+      )
+      source = LF::Data::DataSource.new(
+        database,
+        dialect: LF::Data::Dialects::SQLite.new
+      )
+      entity = DataSourceEntity.new("automatic")
+
+      source.transaction do |manager|
+        manager.persist(entity)
+        entity.id.should be_nil
+      end
+
+      entity.id.should_not be_nil
+      database.scalar("SELECT value FROM datasource_entities")
+        .should eq("automatic")
+    end
+  end
+
+  it "skips queued writes when the transaction block fails" do
+    LF::DataSpecSupport::SQLiteDatabase.with_memory do |database|
+      database.exec(
+        "CREATE TABLE datasource_entities " \
+        "(id INTEGER PRIMARY KEY AUTOINCREMENT, value TEXT NOT NULL)"
+      )
+      source = LF::Data::DataSource.new(
+        database,
+        dialect: LF::Data::Dialects::SQLite.new
+      )
+      entity = DataSourceEntity.new("skipped")
+      failure = Exception.new("block failed")
+
+      raised = expect_raises(Exception) do
+        source.transaction do |manager|
+          manager.persist(entity)
+          raise failure
+        end
+      end
+
+      raised.should be(failure)
+      entity.id.should be_nil
+      database.scalar("SELECT count(*) FROM datasource_entities").should eq(0_i64)
+    end
+  end
+
+  it "performs no write in a query-only entity transaction" do
+    LF::DataSpecSupport::SQLiteDatabase.with_memory do |database|
+      database.exec(
+        "CREATE TABLE datasource_entities " \
+        "(id INTEGER PRIMARY KEY AUTOINCREMENT, value TEXT NOT NULL)"
+      )
+      listener = DataSourceListenerProbe.new
+      source = LF::Data::DataSource.new(
+        database,
+        dialect: LF::Data::Dialects::SQLite.new,
+        listeners: [listener] of LF::Data::Listener
+      )
+
+      source.transaction { |manager| manager.find(DataSourceEntity, 1_i64) }
+
+      listener.events.should eq([
+        "begin",
+        "statement:Select",
+        "transaction:Committed",
+      ])
+      database.scalar("SELECT count(*) FROM datasource_entities").should eq(0_i64)
+    end
+  end
+
+  it "rejects entity operations through an escaped manager" do
+    LF::DataSpecSupport::SQLiteDatabase.with_memory do |database|
+      database.exec(
+        "CREATE TABLE datasource_entities " \
+        "(id INTEGER PRIMARY KEY AUTOINCREMENT, value TEXT NOT NULL)"
+      )
+      source = LF::Data::DataSource.new(
+        database,
+        dialect: LF::Data::Dialects::SQLite.new
+      )
+      escaped = nil.as(LF::Data::EntityManager?)
+
+      source.transaction { |manager| escaped = manager }
+
+      expect_raises(LF::Data::ClosedEntityManagerError) do
+        escaped.not_nil!.persist(DataSourceEntity.new("late"))
+      end
+      expect_raises(LF::Data::ClosedEntityManagerError) do
+        escaped.not_nil!.find(DataSourceEntity, 1_i64)
+      end
     end
   end
 end

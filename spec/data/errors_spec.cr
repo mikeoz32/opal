@@ -39,4 +39,20 @@ describe LF::Data::Error do
     error.cause.should be(cause)
     error.message.not_nil!.should contain("Todo#title")
   end
+
+  it "exposes invalid and detached entity transitions by type" do
+    state_error = LF::Data::EntityStateError.new(
+      :persist,
+      "Todo",
+      LF::Data::EntityState::Removed
+    )
+    detached_error = LF::Data::DetachedEntityError.new(:remove, "Todo")
+
+    state_error.should be_a(LF::Data::Error)
+    state_error.operation.should eq(:persist)
+    state_error.entity_name.should eq("Todo")
+    state_error.state.should eq(LF::Data::EntityState::Removed)
+    detached_error.should be_a(LF::Data::EntityStateError)
+    detached_error.state.should eq(LF::Data::EntityState::Detached)
+  end
 end
