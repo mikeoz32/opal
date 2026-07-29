@@ -314,6 +314,17 @@ position. An UPDATE writes every persistent non-ID, non-version field because
 v1 has no dirty snapshots. Generated IDs are applied only after a successful
 INSERT statement.
 
+The manager implements heterogeneous scheduling with internal
+`TypedTrackedEntity(T)` wrappers. A wrapper stores the entity reference and
+lifecycle bookkeeping but no field snapshot or bind collection; concrete
+generated tuples are read only when that wrapper executes. Object state and
+database identity use separate manager-local hashes.
+
+The operation queue uses append-only nullable slots and a head cursor.
+Successful bulk flush is O(n) overall rather than repeatedly shifting an
+array. Cancelling a New entity may scan pending slots, which keeps the common
+flush path allocation-free and constant-time per completed operation.
+
 ## Flush and Transaction Semantics
 
 `persist` and `remove` do not execute SQL. `flush` executes queued operations.
@@ -341,6 +352,12 @@ An explicit `flush` is required when a generated ID or database-visible state
 is needed before block completion. Repeated successful flushes are allowed.
 After any flush failure, every manager operation raises
 `LF::Data::FailedEntityManagerError`.
+
+INSERT execution branches only on the dialect plan's `GeneratedKeySource`.
+`LastInsertId` consumes `DB::ExecResult#last_insert_id`; `ReturningRow` reads
+exactly one returned integer row. Assigned IDs use `None`. The generated ID is
+written and registered in the identity map only after successful statement
+execution.
 
 No nested transaction or savepoint API is provided in v1. Lower-level services
 compose transactionally by accepting the same manager argument.

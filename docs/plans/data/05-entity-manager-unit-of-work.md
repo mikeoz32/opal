@@ -53,6 +53,13 @@ Internal state stores:
 Database identity key is entity type plus dumped ID. Object scheduling uses
 `Reference#object_id`. Keep maps manager-local.
 
+Implementation types live under `LF::Data::Internal`: `EntityKey`,
+`TrackedEntity`, `TypedTrackedEntity(T)`, `EntityOperation`, and
+`OperationQueue`. `LF::Data::EntityState` remains visible because typed state
+errors expose it. The typed wrapper restores concrete `T` only when an
+operation executes; it stores the entity reference and lifecycle bookkeeping,
+not property snapshots or bind arrays.
+
 ## Task 2: Implement State Transitions Without SQL
 
 Write one failing example for every transition:
@@ -108,6 +115,12 @@ The queue preserves first scheduling order. It stores object references and
 operation kind, not snapshots of property values. SQL arguments are read from
 the entity at flush time.
 
+Use append-only nullable slots with a head cursor. Successful flush advances
+the cursor in O(1) per operation and clears the completed batch without
+repeated `Array#delete` shifts. Cancelling an unflushed New entity may scan the
+pending suffix because cancellation is a scheduling transition, not the bulk
+flush hot path.
+
 Rules:
 
 - INSERT followed by repeated persist remains one INSERT;
@@ -139,6 +152,11 @@ for `ReturningRow` so EntityManager does not encode a SQLite-only assumption.
 Apply generated ID only after the statement succeeds. Register database
 identity only after a valid ID exists. A duplicate assigned ID failure remains
 the original driver error and marks the manager failed.
+
+Statement timing and event construction are conditional on a non-empty
+listener dispatcher. With no listeners, CRUD execution calls the checked-out
+connection directly. Driver preparation and statement caching remain owned by
+`crystal-db`.
 
 All branches pass generated tuples directly:
 
