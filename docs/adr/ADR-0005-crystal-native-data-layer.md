@@ -163,6 +163,13 @@ The datasource delegates connection checkout, begin, commit, rollback, and
 prepared-statement caching to `crystal-db`. It does not retry transactions,
 change isolation, or introduce fiber-local transaction state in v1.
 
+The implementation holds an explicit `DB::Database#using_connection` scope and
+runs `DB::Connection#transaction` inside it. This lets `crystal-db` complete
+commit or rollback first, then closes the transaction-local `EntityManager`,
+and only then returns the connection to the pool. The transaction block is
+typed as `EntityManager` from the start; there is no intermediate public
+`TransactionManager` protocol that Plan 05 would need to replace.
+
 ## Entity Model
 
 A persistent entity is a reference type that explicitly includes the mapping

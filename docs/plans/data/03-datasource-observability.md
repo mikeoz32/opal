@@ -7,10 +7,11 @@
 instance-scoped observability on top of the dialect contract from Plan 02.
 
 **Architecture:** `DataSource` delegates pool and transaction mechanics to
-`crystal-db`. It creates a transaction-local manager through an internal
-factory seam; Plan 05 replaces the placeholder with `EntityManager` without
-changing the public transaction API. It stores only an abstract dialect
-reference and does not own SQL-plan or prepared-statement caches.
+`crystal-db`. It creates a transaction-local `EntityManager` through a
+protected factory seam. This plan installs only the manager lifecycle contract;
+Plan 05 adds persistence behavior to the same public type without changing the
+transaction block API. `DataSource` stores only an abstract dialect reference
+and does not own SQL-plan or prepared-statement caches.
 
 **Prerequisite:** Plans 01 and 02 are merged. No Application work is required.
 
@@ -82,23 +83,33 @@ Tests prove:
 - statement events can be emitted later by manager/query code through one
   internal datasource-owned dispatcher.
 
-## Task 3: Add The Internal Transaction Manager Seam
+## Task 3: Add The EntityManager Lifecycle Shell
 
 **Files**
 
-- Create: `src/opal/data/transaction_manager.cr`
-- Create: `spec/data/support/probe_transaction_manager.cr`
+- Create: `src/opal/data/entity_manager.cr`
+- Create: `spec/data/support/probe_entity_manager.cr`
 
-The temporary internal protocol exposes only:
+Install the public transaction-local type that Plan 05 will extend. At this
+stage it exposes only lifecycle behavior:
 
 ```crystal
-abstract def flush : Nil
-abstract def close : Nil
+class LF::Data::EntityManager
+  def flush : Nil
+  def close : Nil
+end
 ```
 
-DataSource receives an internal factory used by specs. Production construction
-uses a minimal no-op implementation until Plan 05. This protocol is not
-documented or exported as user API.
+The manager receives the checked-out `DB::Connection`, the abstract dialect
+reference, and the datasource-owned event dispatcher. `DataSource` exposes a
+protected factory method that specs can override with a probe subclass.
+Production construction uses the minimal no-op lifecycle implementation until
+Plan 05.
+
+Do not introduce a separate `TransactionManager` abstraction. If the
+transaction method yielded that protocol, Crystal would statically type the
+block parameter as `TransactionManager`, and adding persistence methods to
+`EntityManager` in Plan 05 would require changing the public API.
 
 ## Task 4: Implement DataSource Lifecycle
 
@@ -110,18 +121,23 @@ documented or exported as user API.
 Write one failing spec per behavior:
 
 1. borrowed database remains usable after datasource close;
-2. owned database rejects queries after close;
+2. owned database has its pooled connections closed and the datasource rejects
+   further transactions;
 3. repeated close is a no-op;
 4. transaction returns the exact block result;
-5. normal return calls manager flush then commits;
+5. normal return calls manager flush, commits, then closes the manager;
 6. block exception skips flush, rolls back, and propagates unchanged;
 7. flush exception rolls back and propagates unchanged;
-8. manager closes before connection returns to pool;
+8. manager closes after commit/rollback and before connection returns to pool;
 9. transaction after datasource close raises typed error;
 10. two fibers have different manager/connection lifetimes;
 11. no transaction leaks after either success or failure.
 
-Use `DB::Database#transaction`; do not manually emulate commit/rollback.
+Use `DB::Database#using_connection` and `DB::Connection#transaction`.
+`crystal-db` remains solely responsible for begin, commit, rollback, and
+connection release. The explicit connection scope is required because
+`DB::Database#transaction` returns the connection to the pool before
+`DataSource` can close the manager.
 
 ## Task 5: Verify Statement-Preparation Ownership
 
