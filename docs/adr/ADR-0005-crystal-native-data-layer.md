@@ -225,6 +225,10 @@ state. This follows the separation used by Crystal serialization modules:
 domain construction validates new objects, while hydration restores persisted
 objects.
 
+Ignored fields must be nilable or declare an ivar default. Constructor-free
+hydration initializes them to nil or that default, preventing partially
+initialized entity instances.
+
 ## Compile-Time Generation
 
 Including `LF::Data::Entity` generates:
@@ -234,7 +238,7 @@ Including `LF::Data::Entity` generates:
 - direct bind tuples for INSERT, UPDATE, DELETE, and find-by-ID;
 - a result-set hydrator;
 - internal generated-ID and version writers;
-- typed field marker types and descriptors under `Entity::Fields`.
+- typed field descriptors exposed through `Entity::Fields`.
 
 Compilation fails with an actionable entity and field name when:
 
@@ -267,8 +271,9 @@ end
 ```
 
 Converters are stateless types referenced by metadata. There is no runtime
-converter registry. Nil handling belongs to generated mapping code; the
-converter receives only non-nil values.
+converter registry. Generated dump code bypasses converters for nil property
+values. Because `DB::ResultSet` is forward-only, load converters consume their
+column directly and own nullable stored-value handling.
 
 ## EntityManager and Entity States
 
@@ -358,7 +363,7 @@ database and in-memory versions.
 
 ## Typed Query Model
 
-Entity macros generate typed field marker types and descriptors:
+Entity macros generate typed field descriptors:
 
 ```crystal
 Todo::Fields.completed.eq(false)
@@ -391,12 +396,17 @@ above has a shape equivalent to:
 ```crystal
 SelectQuery(
   Todo,
-  And(Eq(Todo::Fields::Completed), Like(Todo::Fields::Title)),
-  OrderBy(Todo::Fields::Id, Desc),
+  And(Eq(typeof(Todo::Fields.completed)), Like(typeof(Todo::Fields.title))),
+  OrderBy(typeof(Todo::Fields.id), Desc),
   WithLimit,
   WithOffset
 )
 ```
+
+Each descriptor type is
+`Field(EntityType, PropertyType, declaration_index)`. The numeric generic
+argument distinguishes fields at compile time and resolves the original ivar
+annotation without a runtime field-name or metadata registry.
 
 The expression structs store only runtime values. Data core's shared static
 plan compiler is installed into each concrete dialect and specializes for the

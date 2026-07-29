@@ -26,5 +26,25 @@ module LF
         super("EntityManager has failed: operation=#{operation}", cause)
       end
     end
+
+    class MappingError < Error
+      getter entity : String
+      getter property : String?
+      getter column : String?
+
+      def initialize(
+        @entity : String,
+        @property : String?,
+        @column : String?,
+        cause : Exception? = nil,
+      )
+        context = String.build do |message|
+          message << "Cannot map " << entity
+          message << '#' << property if property
+          message << " from column " << column.inspect if column
+        end
+        super(context, cause)
+      end
+    end
   end
 end
