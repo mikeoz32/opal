@@ -268,8 +268,9 @@ values or have explicit parity specs against static generation.
 Test the shared compiler with a test-only policy, then test exact SQLite
 SELECT-by-ID, INSERT, UPDATE, DELETE, versioned UPDATE/DELETE, reserved-word
 identifiers, quote-containing identifiers, and empty writable column lists.
-Inspect macro expansion for at least one fixture and assert that execution code
-contains a final SQL literal rather than runtime SQL assembly.
+Inspect emitted compiler output for at least one fixture, using macro expansion
+or single-module LLVM IR, and assert that execution code contains a final SQL
+literal rather than runtime SQL assembly.
 
 The compile fixture requires `opal/data/dialects/sqlite` without `sqlite3` and
 must pass `--no-codegen`.

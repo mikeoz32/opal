@@ -1,0 +1,82 @@
+require "../spec_helper"
+require "../../../src/opal/data/dialects/sqlite"
+
+module ReturningProbeSpec
+  @[LF::Data::Table("probe_items")]
+  class Item
+    @[LF::Data::Id(generated: true)]
+    getter id : Int64?
+
+    getter name : String
+
+    @[LF::Data::Version]
+    getter version : Int64
+
+    def initialize(@id, @name, @version)
+    end
+  end
+
+  class Dialect < LF::Data::Dialect
+    module StaticSQLPolicy
+      IDENTIFIER_OPEN            = %(")
+      IDENTIFIER_CLOSE           = %(")
+      IDENTIFIER_ESCAPE_FROM     = %(")
+      IDENTIFIER_ESCAPE_TO       = %("")
+      PLACEHOLDER_STYLE          = :numbered
+      PLACEHOLDER_PREFIX         = "$"
+      PLACEHOLDER_FIRST_POSITION = 1
+      EMPTY_INSERT_STYLE         = :default_values
+      GENERATED_KEY_SOURCE       = LF::Data::SQL::GeneratedKeySource::ReturningRow
+    end
+
+    STATIC_SQL_POLICY = StaticSQLPolicy
+    include LF::Data::SQL::StaticPlanCompiler
+
+    def name : String
+      "returning-probe"
+    end
+
+    def quote_identifier(identifier : String) : String
+      %("#{identifier.gsub("\"", "\"\"")}")
+    end
+
+    def placeholder(position : Int32) : String
+      "$#{position}"
+    end
+
+    def supports?(capability : LF::Data::DialectCapability) : Bool
+      capability.returning_row?
+    end
+  end
+end
+
+describe "returning dialect probe" do
+  it "generates numbered placeholders and a returned generated key" do
+    dialect : LF::Data::Dialect = ReturningProbeSpec::Dialect.new
+
+    dialect.find_plan(ReturningProbeSpec::Item).sql.should eq(
+      %(SELECT "id", "name", "version" FROM "probe_items" WHERE "id" = $1)
+    )
+    dialect.insert_plan(ReturningProbeSpec::Item).should eq(
+      LF::Data::SQL::InsertPlan.new(
+        %(INSERT INTO "probe_items" ("name", "version") VALUES ($1, $2) RETURNING "id"),
+        LF::Data::SQL::GeneratedKeySource::ReturningRow,
+        "id"
+      )
+    )
+    dialect.update_plan(ReturningProbeSpec::Item).sql.should eq(
+      %(UPDATE "probe_items" SET "name" = $1, "version" = "version" + 1 WHERE "id" = $2 AND "version" = $3)
+    )
+    dialect.delete_plan(ReturningProbeSpec::Item).sql.should eq(
+      %(DELETE FROM "probe_items" WHERE "id" = $1 AND "version" = $2)
+    )
+  end
+
+  it "specializes the same entity differently for SQLite" do
+    returning_sql = ReturningProbeSpec::Dialect.new.insert_plan(ReturningProbeSpec::Item).sql
+    sqlite_sql = LF::Data::Dialects::SQLite.new.insert_plan(ReturningProbeSpec::Item).sql
+
+    returning_sql.should_not eq(sqlite_sql)
+    sqlite_sql.should eq(%(INSERT INTO "probe_items" ("name", "version") VALUES (?, ?)))
+  end
+end

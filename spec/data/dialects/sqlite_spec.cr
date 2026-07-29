@@ -75,7 +75,7 @@ describe "SQLite dialect" do
       )
     )
     dialect.update_plan(SQLiteDialectTodo).sql.should eq(
-      %(UPDATE "todos" SET "summary" = ?, "completed" = ?, "version" = ? WHERE "id" = ? AND "version" = ?)
+      %(UPDATE "todos" SET "summary" = ?, "completed" = ?, "version" = "version" + 1 WHERE "id" = ? AND "version" = ?)
     )
     dialect.delete_plan(SQLiteDialectTodo).sql.should eq(
       %(DELETE FROM "todos" WHERE "id" = ? AND "version" = ?)
