@@ -2,6 +2,7 @@ require "db"
 require "./data/mapping_annotations"
 require "./data/sql/statement_plan"
 require "./data/sql/insert_plan"
+require "./data/sql/static_plan_compiler"
 require "./data/dialect_capability"
 require "./data/dialect"
 

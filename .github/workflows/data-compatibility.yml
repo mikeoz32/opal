@@ -1,0 +1,39 @@
+name: Data compatibility
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  crystal-1-18:
+    name: Crystal 1.18.2 static SQL
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Crystal
+        uses: crystal-lang/install-crystal@v1
+        with:
+          crystal: 1.18.2
+
+      - name: Install SQLite development library
+        run: sudo apt-get update && sudo apt-get install --yes libsqlite3-dev
+
+      - name: Install dependencies
+        run: shards install
+
+      - name: Compile generic dialect dispatch
+        run: crystal build --no-codegen spec/fixtures/data/dialect_virtual_generic_dispatch.cr
+
+      - name: Run static SQL specs
+        run: >-
+          crystal spec
+          spec/data/sql/static_plan_compiler_spec.cr
+          spec/data/dialects/sqlite_spec.cr
+          spec/data/dialects/returning_probe_spec.cr
+          spec/data/dialects/specialization_spec.cr
+          --no-color
