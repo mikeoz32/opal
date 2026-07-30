@@ -78,6 +78,24 @@ module LF
           {% end %}
 
           {% verbatim do %}
+            def update_query_plan(entity : T.class, shape : S.class) : LF::Data::SQL::StatementPlan forall T, S
+              __lf_compile_bulk_plan(
+                T,
+                S,
+                typeof(S.__lf_predicate_tokens),
+                LF::Data::Query::BulkUpdate
+              )
+            end
+
+            def delete_query_plan(entity : T.class, shape : S.class) : LF::Data::SQL::StatementPlan forall T, S
+              __lf_compile_bulk_plan(
+                T,
+                S,
+                typeof(S.__lf_predicate_tokens),
+                LF::Data::Query::BulkDelete
+              )
+            end
+
             def select_plan(entity : T.class, shape : S.class) : LF::Data::SQL::StatementPlan forall T, S
               __lf_compile_select_plan(
                 T,
@@ -707,6 +725,164 @@ module LF
                       {% sql += " " + policy.constant("OFFSET_ONLY_PREFIX") + offset_placeholder %}
                     {% else %}
                       {% sql += " OFFSET " + offset_placeholder %}
+                    {% end %}
+                  {% end %}
+                {% end %}
+
+                LF::Data::SQL::StatementPlan.new({{sql}})
+              {% end %}
+            end
+
+            private def __lf_compile_bulk_plan(
+              entity : T.class,
+              shape : S.class,
+              predicate_tokens : P.class,
+              operation : M.class,
+            ) : LF::Data::SQL::StatementPlan forall T, S, P, M
+              {% begin %}
+                {% policy_owner = @type %}
+                {% unless policy_owner.has_constant?("STATIC_SQL_POLICY") %}
+                  {% policy_owner = @type.ancestors.find(&.has_constant?("STATIC_SQL_POLICY")) %}
+                {% end %}
+                {% raise "#{@type} has no inherited STATIC_SQL_POLICY" unless policy_owner %}
+                {% policy_reference = policy_owner.constant("STATIC_SQL_POLICY") %}
+                {% if policy_reference.is_a?(Path) &&
+                        policy_reference.names.size == 1 &&
+                        policy_owner.has_constant?(policy_reference.stringify) %}
+                  {% policy = policy_owner.constant(policy_reference.stringify).resolve %}
+                {% else %}
+                  {% policy = policy_reference.resolve %}
+                {% end %}
+                {% identifier_open = policy.constant("IDENTIFIER_OPEN") %}
+                {% identifier_close = policy.constant("IDENTIFIER_CLOSE") %}
+                {% identifier_escape_from = policy.constant("IDENTIFIER_ESCAPE_FROM") %}
+                {% identifier_escape_to = policy.constant("IDENTIFIER_ESCAPE_TO") %}
+                {% placeholder_style = policy.constant("PLACEHOLDER_STYLE") %}
+
+                {% if placeholder_style == :anonymous %}
+                  {% placeholder_token = policy.constant("PLACEHOLDER_TOKEN") %}
+                {% else %}
+                  {% placeholder_prefix = policy.constant("PLACEHOLDER_PREFIX") %}
+                  {% first_position = policy.constant("PLACEHOLDER_FIRST_POSITION") %}
+                {% end %}
+                {% placeholder_position = 0 %}
+
+                {% if table_annotation = T.annotation(LF::Data::Table) %}
+                  {% if table_annotation[:name] %}
+                    {% table_name = table_annotation[:name] %}
+                  {% elsif table_annotation.args.size > 0 %}
+                    {% table_name = table_annotation.args.first %}
+                  {% else %}
+                    {% table_name = T.name.stringify.split("::").last.gsub(/([A-Z]+)([A-Z][a-z])/, "\\1_\\2").gsub(/([a-z0-9])([A-Z])/, "\\1_\\2").downcase %}
+                  {% end %}
+                {% else %}
+                  {% table_name = T.name.stringify.split("::").last.gsub(/([A-Z]+)([A-Z][a-z])/, "\\1_\\2").gsub(/([a-z0-9])([A-Z])/, "\\1_\\2").downcase %}
+                {% end %}
+                {% quoted_table = identifier_open + table_name.split(identifier_escape_from).join(identifier_escape_to) + identifier_close %}
+
+                {% if M == LF::Data::Query::BulkUpdate %}
+                  {% assignment_fields = S.type_vars[1] %}
+                  {% raise "#{T} bulk UPDATE requires at least one SET clause" if assignment_fields.type_vars.empty? %}
+                  {% assignments = [] of String %}
+                  {% for field in assignment_fields.type_vars %}
+                    {% field_entity = field.type_vars[0] %}
+                    {% unless field_entity == T %}
+                      {% raise "#{field_entity} field belongs to #{field_entity}, not update entity #{T}" %}
+                    {% end %}
+                    {% field_index = field.type_vars[2] %}
+                    {% ivar = T.instance_vars[field_index] %}
+                    {% column_annotation = ivar.annotation(LF::Data::Column) %}
+                    {% column_name = (column_annotation && column_annotation[:name]) || ivar.name.stringify %}
+                    {% quoted_column = identifier_open + column_name.split(identifier_escape_from).join(identifier_escape_to) + identifier_close %}
+                    {% if placeholder_style == :anonymous %}
+                      {% placeholder = placeholder_token %}
+                    {% else %}
+                      {% placeholder = placeholder_prefix + (first_position + placeholder_position).stringify %}
+                    {% end %}
+                    {% placeholder_position += 1 %}
+                    {% assignments << quoted_column + " = " + placeholder %}
+                  {% end %}
+                  {% sql = "UPDATE " + quoted_table + " SET " + assignments.join(", ") %}
+                {% else %}
+                  {% sql = "DELETE FROM " + quoted_table %}
+                {% end %}
+
+                {% unless P.type_vars.empty? %}
+                  {% sql += " WHERE " %}
+                  {% for token in P.type_vars %}
+                    {% token_name = token.name.stringify.split("(").first.split("::").last %}
+                    {% if token_name == "OpenParen" %}
+                      {% sql += "(" %}
+                    {% elsif token_name == "CloseParen" %}
+                      {% sql += ")" %}
+                    {% elsif token_name == "And" %}
+                      {% sql += " AND " %}
+                    {% elsif token_name == "Or" %}
+                      {% sql += " OR " %}
+                    {% elsif token_name == "Not" %}
+                      {% sql += "NOT " %}
+                    {% elsif token_name == "Leaf" %}
+                      {% expression = token.type_vars[0] %}
+                      {% expression_name = expression.name.stringify.split("(").first.split("::").last %}
+                      {% field = expression.type_vars[0] %}
+                      {% field_entity = field.type_vars[0] %}
+                      {% unless field_entity == T %}
+                        {% raise "#{field_entity} field belongs to #{field_entity}, not bulk entity #{T}" %}
+                      {% end %}
+                      {% field_index = field.type_vars[2] %}
+                      {% ivar = T.instance_vars[field_index] %}
+                      {% column_annotation = ivar.annotation(LF::Data::Column) %}
+                      {% column_name = (column_annotation && column_annotation[:name]) || ivar.name.stringify %}
+                      {% quoted_column = identifier_open + column_name.split(identifier_escape_from).join(identifier_escape_to) + identifier_close %}
+
+                      {% if expression_name == "IsNil" %}
+                        {% sql += quoted_column + " IS NULL" %}
+                      {% elsif expression_name == "IsNotNil" %}
+                        {% sql += quoted_column + " IS NOT NULL" %}
+                      {% elsif expression_name == "In" %}
+                        {% value_count = expression.type_vars[1].type_vars.size %}
+                        {% if value_count == 0 %}
+                          {% sql += "0 = 1" %}
+                        {% else %}
+                          {% placeholders = [] of String %}
+                          {% for _ in 0...value_count %}
+                            {% if placeholder_style == :anonymous %}
+                              {% placeholders << placeholder_token %}
+                            {% else %}
+                              {% placeholders << placeholder_prefix + (first_position + placeholder_position).stringify %}
+                            {% end %}
+                            {% placeholder_position += 1 %}
+                          {% end %}
+                          {% sql += quoted_column + " IN (" + placeholders.join(", ") + ")" %}
+                        {% end %}
+                      {% else %}
+                        {% operator = if expression_name == "Eq"
+                                        "="
+                                      elsif expression_name == "Ne"
+                                        "<>"
+                                      elsif expression_name == "Lt"
+                                        "<"
+                                      elsif expression_name == "Lte"
+                                        "<="
+                                      elsif expression_name == "Gt"
+                                        ">"
+                                      elsif expression_name == "Gte"
+                                        ">="
+                                      elsif expression_name == "Like"
+                                        "LIKE"
+                                      else
+                                        raise "Unsupported static bulk predicate #{expression}"
+                                      end %}
+                        {% if placeholder_style == :anonymous %}
+                          {% placeholder = placeholder_token %}
+                        {% else %}
+                          {% placeholder = placeholder_prefix + (first_position + placeholder_position).stringify %}
+                        {% end %}
+                        {% placeholder_position += 1 %}
+                        {% sql += quoted_column + " " + operator + " " + placeholder %}
+                      {% end %}
+                    {% else %}
+                      {% raise "Unsupported static bulk predicate token #{token}" %}
                     {% end %}
                   {% end %}
                 {% end %}
