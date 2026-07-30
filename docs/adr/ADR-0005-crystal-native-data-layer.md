@@ -442,6 +442,13 @@ placeholders. Query execution passes the generated SQL and tuple to
 `DB::Connection#query` or `#exec`; `crystal-db` owns preparation and
 per-connection prepared-statement caching.
 
+Expression and ordering shapes expose class-level typed tuples of empty SQL
+token structs. `typeof` supplies the flattened token types to the static
+compiler; no expression instance or query value is passed to SQL generation.
+This avoids recursive runtime rendering while preserving explicit grouping and
+stable depth-first bind order. Dialect subclasses inherit the nearest static
+SQL policy and may override it with their own nested policy constant.
+
 A runtime branch may produce a union of query-shape types. Crystal compiles one
 SQL specialization for each union member. Code that builds an arbitrary number
 of predicates in a loop must opt into `EntityManager#dynamic_query(T)`.

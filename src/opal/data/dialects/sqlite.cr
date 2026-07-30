@@ -13,6 +13,7 @@ module LF
           PLACEHOLDER_TOKEN      = "?"
           EMPTY_INSERT_STYLE     = :default_values
           GENERATED_KEY_SOURCE   = SQL::GeneratedKeySource::LastInsertId
+          OFFSET_ONLY_PREFIX     = "LIMIT -1 OFFSET "
         end
 
         STATIC_SQL_POLICY = StaticSQLPolicy

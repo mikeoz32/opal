@@ -52,4 +52,24 @@ describe LF::Data::Query::Field do
   it "does not generate descriptors for ignored fields" do
     FieldEntity::Fields.responds_to?(:transient).should be_false
   end
+
+  {
+    {"query_wrong_value.cr", "PropertyType"},
+    {"query_like_non_string.cr", "LIKE"},
+    {"query_nil_non_nil.cr", "nil predicate"},
+    {"query_order_bool.cr", "not orderable"},
+    {"query_static_array_in.cr", "expected argument"},
+    {"query_cross_entity_predicate.cr", "belongs to"},
+    {"query_cross_entity_order.cr", "belongs to"},
+  }.each do |fixture_case|
+    fixture_name, message = fixture_case
+
+    it "rejects #{fixture_name}" do
+      fixture = File.expand_path("../../fixtures/data/#{fixture_name}", __DIR__)
+      result = LF::DataSpecSupport.compile_fixture(fixture)
+
+      result[:status].success?.should be_false
+      result[:error].should contain(message)
+    end
+  end
 end

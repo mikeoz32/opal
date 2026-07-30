@@ -34,6 +34,10 @@ class DialectContractProbe < LF::Data::Dialect
     LF::Data::SQL::StatementPlan.new("delete")
   end
 
+  def select_plan(entity : T.class, shape : S.class) : LF::Data::SQL::StatementPlan forall T, S
+    LF::Data::SQL::StatementPlan.new("select")
+  end
+
   def supports?(capability : LF::Data::DialectCapability) : Bool
     capability == LF::Data::DialectCapability::ReturningRow
   end
@@ -47,6 +51,7 @@ describe "Data dialect contract" do
     dialect.insert_plan(String).generated_key_source.should eq(LF::Data::SQL::GeneratedKeySource::None)
     dialect.update_plan(Bool).sql.should eq("update")
     dialect.delete_plan(Float64).sql.should eq("delete")
+    dialect.select_plan(Int64, Tuple(Int32)).sql.should eq("select")
   end
 
   it "keeps driver-neutral naming and placeholders in the base contract" do
