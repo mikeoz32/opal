@@ -4,6 +4,8 @@ require "../../../src/opal/data/dialects/sqlite"
 module ReturningProbeSpec
   @[LF::Data::Table("probe_items")]
   class Item
+    include LF::Data::Entity
+
     @[LF::Data::Id(generated: true)]
     getter id : Int64?
 
@@ -78,5 +80,29 @@ describe "returning dialect probe" do
 
     returning_sql.should_not eq(sqlite_sql)
     sqlite_sql.should eq(%(INSERT INTO "probe_items" ("name", "version") VALUES (?, ?)))
+  end
+
+  it "numbers static SELECT predicates and pagination in bind order" do
+    dialect : LF::Data::Dialect = ReturningProbeSpec::Dialect.new
+    fields = ReturningProbeSpec::Item::Fields
+    predicate = fields.name.eq("opal").and(fields.version.gte(2_i64))
+
+    sql = dialect.select_plan(
+      ReturningProbeSpec::Item,
+      LF::Data::Query::Rows(
+        LF::Data::Query::SelectQuery(
+          ReturningProbeSpec::Item,
+          typeof(predicate),
+          LF::Data::Query::NoOrdering,
+          LF::Data::Query::WithLimit,
+          LF::Data::Query::WithOffset,
+        ),
+      )
+    ).sql
+
+    sql.should eq(
+      %(SELECT "id", "name", "version" FROM "probe_items" ) +
+      %(WHERE ("name" = $1) AND ("version" >= $2) LIMIT $3 OFFSET $4)
+    )
   end
 end

@@ -78,6 +78,94 @@ module LF
         def dump(value : PropertyType)
           self.class.dump(value)
         end
+
+        def eq(value : PropertyType)
+          dumped = dump(value)
+          Eq(typeof(self), typeof(dumped)).new(dumped)
+        end
+
+        def ne(value : PropertyType)
+          dumped = dump(value)
+          Ne(typeof(self), typeof(dumped)).new(dumped)
+        end
+
+        def lt(value : PropertyType)
+          ensure_ordered
+          dumped = dump(value)
+          Lt(typeof(self), typeof(dumped)).new(dumped)
+        end
+
+        def lte(value : PropertyType)
+          ensure_ordered
+          dumped = dump(value)
+          Lte(typeof(self), typeof(dumped)).new(dumped)
+        end
+
+        def gt(value : PropertyType)
+          ensure_ordered
+          dumped = dump(value)
+          Gt(typeof(self), typeof(dumped)).new(dumped)
+        end
+
+        def gte(value : PropertyType)
+          ensure_ordered
+          dumped = dump(value)
+          Gte(typeof(self), typeof(dumped)).new(dumped)
+        end
+
+        def in(values : Tuple(*ValueTypes)) forall ValueTypes
+          {% begin %}
+            dumped = Tuple.new(
+              {% for index in 0...ValueTypes.size %}
+                dump(values[{{index}}]),
+              {% end %}
+            )
+            In(typeof(self), typeof(dumped)).new(dumped)
+          {% end %}
+        end
+
+        def is_nil
+          {% unless PropertyType.resolve.nilable? %}
+            {% raise "#{EntityType} field #{EntityType.instance_vars[Index].name} does not support a nil predicate" %}
+          {% end %}
+          IsNil(typeof(self)).new
+        end
+
+        def is_not_nil
+          {% unless PropertyType.resolve.nilable? %}
+            {% raise "#{EntityType} field #{EntityType.instance_vars[Index].name} does not support a nil predicate" %}
+          {% end %}
+          IsNotNil(typeof(self)).new
+        end
+
+        def like(value : String)
+          {% begin %}
+            {% non_nil_types = PropertyType.resolve.union_types.reject { |type| type == Nil } %}
+            {% unless non_nil_types.size == 1 && non_nil_types.first.stringify == "String" %}
+              {% raise "#{EntityType} field #{EntityType.instance_vars[Index].name} does not support LIKE" %}
+            {% end %}
+            dumped = dump(value)
+            Like(typeof(self), typeof(dumped)).new(dumped)
+          {% end %}
+        end
+
+        def asc
+          Ordering(typeof(self), Asc).new
+        end
+
+        def desc
+          Ordering(typeof(self), Desc).new
+        end
+
+        private def ensure_ordered : Nil
+          {% begin %}
+            {% non_nil_types = PropertyType.resolve.union_types.reject { |type| type == Nil } %}
+            {% ordered = ["Int32", "Int64", "Float32", "Float64", "String", "Time"] %}
+            {% unless non_nil_types.size == 1 && ordered.includes?(non_nil_types.first.stringify) %}
+              {% raise "#{EntityType} field #{EntityType.instance_vars[Index].name} is not orderable" %}
+            {% end %}
+          {% end %}
+        end
       end
     end
   end

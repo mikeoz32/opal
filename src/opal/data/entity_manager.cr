@@ -108,6 +108,54 @@ module LF
         end
       end
 
+      def query(entity : T.class) forall T
+        ensure_available(:query)
+
+        Query::SelectQuery(
+          T,
+          Query::NoPredicate,
+          Query::NoOrdering,
+          Query::NoLimit,
+          Query::NoOffset,
+        ).new(self, Query::NoPredicate.new)
+      end
+
+      # Framework internal: invoked by SelectQuery(T, ...).
+      def __lf_select_to_a(
+        query : Query::SelectQuery(T, P, O, L, F),
+      ) : Array(T) forall T, P, O, L, F
+        ensure_available(:query)
+        plan = @dialect.select_plan(T, Query::Rows(typeof(query)))
+        execute_entity_select(T, plan.sql, query.__lf_rows_args)
+      end
+
+      # Framework internal: invoked by SelectQuery(T, ...).
+      def __lf_select_first(
+        query : Query::SelectQuery(T, P, O, L, F),
+      ) : T? forall T, P, O, L, F
+        ensure_available(:query)
+        plan = @dialect.select_plan(T, Query::First(typeof(query)))
+        execute_entity_select_first(T, plan.sql, query.__lf_first_args)
+      end
+
+      # Framework internal: invoked by SelectQuery(T, ...).
+      def __lf_select_count(
+        query : Query::SelectQuery(T, P, O, L, F),
+      ) : Int64 forall T, P, O, L, F
+        ensure_available(:query)
+        plan = @dialect.select_plan(T, Query::Count(typeof(query)))
+        execute_select_count(T.name, plan.sql, query.__lf_predicate_args)
+      end
+
+      # Framework internal: invoked by SelectQuery(T, ...).
+      def __lf_select_exists(
+        query : Query::SelectQuery(T, P, O, L, F),
+      ) : Bool forall T, P, O, L, F
+        ensure_available(:query)
+        plan = @dialect.select_plan(T, Query::Exists(typeof(query)))
+        execute_select_exists(T.name, plan.sql, query.__lf_predicate_args)
+      end
+
       def flush : Nil
         ensure_available(:flush)
 
@@ -369,6 +417,163 @@ module LF
         end
 
         {generated_id || raise(MappingError.new(entity_name, nil, nil)), rows}
+      end
+
+      private def execute_entity_select(
+        entity : T.class,
+        sql : String,
+        arguments : Tuple,
+      ) : Array(T) forall T
+        if @dispatcher.empty?
+          entities = [] of T
+          @connection.query(sql, *arguments) do |result|
+            while result.move_next
+              entities << managed_entity(T.__lf_hydrate(result))
+            end
+          end
+          return entities
+        end
+
+        started_at = Time.instant
+        rows = 0_i64
+        statement_error = nil.as(Exception?)
+
+        begin
+          entities = [] of T
+          @connection.query(sql, *arguments) do |result|
+            while result.move_next
+              rows += 1
+              entities << managed_entity(T.__lf_hydrate(result))
+            end
+          end
+          entities
+        rescue error
+          statement_error = error
+          raise error
+        ensure
+          dispatch_select(T.name, sql, started_at, rows, statement_error)
+        end
+      end
+
+      private def execute_entity_select_first(
+        entity : T.class,
+        sql : String,
+        arguments : Tuple,
+      ) : T? forall T
+        if @dispatcher.empty?
+          found = nil.as(T?)
+          @connection.query(sql, *arguments) do |result|
+            found = managed_entity(T.__lf_hydrate(result)) if result.move_next
+          end
+          return found
+        end
+
+        started_at = Time.instant
+        rows = 0_i64
+        statement_error = nil.as(Exception?)
+
+        begin
+          found = nil.as(T?)
+          @connection.query(sql, *arguments) do |result|
+            if result.move_next
+              rows = 1_i64
+              found = managed_entity(T.__lf_hydrate(result))
+            end
+          end
+          found
+        rescue error
+          statement_error = error
+          raise error
+        ensure
+          dispatch_select(T.name, sql, started_at, rows, statement_error)
+        end
+      end
+
+      private def execute_select_count(
+        entity_name : String,
+        sql : String,
+        arguments : Tuple,
+      ) : Int64
+        if @dispatcher.empty?
+          return @connection.query_one(sql, *arguments) { |result| result.read(Int64) }
+        end
+
+        started_at = Time.instant
+        rows = 0_i64
+        statement_error = nil.as(Exception?)
+
+        begin
+          count = @connection.query_one(sql, *arguments) do |result|
+            rows = 1_i64
+            result.read(Int64)
+          end
+          count
+        rescue error
+          statement_error = error
+          raise error
+        ensure
+          dispatch_select(entity_name, sql, started_at, rows, statement_error)
+        end
+      end
+
+      private def execute_select_exists(
+        entity_name : String,
+        sql : String,
+        arguments : Tuple,
+      ) : Bool
+        if @dispatcher.empty?
+          exists = false
+          @connection.query(sql, *arguments) { |result| exists = result.move_next }
+          return exists
+        end
+
+        started_at = Time.instant
+        rows = 0_i64
+        statement_error = nil.as(Exception?)
+
+        begin
+          exists = false
+          @connection.query(sql, *arguments) do |result|
+            exists = result.move_next
+            rows = 1_i64 if exists
+          end
+          exists
+        rescue error
+          statement_error = error
+          raise error
+        ensure
+          dispatch_select(entity_name, sql, started_at, rows, statement_error)
+        end
+      end
+
+      private def managed_entity(entity : T) : T forall T
+        database_id = entity.__lf_delete_args[0].as(DB::Any)
+        key = Internal::EntityKey.new(T.name, database_id)
+        if entry = @entries_by_identity[key]?
+          return entry.as(Internal::TypedTrackedEntity(T)).entity
+        end
+
+        register_managed(entity, database_id)
+        entity
+      end
+
+      private def dispatch_select(
+        entity_name : String,
+        sql : String,
+        started_at : Time::Instant,
+        rows : Int64,
+        error : Exception?,
+      ) : Nil
+        dispatch_statement(
+          StatementCompletionEvent.new(
+            StatementOperation::Select,
+            entity_name,
+            sql,
+            Time.instant - started_at,
+            rows,
+            error
+          )
+        )
       end
 
       private def ensure_available(operation : Symbol) : Nil

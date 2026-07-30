@@ -78,9 +78,30 @@ module LF
           {% end %}
 
           {% verbatim do %}
+            def select_plan(entity : T.class, shape : S.class) : LF::Data::SQL::StatementPlan forall T, S
+              __lf_compile_select_plan(
+                T,
+                S,
+                typeof(S.__lf_predicate_tokens),
+                typeof(S.__lf_order_tokens)
+              )
+            end
+
             def find_plan(entity : T.class) : LF::Data::SQL::StatementPlan forall T
               {% begin %}
-                {% policy = @type.constant("STATIC_SQL_POLICY").resolve %}
+                {% policy_owner = @type %}
+                {% unless policy_owner.has_constant?("STATIC_SQL_POLICY") %}
+                  {% policy_owner = @type.ancestors.find(&.has_constant?("STATIC_SQL_POLICY")) %}
+                {% end %}
+                {% raise "#{@type} has no inherited STATIC_SQL_POLICY" unless policy_owner %}
+                {% policy_reference = policy_owner.constant("STATIC_SQL_POLICY") %}
+                {% if policy_reference.is_a?(Path) &&
+                        policy_reference.names.size == 1 &&
+                        policy_owner.has_constant?(policy_reference.stringify) %}
+                  {% policy = policy_owner.constant(policy_reference.stringify).resolve %}
+                {% else %}
+                  {% policy = policy_reference.resolve %}
+                {% end %}
                 {% identifier_open = policy.constant("IDENTIFIER_OPEN") %}
                 {% identifier_close = policy.constant("IDENTIFIER_CLOSE") %}
                 {% identifier_escape_from = policy.constant("IDENTIFIER_ESCAPE_FROM") %}
@@ -146,7 +167,19 @@ module LF
 
             def insert_plan(entity : T.class) : LF::Data::SQL::InsertPlan forall T
               {% begin %}
-                {% policy = @type.constant("STATIC_SQL_POLICY").resolve %}
+                {% policy_owner = @type %}
+                {% unless policy_owner.has_constant?("STATIC_SQL_POLICY") %}
+                  {% policy_owner = @type.ancestors.find(&.has_constant?("STATIC_SQL_POLICY")) %}
+                {% end %}
+                {% raise "#{@type} has no inherited STATIC_SQL_POLICY" unless policy_owner %}
+                {% policy_reference = policy_owner.constant("STATIC_SQL_POLICY") %}
+                {% if policy_reference.is_a?(Path) &&
+                        policy_reference.names.size == 1 &&
+                        policy_owner.has_constant?(policy_reference.stringify) %}
+                  {% policy = policy_owner.constant(policy_reference.stringify).resolve %}
+                {% else %}
+                  {% policy = policy_reference.resolve %}
+                {% end %}
                 {% identifier_open = policy.constant("IDENTIFIER_OPEN") %}
                 {% identifier_close = policy.constant("IDENTIFIER_CLOSE") %}
                 {% identifier_escape_from = policy.constant("IDENTIFIER_ESCAPE_FROM") %}
@@ -267,7 +300,19 @@ module LF
 
             def update_plan(entity : T.class) : LF::Data::SQL::StatementPlan forall T
               {% begin %}
-                {% policy = @type.constant("STATIC_SQL_POLICY").resolve %}
+                {% policy_owner = @type %}
+                {% unless policy_owner.has_constant?("STATIC_SQL_POLICY") %}
+                  {% policy_owner = @type.ancestors.find(&.has_constant?("STATIC_SQL_POLICY")) %}
+                {% end %}
+                {% raise "#{@type} has no inherited STATIC_SQL_POLICY" unless policy_owner %}
+                {% policy_reference = policy_owner.constant("STATIC_SQL_POLICY") %}
+                {% if policy_reference.is_a?(Path) &&
+                        policy_reference.names.size == 1 &&
+                        policy_owner.has_constant?(policy_reference.stringify) %}
+                  {% policy = policy_owner.constant(policy_reference.stringify).resolve %}
+                {% else %}
+                  {% policy = policy_reference.resolve %}
+                {% end %}
                 {% identifier_open = policy.constant("IDENTIFIER_OPEN") %}
                 {% identifier_close = policy.constant("IDENTIFIER_CLOSE") %}
                 {% identifier_escape_from = policy.constant("IDENTIFIER_ESCAPE_FROM") %}
@@ -377,7 +422,19 @@ module LF
 
             def delete_plan(entity : T.class) : LF::Data::SQL::StatementPlan forall T
               {% begin %}
-                {% policy = @type.constant("STATIC_SQL_POLICY").resolve %}
+                {% policy_owner = @type %}
+                {% unless policy_owner.has_constant?("STATIC_SQL_POLICY") %}
+                  {% policy_owner = @type.ancestors.find(&.has_constant?("STATIC_SQL_POLICY")) %}
+                {% end %}
+                {% raise "#{@type} has no inherited STATIC_SQL_POLICY" unless policy_owner %}
+                {% policy_reference = policy_owner.constant("STATIC_SQL_POLICY") %}
+                {% if policy_reference.is_a?(Path) &&
+                        policy_reference.names.size == 1 &&
+                        policy_owner.has_constant?(policy_reference.stringify) %}
+                  {% policy = policy_owner.constant(policy_reference.stringify).resolve %}
+                {% else %}
+                  {% policy = policy_reference.resolve %}
+                {% end %}
                 {% identifier_open = policy.constant("IDENTIFIER_OPEN") %}
                 {% identifier_close = policy.constant("IDENTIFIER_CLOSE") %}
                 {% identifier_escape_from = policy.constant("IDENTIFIER_ESCAPE_FROM") %}
@@ -441,6 +498,219 @@ module LF
                   {% quoted_version = identifier_open + version_column.split(identifier_escape_from).join(identifier_escape_to) + identifier_close %}
                   {% sql += " AND " + quoted_version + " = " + version_placeholder %}
                 {% end %}
+                LF::Data::SQL::StatementPlan.new({{sql}})
+              {% end %}
+            end
+
+            private def __lf_compile_select_plan(
+              entity : T.class,
+              shape : S.class,
+              predicate_tokens : P.class,
+              order_tokens : O.class,
+            ) : LF::Data::SQL::StatementPlan forall T, S, P, O
+              {% begin %}
+                {% policy_owner = @type %}
+                {% unless policy_owner.has_constant?("STATIC_SQL_POLICY") %}
+                  {% policy_owner = @type.ancestors.find(&.has_constant?("STATIC_SQL_POLICY")) %}
+                {% end %}
+                {% raise "#{@type} has no inherited STATIC_SQL_POLICY" unless policy_owner %}
+                {% policy_reference = policy_owner.constant("STATIC_SQL_POLICY") %}
+                {% if policy_reference.is_a?(Path) &&
+                        policy_reference.names.size == 1 &&
+                        policy_owner.has_constant?(policy_reference.stringify) %}
+                  {% policy = policy_owner.constant(policy_reference.stringify).resolve %}
+                {% else %}
+                  {% policy = policy_reference.resolve %}
+                {% end %}
+                {% identifier_open = policy.constant("IDENTIFIER_OPEN") %}
+                {% identifier_close = policy.constant("IDENTIFIER_CLOSE") %}
+                {% identifier_escape_from = policy.constant("IDENTIFIER_ESCAPE_FROM") %}
+                {% identifier_escape_to = policy.constant("IDENTIFIER_ESCAPE_TO") %}
+                {% placeholder_style = policy.constant("PLACEHOLDER_STYLE") %}
+                {% query_shape = S.type_vars[0] %}
+                {% limit_state = query_shape.type_vars[3] %}
+                {% offset_state = query_shape.type_vars[4] %}
+                {% terminal_name = S.name.stringify.split("(").first.split("::").last %}
+
+                {% if placeholder_style == :anonymous %}
+                  {% placeholder_token = policy.constant("PLACEHOLDER_TOKEN") %}
+                {% else %}
+                  {% placeholder_prefix = policy.constant("PLACEHOLDER_PREFIX") %}
+                  {% first_position = policy.constant("PLACEHOLDER_FIRST_POSITION") %}
+                {% end %}
+                {% placeholder_position = 0 %}
+
+                {% if table_annotation = T.annotation(LF::Data::Table) %}
+                  {% if table_annotation[:name] %}
+                    {% table_name = table_annotation[:name] %}
+                  {% elsif table_annotation.args.size > 0 %}
+                    {% table_name = table_annotation.args.first %}
+                  {% else %}
+                    {% table_name = T.name.stringify.split("::").last.gsub(/([A-Z]+)([A-Z][a-z])/, "\\1_\\2").gsub(/([a-z0-9])([A-Z])/, "\\1_\\2").downcase %}
+                  {% end %}
+                {% else %}
+                  {% table_name = T.name.stringify.split("::").last.gsub(/([A-Z]+)([A-Z][a-z])/, "\\1_\\2").gsub(/([a-z0-9])([A-Z])/, "\\1_\\2").downcase %}
+                {% end %}
+
+                {% selected_columns = [] of String %}
+                {% for ivar in T.instance_vars %}
+                  {% column_annotation = ivar.annotation(LF::Data::Column) %}
+                  {% unless column_annotation && column_annotation[:ignore] %}
+                    {% column_name = (column_annotation && column_annotation[:name]) || ivar.name.stringify %}
+                    {% selected_columns << identifier_open + column_name.split(identifier_escape_from).join(identifier_escape_to) + identifier_close %}
+                  {% end %}
+                {% end %}
+                {% quoted_table = identifier_open + table_name.split(identifier_escape_from).join(identifier_escape_to) + identifier_close %}
+
+                {% if terminal_name == "Count" %}
+                  {% sql = "SELECT COUNT(*) FROM " + quoted_table %}
+                {% elsif terminal_name == "Exists" %}
+                  {% sql = "SELECT 1 FROM " + quoted_table %}
+                {% else %}
+                  {% sql = "SELECT " + selected_columns.join(", ") + " FROM " + quoted_table %}
+                {% end %}
+
+                {% unless P.type_vars.empty? %}
+                  {% sql += " WHERE " %}
+                  {% for token in P.type_vars %}
+                    {% token_name = token.name.stringify.split("(").first.split("::").last %}
+                    {% if token_name == "OpenParen" %}
+                      {% sql += "(" %}
+                    {% elsif token_name == "CloseParen" %}
+                      {% sql += ")" %}
+                    {% elsif token_name == "And" %}
+                      {% sql += " AND " %}
+                    {% elsif token_name == "Or" %}
+                      {% sql += " OR " %}
+                    {% elsif token_name == "Not" %}
+                      {% sql += "NOT " %}
+                    {% elsif token_name == "Leaf" %}
+                      {% expression = token.type_vars[0] %}
+                      {% expression_name = expression.name.stringify.split("(").first.split("::").last %}
+                      {% field = expression.type_vars[0] %}
+                      {% field_entity = field.type_vars[0] %}
+                      {% unless field_entity == T %}
+                        {% raise "#{field_entity} field belongs to #{field_entity}, not query entity #{T}" %}
+                      {% end %}
+                      {% field_index = field.type_vars[2] %}
+                      {% ivar = T.instance_vars[field_index] %}
+                      {% column_annotation = ivar.annotation(LF::Data::Column) %}
+                      {% column_name = (column_annotation && column_annotation[:name]) || ivar.name.stringify %}
+                      {% quoted_column = identifier_open + column_name.split(identifier_escape_from).join(identifier_escape_to) + identifier_close %}
+
+                      {% if expression_name == "IsNil" %}
+                        {% sql += quoted_column + " IS NULL" %}
+                      {% elsif expression_name == "IsNotNil" %}
+                        {% sql += quoted_column + " IS NOT NULL" %}
+                      {% elsif expression_name == "In" %}
+                        {% value_count = expression.type_vars[1].type_vars.size %}
+                        {% if value_count == 0 %}
+                          {% sql += "0 = 1" %}
+                        {% else %}
+                          {% placeholders = [] of String %}
+                          {% for _ in 0...value_count %}
+                            {% if placeholder_style == :anonymous %}
+                              {% placeholders << placeholder_token %}
+                            {% else %}
+                              {% placeholders << placeholder_prefix + (first_position + placeholder_position).stringify %}
+                            {% end %}
+                            {% placeholder_position += 1 %}
+                          {% end %}
+                          {% sql += quoted_column + " IN (" + placeholders.join(", ") + ")" %}
+                        {% end %}
+                      {% else %}
+                        {% operator = if expression_name == "Eq"
+                                        "="
+                                      elsif expression_name == "Ne"
+                                        "<>"
+                                      elsif expression_name == "Lt"
+                                        "<"
+                                      elsif expression_name == "Lte"
+                                        "<="
+                                      elsif expression_name == "Gt"
+                                        ">"
+                                      elsif expression_name == "Gte"
+                                        ">="
+                                      elsif expression_name == "Like"
+                                        "LIKE"
+                                      else
+                                        raise "Unsupported static predicate #{expression}"
+                                      end %}
+                        {% if placeholder_style == :anonymous %}
+                          {% placeholder = placeholder_token %}
+                        {% else %}
+                          {% placeholder = placeholder_prefix + (first_position + placeholder_position).stringify %}
+                        {% end %}
+                        {% placeholder_position += 1 %}
+                        {% sql += quoted_column + " " + operator + " " + placeholder %}
+                      {% end %}
+                    {% else %}
+                      {% raise "Unsupported static predicate token #{token}" %}
+                    {% end %}
+                  {% end %}
+                {% end %}
+
+                {% if terminal_name != "Count" && terminal_name != "Exists" && !O.type_vars.empty? %}
+                  {% order_clauses = [] of String %}
+                  {% for token in O.type_vars %}
+                    {% ordering = token.type_vars[0] %}
+                    {% field = ordering.type_vars[0] %}
+                    {% field_entity = field.type_vars[0] %}
+                    {% unless field_entity == T %}
+                      {% raise "#{field_entity} field belongs to #{field_entity}, not query entity #{T}" %}
+                    {% end %}
+                    {% direction = ordering.type_vars[1] %}
+                    {% field_index = field.type_vars[2] %}
+                    {% ivar = T.instance_vars[field_index] %}
+                    {% column_annotation = ivar.annotation(LF::Data::Column) %}
+                    {% column_name = (column_annotation && column_annotation[:name]) || ivar.name.stringify %}
+                    {% quoted_column = identifier_open + column_name.split(identifier_escape_from).join(identifier_escape_to) + identifier_close %}
+                    {% direction_name = direction.name.stringify.split("::").last.upcase %}
+                    {% order_clauses << quoted_column + " " + direction_name %}
+                  {% end %}
+                  {% sql += " ORDER BY " + order_clauses.join(", ") %}
+                {% end %}
+
+                {% if terminal_name == "Exists" %}
+                  {% sql += " LIMIT 1" %}
+                {% elsif terminal_name == "First" %}
+                  {% sql += " LIMIT 1" %}
+                  {% if offset_state.name.stringify.split("::").last == "WithOffset" %}
+                    {% if placeholder_style == :anonymous %}
+                      {% offset_placeholder = placeholder_token %}
+                    {% else %}
+                      {% offset_placeholder = placeholder_prefix + (first_position + placeholder_position).stringify %}
+                    {% end %}
+                    {% sql += " OFFSET " + offset_placeholder %}
+                  {% end %}
+                {% elsif terminal_name == "Rows" %}
+                  {% has_limit = limit_state.name.stringify.split("::").last == "WithLimit" %}
+                  {% has_offset = offset_state.name.stringify.split("::").last == "WithOffset" %}
+                  {% if has_limit %}
+                    {% if placeholder_style == :anonymous %}
+                      {% limit_placeholder = placeholder_token %}
+                    {% else %}
+                      {% limit_placeholder = placeholder_prefix + (first_position + placeholder_position).stringify %}
+                    {% end %}
+                    {% placeholder_position += 1 %}
+                    {% sql += " LIMIT " + limit_placeholder %}
+                  {% end %}
+                  {% if has_offset %}
+                    {% if placeholder_style == :anonymous %}
+                      {% offset_placeholder = placeholder_token %}
+                    {% else %}
+                      {% offset_placeholder = placeholder_prefix + (first_position + placeholder_position).stringify %}
+                    {% end %}
+                    {% if has_limit %}
+                      {% sql += " OFFSET " + offset_placeholder %}
+                    {% elsif policy.has_constant?("OFFSET_ONLY_PREFIX") %}
+                      {% sql += " " + policy.constant("OFFSET_ONLY_PREFIX") + offset_placeholder %}
+                    {% else %}
+                      {% sql += " OFFSET " + offset_placeholder %}
+                    {% end %}
+                  {% end %}
+                {% end %}
+
                 LF::Data::SQL::StatementPlan.new({{sql}})
               {% end %}
             end

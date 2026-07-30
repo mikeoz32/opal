@@ -13,7 +13,17 @@ module LF
             {% end %}
 
             {% if table_annotation = entity.annotation(LF::Data::Table) %}
-              {% table_name = table_annotation[:name] || table_annotation.args.first %}
+              {% if table_annotation[:name] %}
+                {% table_name = table_annotation[:name] %}
+              {% elsif table_annotation.args.size > 0 %}
+                {% table_name = table_annotation.args.first %}
+              {% else %}
+                {% table_name = entity.name.stringify
+                     .split("::").last
+                     .gsub(/([A-Z]+)([A-Z][a-z])/, "\\1_\\2")
+                     .gsub(/([a-z0-9])([A-Z])/, "\\1_\\2")
+                     .downcase %}
+              {% end %}
             {% else %}
               {% table_name = entity.name.stringify
                    .split("::").last
@@ -126,7 +136,17 @@ module LF
           def self.__lf_table_name : String
             {% begin %}
               {% if table_annotation = @type.annotation(LF::Data::Table) %}
-                {% table_name = table_annotation[:name] || table_annotation.args.first %}
+                {% if table_annotation[:name] %}
+                  {% table_name = table_annotation[:name] %}
+                {% elsif table_annotation.args.size > 0 %}
+                  {% table_name = table_annotation.args.first %}
+                {% else %}
+                  {% table_name = @type.name.stringify
+                       .split("::").last
+                       .gsub(/([A-Z]+)([A-Z][a-z])/, "\\1_\\2")
+                       .gsub(/([a-z0-9])([A-Z])/, "\\1_\\2")
+                       .downcase %}
+                {% end %}
               {% else %}
                 {% table_name = @type.name.stringify
                      .split("::").last

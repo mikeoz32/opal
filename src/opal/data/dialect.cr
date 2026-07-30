@@ -9,6 +9,7 @@ module LF
       abstract def insert_plan(entity : T.class) : SQL::InsertPlan forall T
       abstract def update_plan(entity : T.class) : SQL::StatementPlan forall T
       abstract def delete_plan(entity : T.class) : SQL::StatementPlan forall T
+      abstract def select_plan(entity : T.class, shape : S.class) : SQL::StatementPlan forall T, S
 
       abstract def supports?(capability : DialectCapability) : Bool
     end

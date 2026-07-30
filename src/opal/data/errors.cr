@@ -78,5 +78,14 @@ module LF
         super("Expected at most one #{entity_name} row, got #{rows}")
       end
     end
+
+    class InvalidQueryError < Error
+      getter component : Symbol
+      getter value : Int64
+
+      def initialize(@component : Symbol, @value : Int64)
+        super("Invalid query #{component}: value=#{value}")
+      end
+    end
   end
 end

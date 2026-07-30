@@ -19,6 +19,32 @@ static policy; generated query code supplies a direct bind tuple. An explicit
 
 ---
 
+## Implementation Progress
+
+Tasks 1-4 are implemented as the first independently green capability:
+
+- field expressions retain only converted values and expose compile-time token
+  tuple types through class methods;
+- `Dialect#select_plan(T, S)` and the shared static compiler emit complete
+  SELECT, first, count, and exists SQL literals;
+- immutable `SelectQuery` executes through EntityManager without implicit
+  flush and reuses the transaction-local identity map;
+- runtime branches compile one static specialization per union member;
+- cross-entity predicates and ordering fail compilation;
+- runtime-arity `IN` remains unavailable to the static builder.
+
+The generic bulk UPDATE and DELETE plan overloads described in Task 2 are
+intentionally added with Tasks 7 and 8, together with their builder shapes and
+execution tests. They are not part of the completed SELECT capability.
+
+`crystal tool expand` was attempted for the static SELECT regression but the
+installed Crystal tool crashes in its DWARF reader before producing expansion
+output. The source-level compiler returns a `StatementPlan` from one generated
+string literal, while regression tests make runtime dialect rendering methods
+raise and prove they are never called.
+
+---
+
 ## Target API
 
 ```crystal
