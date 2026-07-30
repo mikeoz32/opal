@@ -37,6 +37,22 @@ The generic bulk UPDATE and DELETE plan overloads described in Task 2 are
 intentionally added with Tasks 7 and 8, together with their builder shapes and
 execution tests. They are not part of the completed SELECT capability.
 
+Tasks 5-6 are implemented as the second independently green capability:
+
+- `EntityManager#dynamic_query(T)` is an explicit mutable builder and is never
+  selected by `query(T)`;
+- heterogeneous runtime collections retain typed expression wrappers;
+- `Field#in(Array(T))` dumps each value once and is rejected by the static
+  builder;
+- `DynamicRenderer` returns `RenderedQuery` with SQL and `Array(DB::Any)`,
+  using generated entity names, dialect quoting/placeholders, and no raw field
+  or operator input;
+- static Tuple binds continue to use the splat path while dynamic arrays use
+  crystal-db's named `args:` path, with no conversion between them;
+- all static and dynamic SELECT terminals are covered by no-auto-flush
+  regressions;
+- SQLite offset-only syntax and a numbered-placeholder dialect are covered.
+
 `crystal tool expand` was attempted for the static SELECT regression but the
 installed Crystal tool crashes in its DWARF reader before producing expansion
 output. The source-level compiler returns a `StatementPlan` from one generated
@@ -277,6 +293,10 @@ query.limit(limit).offset(offset).to_a
 It supports runtime collections of typed dynamic expressions and a field
 `in(Array(T))` overload whose result is accepted only by dynamic builders. Its
 renderer returns SQL plus `Array(DB::Any)`.
+
+Unlike immutable static `SelectQuery`, `DynamicQuery` mutates its runtime
+predicate/order/pagination collections and returns itself from builder calls.
+This permits loop-based construction without creating a union of static shapes.
 
 Retain all safety guarantees:
 

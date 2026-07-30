@@ -58,9 +58,10 @@ describe LF::Data::Query::Field do
     {"query_like_non_string.cr", "LIKE"},
     {"query_nil_non_nil.cr", "nil predicate"},
     {"query_order_bool.cr", "not orderable"},
-    {"query_static_array_in.cr", "expected argument"},
+    {"query_static_array_in.cr", "__lf_tokens"},
     {"query_cross_entity_predicate.cr", "belongs to"},
     {"query_cross_entity_order.cr", "belongs to"},
+    {"dynamic_query_cross_entity.cr", "belongs to"},
   }.each do |fixture_case|
     fixture_name, message = fixture_case
 

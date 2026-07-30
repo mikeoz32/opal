@@ -105,4 +105,32 @@ describe "returning dialect probe" do
       %(WHERE ("name" = $1) AND ("version" >= $2) LIMIT $3 OFFSET $4)
     )
   end
+
+  it "numbers dynamic SELECT placeholders in runtime bind order" do
+    fields = ReturningProbeSpec::Item::Fields
+    predicate = fields.name.eq("opal").and(fields.version.gte(2_i64))
+    predicates = [] of LF::Data::Query::DynamicPredicateNode(ReturningProbeSpec::Item)
+    predicates << LF::Data::Query::TypedDynamicPredicateNode(
+      ReturningProbeSpec::Item,
+      typeof(predicate),
+    ).new(predicate)
+
+    rendered = LF::Data::Query::DynamicRenderer(ReturningProbeSpec::Item).new(
+      ReturningProbeSpec::Dialect.new
+    ).build(
+      predicates,
+      [] of LF::Data::Query::DynamicOrderNode(ReturningProbeSpec::Item),
+      10_i64,
+      3_i64,
+      LF::Data::Query::DynamicTerminal::Rows
+    )
+
+    rendered.sql.should eq(
+      %(SELECT "id", "name", "version" FROM "probe_items" ) +
+      %(WHERE (("name" = $1) AND ("version" >= $2)) LIMIT $3 OFFSET $4)
+    )
+    rendered.arguments.should eq(
+      ["opal", 2_i64, 10_i64, 3_i64] of DB::Any
+    )
+  end
 end

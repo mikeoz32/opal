@@ -161,10 +161,11 @@ describe LF::Data::Query::SelectQuery do
       source.transaction do |manager|
         manager.persist(SelectQueryRecord.new(5_i64, "pending", true, 50))
 
+        manager.query(SelectQueryRecord).to_a.size.should eq(4)
+        manager.query(SelectQueryRecord).first?.not_nil!.id.should eq(1_i64)
         manager.query(SelectQueryRecord).count.should eq(4_i64)
-        listener.statements.map(&.operation).should eq(
-          [LF::Data::StatementOperation::Select]
-        )
+        manager.query(SelectQueryRecord).exists?.should be_true
+        listener.statements.map(&.operation).all?(&.select?).should be_true
 
         manager.flush
         manager.query(SelectQueryRecord).count.should eq(5_i64)

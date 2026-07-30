@@ -38,6 +38,10 @@ module LF
           StaticSQLPolicy::PLACEHOLDER_TOKEN
         end
 
+        def offset_without_limit(placeholder : String) : String
+          "LIMIT -1 OFFSET #{placeholder}"
+        end
+
         def supports?(capability : DialectCapability) : Bool
           case capability
           when .last_insert_id?, .transactional_ddl?, .add_column?, .rename_column?, .foreign_key_ddl?

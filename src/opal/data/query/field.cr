@@ -124,6 +124,14 @@ module LF
           {% end %}
         end
 
+        def in(values : Array(ValueType)) forall ValueType
+          dumped = [] of DB::Any
+          values.each do |value|
+            dumped << dump(value).as(DB::Any)
+          end
+          DynamicIn(typeof(self)).new(dumped)
+        end
+
         def is_nil
           {% unless PropertyType.resolve.nilable? %}
             {% raise "#{EntityType} field #{EntityType.instance_vars[Index].name} does not support a nil predicate" %}
