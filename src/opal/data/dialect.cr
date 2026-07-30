@@ -11,6 +11,10 @@ module LF
       abstract def delete_plan(entity : T.class) : SQL::StatementPlan forall T
       abstract def select_plan(entity : T.class, shape : S.class) : SQL::StatementPlan forall T, S
 
+      def offset_without_limit(placeholder : String) : String
+        "OFFSET #{placeholder}"
+      end
+
       abstract def supports?(capability : DialectCapability) : Bool
     end
   end

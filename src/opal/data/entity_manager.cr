@@ -120,6 +120,11 @@ module LF
         ).new(self, Query::NoPredicate.new)
       end
 
+      def dynamic_query(entity : T.class) forall T
+        ensure_available(:dynamic_query)
+        Query::DynamicQuery(T).new(self)
+      end
+
       # Framework internal: invoked by SelectQuery(T, ...).
       def __lf_select_to_a(
         query : Query::SelectQuery(T, P, O, L, F),
@@ -154,6 +159,34 @@ module LF
         ensure_available(:query)
         plan = @dialect.select_plan(T, Query::Exists(typeof(query)))
         execute_select_exists(T.name, plan.sql, query.__lf_predicate_args)
+      end
+
+      # Framework internal: invoked by DynamicQuery(T).
+      def __lf_dynamic_select_to_a(query : Query::DynamicQuery(T)) : Array(T) forall T
+        ensure_available(:dynamic_query)
+        rendered = query.__lf_render(@dialect, Query::DynamicTerminal::Rows)
+        execute_entity_select(T, rendered.sql, rendered.arguments)
+      end
+
+      # Framework internal: invoked by DynamicQuery(T).
+      def __lf_dynamic_select_first(query : Query::DynamicQuery(T)) : T? forall T
+        ensure_available(:dynamic_query)
+        rendered = query.__lf_render(@dialect, Query::DynamicTerminal::First)
+        execute_entity_select_first(T, rendered.sql, rendered.arguments)
+      end
+
+      # Framework internal: invoked by DynamicQuery(T).
+      def __lf_dynamic_select_count(query : Query::DynamicQuery(T)) : Int64 forall T
+        ensure_available(:dynamic_query)
+        rendered = query.__lf_render(@dialect, Query::DynamicTerminal::Count)
+        execute_select_count(T.name, rendered.sql, rendered.arguments)
+      end
+
+      # Framework internal: invoked by DynamicQuery(T).
+      def __lf_dynamic_select_exists(query : Query::DynamicQuery(T)) : Bool forall T
+        ensure_available(:dynamic_query)
+        rendered = query.__lf_render(@dialect, Query::DynamicTerminal::Exists)
+        execute_select_exists(T.name, rendered.sql, rendered.arguments)
       end
 
       def flush : Nil
@@ -422,11 +455,11 @@ module LF
       private def execute_entity_select(
         entity : T.class,
         sql : String,
-        arguments : Tuple,
-      ) : Array(T) forall T
+        arguments : A,
+      ) : Array(T) forall T, A
         if @dispatcher.empty?
           entities = [] of T
-          @connection.query(sql, *arguments) do |result|
+          connection_query(sql, arguments) do |result|
             while result.move_next
               entities << managed_entity(T.__lf_hydrate(result))
             end
@@ -440,7 +473,7 @@ module LF
 
         begin
           entities = [] of T
-          @connection.query(sql, *arguments) do |result|
+          connection_query(sql, arguments) do |result|
             while result.move_next
               rows += 1
               entities << managed_entity(T.__lf_hydrate(result))
@@ -458,11 +491,11 @@ module LF
       private def execute_entity_select_first(
         entity : T.class,
         sql : String,
-        arguments : Tuple,
-      ) : T? forall T
+        arguments : A,
+      ) : T? forall T, A
         if @dispatcher.empty?
           found = nil.as(T?)
-          @connection.query(sql, *arguments) do |result|
+          connection_query(sql, arguments) do |result|
             found = managed_entity(T.__lf_hydrate(result)) if result.move_next
           end
           return found
@@ -474,7 +507,7 @@ module LF
 
         begin
           found = nil.as(T?)
-          @connection.query(sql, *arguments) do |result|
+          connection_query(sql, arguments) do |result|
             if result.move_next
               rows = 1_i64
               found = managed_entity(T.__lf_hydrate(result))
@@ -492,10 +525,10 @@ module LF
       private def execute_select_count(
         entity_name : String,
         sql : String,
-        arguments : Tuple,
-      ) : Int64
+        arguments : A,
+      ) : Int64 forall A
         if @dispatcher.empty?
-          return @connection.query_one(sql, *arguments) { |result| result.read(Int64) }
+          return connection_query_one(sql, arguments) { |result| result.read(Int64) }
         end
 
         started_at = Time.instant
@@ -503,7 +536,7 @@ module LF
         statement_error = nil.as(Exception?)
 
         begin
-          count = @connection.query_one(sql, *arguments) do |result|
+          count = connection_query_one(sql, arguments) do |result|
             rows = 1_i64
             result.read(Int64)
           end
@@ -519,11 +552,11 @@ module LF
       private def execute_select_exists(
         entity_name : String,
         sql : String,
-        arguments : Tuple,
-      ) : Bool
+        arguments : A,
+      ) : Bool forall A
         if @dispatcher.empty?
           exists = false
-          @connection.query(sql, *arguments) { |result| exists = result.move_next }
+          connection_query(sql, arguments) { |result| exists = result.move_next }
           return exists
         end
 
@@ -533,7 +566,7 @@ module LF
 
         begin
           exists = false
-          @connection.query(sql, *arguments) do |result|
+          connection_query(sql, arguments) do |result|
             exists = result.move_next
             rows = 1_i64 if exists
           end
@@ -555,6 +588,30 @@ module LF
 
         register_managed(entity, database_id)
         entity
+      end
+
+      private def connection_query(
+        sql : String,
+        arguments : A,
+        &block : DB::ResultSet -> R
+      ) : R forall A, R
+        {% if A < Tuple %}
+          @connection.query(sql, *arguments) { |result| yield result }
+        {% else %}
+          @connection.query(sql, args: arguments) { |result| yield result }
+        {% end %}
+      end
+
+      private def connection_query_one(
+        sql : String,
+        arguments : A,
+        &block : DB::ResultSet -> R
+      ) : R forall A, R
+        {% if A < Tuple %}
+          @connection.query_one(sql, *arguments) { |result| yield result }
+        {% else %}
+          @connection.query_one(sql, args: arguments) { |result| yield result }
+        {% end %}
       end
 
       private def dispatch_select(

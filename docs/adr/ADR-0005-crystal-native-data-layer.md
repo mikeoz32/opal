@@ -455,6 +455,14 @@ of predicates in a loop must opt into `EntityManager#dynamic_query(T)`.
 `DynamicQuery` uses the same typed field descriptors and bound values but
 renders SQL at runtime. It is never selected implicitly.
 
+`DynamicQuery` is mutable so loop-based filters can append to one runtime
+shape. It boxes concrete typed expressions behind entity-specific predicate
+nodes; field identity and the closed operator set remain compile-time checked.
+`DynamicRenderer` reads generated table/column literals, delegates runtime
+quoting, placeholders, and offset-only syntax to the concrete dialect, and
+returns `RenderedQuery(String, Array(DB::Any))`. The array is passed through
+crystal-db's `args:` API without becoming a static bind representation.
+
 Fixed-arity `IN` accepts a Tuple and produces a static placeholder count. An
 Array has runtime arity and is accepted only by `DynamicQuery`. An empty static
 Tuple emits a false expression instead of invalid SQL. Negative limit or offset

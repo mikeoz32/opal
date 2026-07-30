@@ -60,6 +60,7 @@ describe "Data dialect contract" do
     dialect.name.should eq("probe")
     dialect.quote_identifier("todos").should eq("[todos]")
     dialect.placeholder(2).should eq(":2")
+    dialect.offset_without_limit(":3").should eq("OFFSET :3")
   end
 
   it "exposes a closed capability set through supports?" do

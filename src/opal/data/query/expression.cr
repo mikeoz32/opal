@@ -151,6 +151,15 @@ module LF
         end
       end
 
+      struct DynamicIn(FieldType)
+        include Expression
+
+        getter values : Array(DB::Any)
+
+        def initialize(@values)
+        end
+      end
+
       struct IsNil(FieldType)
         include Expression
 
