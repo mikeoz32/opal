@@ -33,10 +33,6 @@ Tasks 1-4 are implemented as the first independently green capability:
 - cross-entity predicates and ordering fail compilation;
 - runtime-arity `IN` remains unavailable to the static builder.
 
-The generic bulk UPDATE and DELETE plan overloads described in Task 2 are
-intentionally added with Tasks 7 and 8, together with their builder shapes and
-execution tests. They are not part of the completed SELECT capability.
-
 Tasks 5-6 are implemented as the second independently green capability:
 
 - `EntityManager#dynamic_query(T)` is an explicit mutable builder and is never
@@ -52,6 +48,21 @@ Tasks 5-6 are implemented as the second independently green capability:
 - all static and dynamic SELECT terminals are covered by no-auto-flush
   regressions;
 - SQLite offset-only syntax and a numbered-placeholder dialect are covered.
+
+Tasks 7-9 are implemented as the third independently green capability:
+
+- immutable typed UPDATE and DELETE builders emit static dialect plans and
+  direct bind tuples;
+- repeated SET replaces the value while retaining the field's first SQL
+  position, and repeated WHERE combines with AND;
+- zero SET, ID/version assignment, wrong value types, and cross-entity fields
+  fail at compile time;
+- bulk execution rejects pending per-entity operations of the same type and
+  detaches that type after success;
+- whole-table UPDATE and DELETE remain explicit supported operations;
+- numbered dialect coverage proves SET binds precede predicate binds;
+- `EntityManager#connection` exposes only the active transaction connection,
+  and `clear(T)` provides explicit identity invalidation after raw writes.
 
 `crystal tool expand` was attempted for the static SELECT regression but the
 installed Crystal tool crashes in its DWARF reader before producing expansion
@@ -151,12 +162,12 @@ abstract def select_plan(
   shape : S.class
 ) : SQL::StatementPlan forall T, S
 
-abstract def update_plan(
+abstract def update_query_plan(
   entity : T.class,
   shape : S.class
 ) : SQL::StatementPlan forall T, S
 
-abstract def delete_plan(
+abstract def delete_query_plan(
   entity : T.class,
   shape : S.class
 ) : SQL::StatementPlan forall T, S

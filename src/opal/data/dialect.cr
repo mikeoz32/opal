@@ -10,6 +10,8 @@ module LF
       abstract def update_plan(entity : T.class) : SQL::StatementPlan forall T
       abstract def delete_plan(entity : T.class) : SQL::StatementPlan forall T
       abstract def select_plan(entity : T.class, shape : S.class) : SQL::StatementPlan forall T, S
+      abstract def update_query_plan(entity : T.class, shape : S.class) : SQL::StatementPlan forall T, S
+      abstract def delete_query_plan(entity : T.class, shape : S.class) : SQL::StatementPlan forall T, S
 
       def offset_without_limit(placeholder : String) : String
         "OFFSET #{placeholder}"

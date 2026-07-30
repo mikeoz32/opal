@@ -14,7 +14,7 @@ module LF::DataSpecSupport
     end
 
     def transaction_available? : Bool
-      connection.transaction { true } == true
+      transaction_connection.transaction { true } == true
     end
 
     def exec(sql : String, *args : DB::Any) : DB::ExecResult

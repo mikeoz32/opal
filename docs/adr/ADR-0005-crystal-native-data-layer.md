@@ -485,13 +485,21 @@ entity_manager.delete(Todo)
 
 Successful bulk UPDATE or DELETE marks all currently managed entities of that
 type detached because their in-memory state may be stale. Bulk operations do
-not flush queued entity operations first.
+not flush queued entity operations first. Execution is rejected when that
+entity type has pending per-entity operations. UPDATE binds SET values before
+WHERE values; repeated SET for one field uses the last value while retaining
+the field's first SQL position. Whole-table UPDATE and DELETE are allowed only
+through an explicit bulk builder execution.
 
 The active `DB::Connection` remains available as an advanced raw SQL escape
-hatch. Raw writes bypass Unit of Work guarantees. `clear(T)` detaches every
-managed entity of one type when that type has no pending entity operations;
-otherwise it raises `EntityStateError`. Application code must call `clear(T)`
-for affected types or abandon the manager before further managed operations.
+hatch through the read-only `EntityManager#connection` getter. It is the
+connection owned by the current datasource transaction and is unavailable after
+the manager closes or enters its failed state. Driver errors keep their original
+type. Raw writes bypass Unit of Work guarantees and do not invalidate the
+identity map automatically. `clear(T)` detaches every managed entity of one type
+when that type has no pending entity operations; otherwise it raises
+`EntityStateError`. Application code must call `clear(T)` for affected types or
+abandon the manager before further managed operations.
 
 ## Dialect Architecture
 
@@ -517,6 +525,14 @@ abstract class LF::Data::Dialect
   abstract def update_plan(entity : T.class) : SQL::StatementPlan forall T
   abstract def delete_plan(entity : T.class) : SQL::StatementPlan forall T
   abstract def select_plan(
+    entity : T.class,
+    shape : S.class
+  ) : SQL::StatementPlan forall T, S
+  abstract def update_query_plan(
+    entity : T.class,
+    shape : S.class
+  ) : SQL::StatementPlan forall T, S
+  abstract def delete_query_plan(
     entity : T.class,
     shape : S.class
   ) : SQL::StatementPlan forall T, S

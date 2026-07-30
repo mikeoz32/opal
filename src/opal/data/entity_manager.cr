@@ -125,6 +125,35 @@ module LF
         Query::DynamicQuery(T).new(self)
       end
 
+      def update(entity : T.class) forall T
+        ensure_available(:bulk_update)
+        Query::UpdateQuery(
+          T,
+          typeof(Tuple.new),
+          typeof(Tuple.new),
+          Query::NoPredicate,
+        ).new(self, Tuple.new, Query::NoPredicate.new)
+      end
+
+      def delete(entity : T.class) forall T
+        ensure_available(:bulk_delete)
+        Query::DeleteQuery(T, Query::NoPredicate).new(
+          self,
+          Query::NoPredicate.new
+        )
+      end
+
+      def connection : DB::Connection
+        ensure_available(:connection)
+        @connection
+      end
+
+      def clear(entity : T.class) : Nil forall T
+        ensure_available(:clear)
+        ensure_no_pending(T.name, :clear)
+        detach_managed(T)
+      end
+
       # Framework internal: invoked by SelectQuery(T, ...).
       def __lf_select_to_a(
         query : Query::SelectQuery(T, P, O, L, F),
@@ -187,6 +216,40 @@ module LF
         ensure_available(:dynamic_query)
         rendered = query.__lf_render(@dialect, Query::DynamicTerminal::Exists)
         execute_select_exists(T.name, rendered.sql, rendered.arguments)
+      end
+
+      # Framework internal: invoked by UpdateQuery(T, ...).
+      def __lf_execute_bulk_update(
+        query : Query::UpdateQuery(T, F, V, P),
+      ) : Int64 forall T, F, V, P
+        ensure_available(:bulk_update)
+        ensure_no_pending(T.name, :bulk_update)
+        plan = @dialect.update_query_plan(T, typeof(query))
+        result = execute_observed_exec(
+          StatementOperation::Update,
+          T.name,
+          plan.sql,
+          query.__lf_args
+        )
+        detach_managed(T)
+        result.rows_affected
+      end
+
+      # Framework internal: invoked by DeleteQuery(T, ...).
+      def __lf_execute_bulk_delete(
+        query : Query::DeleteQuery(T, P),
+      ) : Int64 forall T, P
+        ensure_available(:bulk_delete)
+        ensure_no_pending(T.name, :bulk_delete)
+        plan = @dialect.delete_query_plan(T, typeof(query))
+        result = execute_observed_exec(
+          StatementOperation::Delete,
+          T.name,
+          plan.sql,
+          query.__lf_args
+        )
+        detach_managed(T)
+        result.rows_affected
       end
 
       def flush : Nil
@@ -287,8 +350,11 @@ module LF
         end
       end
 
-      protected getter connection : DB::Connection
       protected getter dialect : Dialect
+
+      protected def transaction_connection : DB::Connection
+        @connection
+      end
 
       protected def dispatch_statement(event : StatementCompletionEvent) : Nil
         @dispatcher.statement_completion(event)
@@ -347,6 +413,26 @@ module LF
           sequence = @next_sequence
           @next_sequence += 1
           @operation_queue.schedule(entry, operation, sequence)
+        end
+      end
+
+      private def ensure_no_pending(entity_name : String, operation : Symbol) : Nil
+        return unless @operation_queue.pending_for?(entity_name)
+
+        raise EntityStateError.new(operation, entity_name, nil)
+      end
+
+      private def detach_managed(entity : T.class) : Nil forall T
+        @entries_by_object.each_value do |entry|
+          next unless entry.entity_name == T.name
+          next unless entry.state.managed?
+
+          if entry.has_database_id?
+            @entries_by_identity.delete(
+              Internal::EntityKey.new(T.name, entry.database_id)
+            )
+          end
+          entry.state = EntityState::Detached
         end
       end
 

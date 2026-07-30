@@ -62,6 +62,13 @@ module LF
           @entries[@head]?
         end
 
+        def pending_for?(entity_name : String) : Bool
+          each do |entry|
+            return true if entry.entity_name == entity_name
+          end
+          false
+        end
+
         def complete(entry : TrackedEntity) : Nil
           entry.operation = nil
           entry.sequence = nil

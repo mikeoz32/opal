@@ -85,6 +85,12 @@ module LF
           QueryShape.__lf_order_tokens
         end
       end
+
+      struct BulkUpdate
+      end
+
+      struct BulkDelete
+      end
     end
   end
 end
