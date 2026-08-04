@@ -62,16 +62,29 @@ order.
 - Modify: `spec/application_compile_spec.cr`
 - Create: `spec/fixtures/application/autoconfiguration_valid.cr`
 - Create: `spec/fixtures/application/autoconfiguration_invalid_priority.cr`
+- Create: `spec/fixtures/application/autoconfiguration_nil_priority.cr`
+- Create: `spec/fixtures/application/autoconfiguration_false_priority.cr`
 - Create: `spec/fixtures/application/autoconfiguration_missing_marker.cr`
+- Create: `spec/fixtures/application/autoconfiguration_unknown_marker.cr`
+- Create: `spec/fixtures/application/autoconfiguration_non_annotation_marker.cr`
 - Create: `spec/fixtures/application/autoconfiguration_requires_arguments.cr`
+- Create: `spec/fixtures/application/autoconfiguration_inherited_constructor.cr`
+- Create: `spec/fixtures/application/autoconfiguration_typed_splat_constructor.cr`
+- Create: `spec/fixtures/application/autoconfiguration_not_extension.cr`
+- Create: `spec/fixtures/application/autoconfiguration_abstract_extension.cr`
 
 Write failing fixtures in this order:
 
 1. valid descriptor and marked application compile;
-2. descriptor priority must be an integer literal;
-3. `enabled_by` is mandatory;
+2. descriptor priority, when explicitly present, must be an integer literal;
+3. `enabled_by` is mandatory and must resolve to an annotation type;
 4. extension requires a zero-argument constructor;
 5. a descriptor type must implement `ApplicationExtension`.
+
+Concrete extension validation also rejects abstract descriptor classes and
+follows inherited `initialize` overloads when checking whether `.new` accepts no
+arguments. Default arguments, including an explicit `nil`, and untyped splats
+are allowed when an empty call is valid; typed positional splats are rejected.
 
 Compiler messages include the extension type and invalid attribute. Validation
 must run only when the optional package is required.
@@ -82,6 +95,7 @@ must run only when the optional package is required.
 
 - Create: `spec/application_autoconfiguration_spec.cr`
 - Create: `spec/fixtures/application/autoconfiguration_without_marker.cr`
+- Create: `spec/fixtures/application/autoconfiguration_order.cr`
 
 Extend the existing application `macro finished` generation:
 
@@ -96,6 +110,11 @@ must compile and install nothing.
 
 Do not add a global runtime registry. The generated bootstrap contains direct
 constructor and `runtime.install` calls for enabled extensions only.
+
+Runtime selection coverage is compiled as an isolated executable fixture so it
+can declare its own `@[LF::Application]` without conflicting with the main spec
+executable. The fixture verifies disabled markers, descending priority,
+fully-qualified-name tie breaking, and reverse shutdown.
 
 ## Task 3: Install Extensions During Bootstrap
 
@@ -118,6 +137,11 @@ On extension installation failure:
 - bootstrap never returns a closed runtime.
 
 Tests use probe extensions to verify configure and stop event order.
+
+Constructor and configure failure fixtures verify that bootstrap never skips
+already-installed extension cleanup, never shuts down an already-closed runtime
+twice, preserves the primary error, and reports cleanup failures through
+`ApplicationRuntime::InstallError`.
 
 ## Task 4: Protect Existing Boundaries
 
