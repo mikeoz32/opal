@@ -148,6 +148,16 @@ module LF
         @connection
       end
 
+      # Framework internal: bridges extension-owned SQL to DataSource listeners.
+      def __lf_statement_observer : StatementObserver?
+        return nil if @dispatcher.empty?
+
+        ->(event : StatementCompletionEvent) do
+          dispatch_statement(event)
+          nil
+        end
+      end
+
       def clear(entity : T.class) : Nil forall T
         ensure_available(:clear)
         ensure_no_pending(T.name, :clear)

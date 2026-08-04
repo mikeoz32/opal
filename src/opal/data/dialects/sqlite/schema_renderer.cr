@@ -11,7 +11,7 @@ module LF
 
           def execute(
             operation : LF::Data::Schema::Operation,
-            observer : LF::Data::SchemaRenderer::StatementObserver? = nil,
+            observer : LF::Data::StatementObserver? = nil,
           ) : Nil
             statements(operation).each do |statement|
               execute_statement(statement, observer)
@@ -23,7 +23,7 @@ module LF
           ) : Array(Statement)
             case operation
             when LF::Data::Schema::CreateTable
-              create_table_statements(operation.table)
+              create_table_statements(operation.table, operation.if_not_exists)
             when LF::Data::Schema::DropTable
               [Statement.new(
                 operation.table_name,
@@ -63,6 +63,7 @@ module LF
 
           private def create_table_statements(
             table : LF::Data::Schema::TableDefinition,
+            if_not_exists : Bool,
           ) : Array(Statement)
             generated = table.columns.select(&.generated?)
             if generated.size > 1
@@ -107,10 +108,15 @@ module LF
 
             statements = [Statement.new(
               table.name,
-              "CREATE TABLE #{quote(table.name)} (#{definitions.join(", ")})"
+              "CREATE TABLE #{"IF NOT EXISTS " if if_not_exists}" \
+              "#{quote(table.name)} (#{definitions.join(", ")})"
             )]
             table.indexes.each do |index|
-              statements << create_index_statement(table.name, index)
+              statements << create_index_statement(
+                table.name,
+                index,
+                if_not_exists
+              )
             end
             statements
           end
@@ -118,11 +124,13 @@ module LF
           private def create_index_statement(
             table_name : String,
             index : LF::Data::Schema::IndexDefinition,
+            if_not_exists : Bool = false,
           ) : Statement
             unique = index.unique? ? "UNIQUE " : ""
+            existence = if_not_exists ? "IF NOT EXISTS " : ""
             Statement.new(
               index.name,
-              "CREATE #{unique}INDEX #{quote(index.name)} " \
+              "CREATE #{unique}INDEX #{existence}#{quote(index.name)} " \
               "ON #{quote(table_name)} (#{quoted_list(index.columns)})"
             )
           end
@@ -201,7 +209,7 @@ module LF
 
           private def execute_statement(
             statement : Statement,
-            observer : LF::Data::SchemaRenderer::StatementObserver?,
+            observer : LF::Data::StatementObserver?,
           ) : Nil
             unless observer
               connection.exec(statement.sql)

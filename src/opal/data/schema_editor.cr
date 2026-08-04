@@ -3,14 +3,19 @@ module LF
     class SchemaEditor
       def initialize(
         @renderer : SchemaRenderer,
-        @observer : SchemaRenderer::StatementObserver? = nil,
+        @observer : StatementObserver? = nil,
       )
       end
 
-      def create_table(name : String, & : Schema::TableBuilder ->) : Nil
+      def create_table(
+        name : String,
+        *,
+        if_not_exists : Bool = false,
+        & : Schema::TableBuilder ->
+      ) : Nil
         builder = Schema::TableBuilder.new(name)
         yield builder
-        execute(Schema::CreateTable.new(builder.build))
+        execute(Schema::CreateTable.new(builder.build, if_not_exists))
       end
 
       def drop_table(name : String) : Nil

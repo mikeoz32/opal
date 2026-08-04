@@ -667,10 +667,36 @@ The runner validates unique, strictly ascending positive versions before
 executing SQL. It stores version, name, and application timestamp in
 `_lf_migrations`.
 
+`MigrationSet` preserves declared instance order and exposes no mutable global
+registry. Validation runs again at the start of `MigrationRunner#run`, before
+the runner opens a datasource transaction. This protects the execution boundary
+even when a migration instance exposes mutable version or name state.
+
+`SchemaEditor` produces typed schema-operation values and delegates them to the
+`SchemaRenderer` supplied by the active dialect. Data core contains no concrete
+dialect branches. `create_table(..., if_not_exists: true)` is available for
+infrastructure bootstrap; a concrete renderer must apply that mode to both the
+table and any indexes emitted by the same operation. The migration history uses
+this mode to create `_lf_migrations` idempotently.
+
 Each pending migration and its history insert run in one transaction when the
 dialect supports transactional DDL. Failed migrations are not recorded.
 Already applied versions are skipped. An applied version with a different name
 is an error.
+
+The runner first opens one datasource transaction to ensure and read history.
+It then opens one independent datasource transaction per pending migration. The
+migration `up` method and its history insert use the same checked-out connection;
+a failure in either rolls back that migration and stops later versions, while
+previously committed versions remain applied. Driver and SQL exceptions keep
+their original types.
+
+Concurrent runners use database transactions and the `_lf_migrations.version`
+primary key as their coordination mechanism. There is no process-global lock.
+Two runners may both observe a version as pending, but at most one can commit
+the migration side effects together with its history row. This atomicity covers
+database work on dialects with transactional DDL; arbitrary external side
+effects performed by migration code are outside the transaction guarantee.
 
 The portable schema DSL covers create/drop table, scalar columns, generated
 primary keys, foreign keys, unique constraints, indexes, add column, and rename
@@ -680,6 +706,11 @@ the schema editor.
 
 Migrations are forward-only. `down`, automatic schema generation from entity
 metadata, automatic destructive changes, and source checksums are excluded.
+
+Schema, history select, and history insert statements participate in the same
+datasource listener stream as entity operations. `StatementObserver` belongs to
+the Data listener contract; `EntityManager` exposes only an internal callback
+bridge and has no dependency on migration or schema types.
 
 ## Application Autoconfiguration
 

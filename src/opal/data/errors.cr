@@ -162,6 +162,25 @@ module LF
       end
     end
 
+    class MigrationHistoryMismatchError < MigrationError
+      getter expected_name : String
+      getter applied_name : String
+
+      def initialize(
+        version : Int64,
+        @expected_name : String,
+        @applied_name : String,
+      )
+        super(
+          :history_mismatch,
+          version,
+          expected_name,
+          "Migration version #{version} is named #{expected_name.inspect}, " \
+          "but history contains #{applied_name.inspect}"
+        )
+      end
+    end
+
     class UnsupportedSchemaOperationError < Error
       getter dialect : String
       getter operation : String

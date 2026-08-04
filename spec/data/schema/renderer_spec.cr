@@ -7,7 +7,7 @@ private class SchemaRendererProbe < LF::Data::SchemaRenderer
 
   def execute(
     operation : LF::Data::Schema::Operation,
-    observer : LF::Data::SchemaRenderer::StatementObserver? = nil,
+    observer : LF::Data::StatementObserver? = nil,
   ) : Nil
     @operations << operation
   end

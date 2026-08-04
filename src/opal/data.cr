@@ -30,8 +30,10 @@ require "./data/sql/query_token"
 require "./data/sql/static_plan_compiler"
 require "./data/dialect_capability"
 require "./data/dialect"
+require "./data/migration_history"
 require "./data/entity_manager"
 require "./data/data_source"
+require "./data/migration_runner"
 
 module LF
   module Data
