@@ -107,5 +107,68 @@ module LF
         )
       end
     end
+
+    class MigrationError < Error
+      getter reason : Symbol
+      getter version : Int64?
+      getter migration_name : String?
+
+      def initialize(
+        @reason : Symbol,
+        @version : Int64? = nil,
+        @migration_name : String? = nil,
+        message : String? = nil,
+        cause : Exception? = nil,
+      )
+        super(
+          message || "Invalid migration: reason=#{reason}, " \
+                     "version=#{version.inspect}, name=#{migration_name.inspect}",
+          cause
+        )
+      end
+    end
+
+    class DuplicateMigrationVersionError < MigrationError
+      getter conflicting_name : String
+
+      def initialize(version : Int64, first_name : String, @conflicting_name : String)
+        super(
+          :duplicate_version,
+          version,
+          first_name,
+          "Duplicate migration version #{version}: " \
+          "#{first_name.inspect} conflicts with #{conflicting_name.inspect}"
+        )
+      end
+    end
+
+    class MigrationOrderError < MigrationError
+      getter previous_version : Int64
+      getter previous_name : String
+
+      def initialize(
+        @previous_version : Int64,
+        @previous_name : String,
+        version : Int64,
+        migration_name : String,
+      )
+        super(
+          :not_ascending,
+          version,
+          migration_name,
+          "Migration #{migration_name.inspect} version #{version} must be greater than " \
+          "#{previous_name.inspect} version #{previous_version}"
+        )
+      end
+    end
+
+    class UnsupportedSchemaOperationError < Error
+      getter dialect : String
+      getter operation : String
+
+      def initialize(@dialect : String, @operation : String)
+        super("Dialect #{dialect.inspect} does not support schema operation #{operation.inspect}")
+      end
+    end
   end
 end

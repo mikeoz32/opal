@@ -56,3 +56,5 @@ module LF
     end
   end
 end
+
+require "./sqlite/schema_renderer"
