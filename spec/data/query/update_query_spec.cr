@@ -66,7 +66,7 @@ describe LF::Data::Query::UpdateQuery do
   it "rejects pending per-entity operations of the same type" do
     with_bulk_query_source do |_database, source, listener|
       source.transaction do |manager|
-        pending = BulkQueryRecord.new(4_i64, "pending", true, 0_i64)
+        pending = BulkQueryRecord.new(4_i64, "pending", true)
         manager.persist(pending)
 
         error = expect_raises(LF::Data::EntityStateError) do

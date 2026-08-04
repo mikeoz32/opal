@@ -55,4 +55,20 @@ describe LF::Data::Error do
     detached_error.should be_a(LF::Data::EntityStateError)
     detached_error.state.should eq(LF::Data::EntityState::Detached)
   end
+
+  it "exposes optimistic lock context" do
+    error = LF::Data::OptimisticLockError.new(
+      :update,
+      "Todo",
+      7_i64,
+      3_i64
+    )
+
+    error.should be_a(LF::Data::Error)
+    error.operation.should eq(:update)
+    error.entity_name.should eq("Todo")
+    error.entity_id.should eq(7_i64)
+    error.expected_version.should eq(3_i64)
+    error.message.not_nil!.should contain("expected_version=3")
+  end
 end

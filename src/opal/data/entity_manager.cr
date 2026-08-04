@@ -86,7 +86,7 @@ module LF
           end
 
           if loaded = found
-            register_managed(loaded, database_id)
+            register_managed(loaded, database_id, loaded.__lf_version)
           end
           found
         rescue error
@@ -306,30 +306,73 @@ module LF
       # Framework internal: invoked by TypedTrackedEntity(T) to restore T.
       def __lf_execute_update(entity : T, entry : Internal::TypedTrackedEntity(T)) : Nil forall T
         plan = @dialect.update_plan(T)
-        result = execute_observed_exec(
-          StatementOperation::Update,
-          T.name,
-          plan.sql,
-          entity.__lf_update_args
-        )
-        if result.rows_affected == 0
-          raise EntityStateError.new(:update, T.name, entry.state)
-        end
+        {% if T.instance_vars.any? { |ivar| ivar.annotation(LF::Data::Version) } %}
+          expected_version = entry.loaded_version || raise(
+            EntityStateError.new(:update, T.name, entry.state)
+          )
+          result = execute_observed_exec(
+            StatementOperation::Update,
+            T.name,
+            plan.sql,
+            entity.__lf_update_args(expected_version)
+          )
+          if result.rows_affected == 0
+            raise OptimisticLockError.new(
+              :update,
+              T.name,
+              entry.database_id,
+              expected_version
+            )
+          end
+          next_version = expected_version + 1_i64
+          entry.loaded_version = next_version
+          entity.__lf_write_version(next_version)
+        {% else %}
+          result = execute_observed_exec(
+            StatementOperation::Update,
+            T.name,
+            plan.sql,
+            entity.__lf_update_args
+          )
+          if result.rows_affected == 0
+            raise EntityStateError.new(:update, T.name, entry.state)
+          end
+        {% end %}
         entry.state = EntityState::Managed
       end
 
       # Framework internal: invoked by TypedTrackedEntity(T) to restore T.
       def __lf_execute_delete(entity : T, entry : Internal::TypedTrackedEntity(T)) : Nil forall T
         plan = @dialect.delete_plan(T)
-        result = execute_observed_exec(
-          StatementOperation::Delete,
-          T.name,
-          plan.sql,
-          entity.__lf_delete_args
-        )
-        if result.rows_affected == 0
-          raise EntityStateError.new(:delete, T.name, entry.state)
-        end
+        {% if T.instance_vars.any? { |ivar| ivar.annotation(LF::Data::Version) } %}
+          expected_version = entry.loaded_version || raise(
+            EntityStateError.new(:delete, T.name, entry.state)
+          )
+          result = execute_observed_exec(
+            StatementOperation::Delete,
+            T.name,
+            plan.sql,
+            entity.__lf_delete_args(expected_version)
+          )
+          if result.rows_affected == 0
+            raise OptimisticLockError.new(
+              :delete,
+              T.name,
+              entry.database_id,
+              expected_version
+            )
+          end
+        {% else %}
+          result = execute_observed_exec(
+            StatementOperation::Delete,
+            T.name,
+            plan.sql,
+            entity.__lf_delete_args
+          )
+          if result.rows_affected == 0
+            raise EntityStateError.new(:delete, T.name, entry.state)
+          end
+        {% end %}
 
         if entry.has_database_id?
           @entries_by_identity.delete(Internal::EntityKey.new(T.name, entry.database_id))
@@ -449,6 +492,7 @@ module LF
 
         entry.database_id = database_id
         entry.has_database_id = true
+        entry.loaded_version = entry.entity.__lf_version
         entry.state = EntityState::Managed
         @entries_by_identity[key] = entry
       end
@@ -672,7 +716,7 @@ module LF
           return entry.as(Internal::TypedTrackedEntity(T)).entity
         end
 
-        register_managed(entity, database_id)
+        register_managed(entity, database_id, entity.__lf_version)
         entity
       end
 

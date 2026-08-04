@@ -15,6 +15,30 @@ uses compare-and-increment SQL during explicit flush.
 
 ---
 
+## Implementation Progress
+
+Tasks 1-5 are implemented:
+
+- entity compilation accepts at most one immutable, non-ignored, converter-free
+  `Int64` version field with a numeric zero ivar default;
+- ID/version overlap, multiple, nilable, writable, ignored, converted,
+  missing-default, and non-zero-default versions fail compilation;
+- INSERT binds the initial zero version, while UPDATE and DELETE bind the
+  manager-owned expected version directly after their existing arguments;
+- successful UPDATE advances manager and entity versions only after SQL
+  succeeds; stale UPDATE/DELETE raises typed `OptimisticLockError` and makes the
+  manager terminal through the existing flush failure path;
+- file-backed SQLite tests use two simultaneously alive EntityManagers on
+  separate connections and autocommit statement transactions to exercise a
+  real stale compare-and-set. Holding the second SQLite read transaction open
+  across the first commit is intentionally not used: SQLite rejects that
+  snapshot-to-writer upgrade with `database is locked` before row-count-based
+  optimistic detection can run, and Opal preserves that driver error;
+- explicit-flush regressions cover repeated batches, operation coalescing,
+  stop-on-stale behavior, and the in-memory rollback caveat.
+
+---
+
 ## Entity Contract
 
 ```crystal
@@ -105,7 +129,8 @@ same stale-error and manager-failure rules as UPDATE.
 
 - Create: `spec/data/optimistic_concurrency_spec.cr`
 
-Use a temporary file-backed SQLite database and two separate EntityManagers:
+Use a temporary file-backed SQLite database and two separate EntityManagers on
+separate connections:
 
 1. both load version zero;
 2. first updates and commits version one;
@@ -114,8 +139,12 @@ Use a temporary file-backed SQLite database and two separate EntityManagers:
 5. repeat with stale delete;
 6. non-versioned entities retain existing row-count behavior.
 
-Do not simulate this by manually changing the version column in the same
-manager only; test independent transactions.
+Do not simulate this only by manually changing the version column in the same
+manager. For SQLite, use independent autocommit statement transactions so both
+managers can load version zero before the first write. An overlapping stale
+SQLite read transaction cannot be upgraded after another writer commits and
+correctly remains a native `database is locked` driver case rather than an
+`OptimisticLockError`.
 
 ## Task 5: Check Explicit Flush Edge Cases
 

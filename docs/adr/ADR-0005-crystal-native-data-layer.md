@@ -216,8 +216,9 @@ generated framework-internal persistence method. Composite IDs are not
 supported in v1.
 
 An optional `LF::Data::Version` field is a non-nil `Int64` getter initialized to
-zero for new entities. Application code does not receive a public version
-setter. The manager writes it through generated internal code.
+zero for new entities. It cannot also be the ID, be ignored, or define a
+converter. Application code does not receive a public version setter. The
+manager writes it through generated internal code.
 
 Entity hydration does not call the domain constructor. The macro generates a
 dedicated result-set constructor that allocates and initializes persistent
@@ -346,7 +347,9 @@ On block or flush exception:
 
 The manager cannot restore arbitrary user mutations after rollback. Generated
 ID and version changes are therefore applied only after their statement
-succeeds, but an application must discard entities from a rolled-back manager.
+succeeds. A later transaction rollback can still occur after a successful
+explicit flush has advanced the in-memory version, so an application must
+discard every entity from a rolled-back manager.
 
 An explicit `flush` is required when a generated ID or database-visible state
 is needed before block completion. Repeated successful flushes are allowed.
@@ -377,6 +380,12 @@ DELETE also constrains ID and version. Exactly one affected row is required.
 Zero affected rows raise `LF::Data::OptimisticLockError`, mark the manager
 failed, and cause transaction rollback. A successful UPDATE increments both
 database and in-memory versions.
+
+SQLite may reject an overlapping stale read transaction when it attempts to
+upgrade to a writer after another connection commits. That native
+`database is locked` failure happens before compare-and-set row counts are
+available and remains a driver error; Opal does not relabel it as an optimistic
+conflict.
 
 ## Typed Query Model
 
