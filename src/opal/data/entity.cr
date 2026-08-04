@@ -83,16 +83,32 @@ module LF
               {% raise "#{entity} field #{id_ivar.name} assigned ID must not be nilable" %}
             {% end %}
 
-            {% version_ivars = persistent_ivars.select { |ivar| ivar.annotation(LF::Data::Version) } %}
+            {% version_ivars = entity.instance_vars.select { |ivar| ivar.annotation(LF::Data::Version) } %}
             {% if version_ivars.size > 1 %}
               {% names = version_ivars.map(&.name.stringify).join(", ") %}
               {% raise "#{entity} defines multiple LF::Data::Version fields: #{names}" %}
             {% end %}
             {% if version_ivars.size == 1 %}
               {% version_ivar = version_ivars.first %}
+              {% version_column = version_ivar.annotation(LF::Data::Column) %}
+              {% if version_column && version_column[:ignore] %}
+                {% raise "#{entity} field #{version_ivar.name} version must not be ignored" %}
+              {% end %}
+              {% if version_column && version_column[:converter] %}
+                {% raise "#{entity} field #{version_ivar.name} version must not define a converter" %}
+              {% end %}
+              {% if version_ivar.annotation(LF::Data::Id) %}
+                {% raise "#{entity} field #{version_ivar.name} version cannot also be the ID" %}
+              {% end %}
               {% version_type = version_ivar.type.resolve %}
               {% unless version_type.stringify == "Int64" %}
                 {% raise "#{entity} field #{version_ivar.name} version must be non-nil Int64, not #{version_type}" %}
+              {% end %}
+              {% version_default = version_ivar.default_value %}
+              {% unless version_ivar.has_default_value? &&
+                          version_default.is_a?(NumberLiteral) &&
+                          version_default.zero? %}
+                {% raise "#{entity} field #{version_ivar.name} version must default to zero" %}
               {% end %}
               {% setter_name = "#{version_ivar.name}=" %}
               {% if entity.methods.any? { |method| method.name.stringify == setter_name } %}
@@ -264,7 +280,7 @@ module LF
                 {% id_annotation = ivar.annotation(LF::Data::Id) %}
                 {% ignored = column_annotation && column_annotation[:ignore] %}
                 {% generated_id = id_annotation && id_annotation[:generated] %}
-                {% unless ignored || generated_id || ivar.annotation(LF::Data::Version) %}
+                {% unless ignored || generated_id %}
                   {% if converter = column_annotation && column_annotation[:converter] %}
                     {% if ivar.type.resolve.nilable? %}
                       @{{ivar.name}}.nil? ? nil : LF::Data::Converter.dump(@{{ivar.name}}.not_nil!, {{converter}}),
@@ -280,7 +296,7 @@ module LF
             {% end %}
           end
 
-          def __lf_update_args
+          private def __lf_update_values
             {% begin %}
             {% id_ivar = @type.instance_vars.find { |ivar| ivar.annotation(LF::Data::Id) } %}
             {% id_column_annotation = id_ivar.annotation(LF::Data::Column) %}
@@ -313,6 +329,20 @@ module LF
             {% end %}
           end
 
+          def __lf_update_args
+            {% if @type.instance_vars.any? { |ivar| ivar.annotation(LF::Data::Version) } %}
+              {% raise "#{@type} versioned UPDATE requires an expected version" %}
+            {% end %}
+            __lf_update_values
+          end
+
+          def __lf_update_args(expected_version : Int64)
+            {% unless @type.instance_vars.any? { |ivar| ivar.annotation(LF::Data::Version) } %}
+              {% raise "#{@type} does not have a version field" %}
+            {% end %}
+            __lf_update_values + {expected_version}
+          end
+
           def __lf_delete_args
             {% begin %}
             {% id_ivar = @type.instance_vars.find { |ivar| ivar.annotation(LF::Data::Id) } %}
@@ -328,6 +358,14 @@ module LF
                 @{{id_ivar.name}}
               {% end %}
             )
+            {% end %}
+          end
+
+          def __lf_delete_args(expected_version : Int64)
+            {% begin %}
+              {% version_ivar = @type.instance_vars.find { |ivar| ivar.annotation(LF::Data::Version) } %}
+              {% raise "#{@type} does not have a version field" unless version_ivar %}
+              __lf_delete_args + {expected_version}
             {% end %}
           end
 
@@ -356,6 +394,26 @@ module LF
               {% else %}
                 @{{id_ivar.name}} = value
               {% end %}
+              nil
+            {% end %}
+          end
+
+          def __lf_version : Int64?
+            {% begin %}
+              {% version_ivar = @type.instance_vars.find { |ivar| ivar.annotation(LF::Data::Version) } %}
+              {% if version_ivar %}
+                @{{version_ivar.name}}
+              {% else %}
+                nil
+              {% end %}
+            {% end %}
+          end
+
+          def __lf_write_version(value : Int64) : Nil
+            {% begin %}
+              {% version_ivar = @type.instance_vars.find { |ivar| ivar.annotation(LF::Data::Version) } %}
+              {% raise "#{@type} does not have a version field" unless version_ivar %}
+              @{{version_ivar.name}} = value
               nil
             {% end %}
           end

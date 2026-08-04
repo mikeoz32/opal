@@ -87,5 +87,25 @@ module LF
         super("Invalid query #{component}: value=#{value}")
       end
     end
+
+    class OptimisticLockError < Error
+      getter operation : Symbol
+      getter entity_name : String
+      getter entity_id : DB::Any
+      getter expected_version : Int64
+
+      def initialize(
+        @operation : Symbol,
+        @entity_name : String,
+        @entity_id : DB::Any,
+        @expected_version : Int64,
+      )
+        super(
+          "Optimistic lock failed: operation=#{operation}, " \
+          "entity=#{entity_name}, id=#{entity_id.inspect}, " \
+          "expected_version=#{expected_version}"
+        )
+      end
+    end
   end
 end

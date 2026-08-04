@@ -18,6 +18,14 @@ describe LF::Data::Entity do
     result[:error].should eq("")
   end
 
+  it "installs on a class with one immutable Int64 version initialized to zero" do
+    fixture = File.expand_path("../fixtures/data/entities/valid_version.cr", __DIR__)
+    result = LF::DataSpecSupport.compile_fixture(fixture)
+
+    result[:status].success?.should be_true
+    result[:error].should eq("")
+  end
+
   it "does not discover entities globally" do
     source = File.read(File.expand_path("../../src/opal/data/entity.cr", __DIR__))
 
@@ -48,7 +56,14 @@ describe LF::Data::Entity do
     {"duplicate_columns.cr", "DuplicateColumnsEntity", "column value"},
     {"invalid_generated_id.cr", "InvalidGeneratedIdEntity", "field id"},
     {"invalid_version_type.cr", "InvalidVersionTypeEntity", "field version"},
+    {"nilable_version.cr", "NilableVersionEntity", "non-nil Int64"},
+    {"multiple_versions.cr", "MultipleVersionsEntity", "first_version, second_version"},
     {"writable_version.cr", "WritableVersionEntity", "public setter version="},
+    {"version_on_id.cr", "VersionOnIdEntity", "cannot also be the ID"},
+    {"ignored_version.cr", "IgnoredVersionEntity", "version must not be ignored"},
+    {"version_without_default.cr", "VersionWithoutDefaultEntity", "default to zero"},
+    {"nonzero_version_default.cr", "NonzeroVersionDefaultEntity", "default to zero"},
+    {"version_converter.cr", "VersionConverterEntity", "must not define a converter"},
     {"unsupported_direct_type.cr", "UnsupportedDirectTypeEntity", "field amount"},
     {"invalid_table_name.cr", "InvalidTableNameEntity", "table name"},
     {"invalid_column_name.cr", "InvalidColumnNameEntity", "column name for field payload"},

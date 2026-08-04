@@ -12,9 +12,9 @@ module ReturningProbeSpec
     getter name : String
 
     @[LF::Data::Version]
-    getter version : Int64
+    getter version : Int64 = 0_i64
 
-    def initialize(@id, @name, @version)
+    def initialize(@id, @name)
     end
   end
 

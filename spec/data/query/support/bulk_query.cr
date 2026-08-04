@@ -14,9 +14,9 @@ class BulkQueryRecord
   property active : Bool
 
   @[LF::Data::Version]
-  getter version : Int64
+  getter version : Int64 = 0_i64
 
-  def initialize(@id, @title, @active, @version)
+  def initialize(@id, @title, @active)
   end
 end
 

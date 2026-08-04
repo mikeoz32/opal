@@ -1,13 +1,13 @@
 require "../../../../src/opal/data"
 
-class WritableVersionEntity
+class ValidVersionEntity
   include LF::Data::Entity
 
   @[LF::Data::Id]
   getter id : Int64
 
   @[LF::Data::Version]
-  property version : Int64 = 0_i64
+  getter version : Int64 = 0_i64
 
   def initialize(@id : Int64)
   end
