@@ -18,6 +18,171 @@ private def compile_fixture(path : String) : NamedTuple(status: Process::Status,
 end
 
 describe "application compiler fixtures" do
+  it "accepts a valid conditional application autoconfiguration" do
+    fixture = File.expand_path(
+      "fixtures/application/autoconfiguration_valid.cr",
+      __DIR__
+    )
+    result = compile_fixture(fixture)
+
+    result[:status].success?.should be_true
+    result[:error].should eq("")
+  end
+
+  it "rejects a non-integer autoconfiguration priority" do
+    fixture = File.expand_path(
+      "fixtures/application/autoconfiguration_invalid_priority.cr",
+      __DIR__
+    )
+    result = compile_fixture(fixture)
+
+    result[:status].success?.should be_false
+    result[:error].should contain(
+      "Invalid application autoconfiguration priority for InvalidPriorityExtension: " \
+      "expected integer literal"
+    )
+  end
+
+  it "rejects an explicit nil autoconfiguration priority" do
+    fixture = File.expand_path(
+      "fixtures/application/autoconfiguration_nil_priority.cr",
+      __DIR__
+    )
+    result = compile_fixture(fixture)
+
+    result[:status].success?.should be_false
+    result[:error].should contain(
+      "Invalid application autoconfiguration priority for NilPriorityExtension: " \
+      "expected integer literal"
+    )
+  end
+
+  it "rejects an explicit false autoconfiguration priority" do
+    fixture = File.expand_path(
+      "fixtures/application/autoconfiguration_false_priority.cr",
+      __DIR__
+    )
+    result = compile_fixture(fixture)
+
+    result[:status].success?.should be_false
+    result[:error].should contain(
+      "Invalid application autoconfiguration priority for FalsePriorityExtension: " \
+      "expected integer literal"
+    )
+  end
+
+  it "requires an enabled_by marker on autoconfiguration descriptors" do
+    fixture = File.expand_path(
+      "fixtures/application/autoconfiguration_missing_marker.cr",
+      __DIR__
+    )
+    result = compile_fixture(fixture)
+
+    result[:status].success?.should be_false
+    result[:error].should contain(
+      "Invalid application autoconfiguration enabled_by for MissingMarkerExtension: " \
+      "attribute is required"
+    )
+  end
+
+  it "requires enabled_by to resolve to an existing annotation" do
+    fixture = File.expand_path(
+      "fixtures/application/autoconfiguration_unknown_marker.cr",
+      __DIR__
+    )
+    result = compile_fixture(fixture)
+
+    result[:status].success?.should be_false
+    result[:error].should contain(
+      "Invalid application autoconfiguration enabled_by for UnknownMarkerExtension: " \
+      "expected annotation type"
+    )
+  end
+
+  it "rejects a non-annotation enabled_by type" do
+    fixture = File.expand_path(
+      "fixtures/application/autoconfiguration_non_annotation_marker.cr",
+      __DIR__
+    )
+    result = compile_fixture(fixture)
+
+    result[:status].success?.should be_false
+    result[:error].should contain(
+      "Invalid application autoconfiguration enabled_by for NonAnnotationMarkerExtension: " \
+      "expected annotation type"
+    )
+  end
+
+  it "requires a zero-argument autoconfiguration constructor" do
+    fixture = File.expand_path(
+      "fixtures/application/autoconfiguration_requires_arguments.cr",
+      __DIR__
+    )
+    result = compile_fixture(fixture)
+
+    result[:status].success?.should be_false
+    result[:error].should contain(
+      "Invalid application autoconfiguration constructor for " \
+      "RequiresArgumentsExtension: expected zero-argument initialize"
+    )
+  end
+
+  it "validates an inherited autoconfiguration constructor" do
+    fixture = File.expand_path(
+      "fixtures/application/autoconfiguration_inherited_constructor.cr",
+      __DIR__
+    )
+    result = compile_fixture(fixture)
+
+    result[:status].success?.should be_false
+    result[:error].should contain(
+      "Invalid application autoconfiguration constructor for " \
+      "InheritedRequiresArgumentsExtension: expected zero-argument initialize"
+    )
+  end
+
+  it "rejects a typed splat autoconfiguration constructor" do
+    fixture = File.expand_path(
+      "fixtures/application/autoconfiguration_typed_splat_constructor.cr",
+      __DIR__
+    )
+    result = compile_fixture(fixture)
+
+    result[:status].success?.should be_false
+    result[:error].should contain(
+      "Invalid application autoconfiguration constructor for " \
+      "TypedSplatConstructorExtension: expected zero-argument initialize"
+    )
+  end
+
+  it "requires an autoconfiguration descriptor to implement ApplicationExtension" do
+    fixture = File.expand_path(
+      "fixtures/application/autoconfiguration_not_extension.cr",
+      __DIR__
+    )
+    result = compile_fixture(fixture)
+
+    result[:status].success?.should be_false
+    result[:error].should contain(
+      "Invalid application autoconfiguration type for NotAnApplicationExtension: " \
+      "must include LF::ApplicationExtension"
+    )
+  end
+
+  it "requires a concrete autoconfiguration extension" do
+    fixture = File.expand_path(
+      "fixtures/application/autoconfiguration_abstract_extension.cr",
+      __DIR__
+    )
+    result = compile_fixture(fixture)
+
+    result[:status].success?.should be_false
+    result[:error].should contain(
+      "Invalid application autoconfiguration type for AbstractFixtureExtension: " \
+      "must be concrete"
+    )
+  end
+
   it "keeps standalone DI executables valid without an application marker" do
     fixture = File.expand_path("fixtures/application/standalone_di.cr", __DIR__)
     result = compile_fixture(fixture)
