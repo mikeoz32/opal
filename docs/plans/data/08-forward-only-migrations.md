@@ -134,6 +134,10 @@ SQLite capability policy:
 - raw SQL executes exactly as supplied and is explicitly named in listener
   events.
 
+`create_table(..., if_not_exists: true)` applies to the table and indexes emitted
+by that create-table operation. It exists for idempotent infrastructure such as
+the migration history table; ordinary migration DDL remains strict by default.
+
 Never emulate unsupported destructive alteration by silently rebuilding a
 table in v1.
 
@@ -161,6 +165,11 @@ History behavior:
 
 No source checksum is stored in v1.
 
+History renders identifiers and placeholders through the abstract `Dialect`.
+Its table DDL goes through `SchemaEditor`; Data core does not contain SQLite SQL.
+History schema/select/insert statements use the datasource statement observer
+when one is present, with a direct execution fast path when it is absent.
+
 ## Task 6: Implement MigrationRunner
 
 **Files**
@@ -185,6 +194,11 @@ Test fresh run, repeated no-op, multiple pending versions, failure rollback,
 history atomicity, empty set, migration throwing before SQL, and DB error
 preservation.
 
+`EntityManager#__lf_statement_observer` is a generic internal bridge from SQL
+owned by Data extensions to the datasource listener dispatcher. It references
+only `StatementCompletionEvent`; EntityManager does not depend on migrations or
+schema rendering.
+
 ## Task 7: Test Concurrent Runners
 
 Use two DataSources against one temporary SQLite file. Coordinate two fibers so
@@ -195,6 +209,11 @@ may leave a partial schema or duplicate history row.
 Do not add process-global migration locks. Database constraints and
 transactions remain the coordination mechanism.
 
+The concurrency regression lives in
+`spec/data/migration_runner_concurrency_spec.cr`. It uses a barrier inside
+`Migration#up` so two runners have both observed the same version as pending
+before either executes its side effect.
+
 ## Verification
 
 ```bash
@@ -204,7 +223,8 @@ CRYSTAL_CACHE_DIR=/tmp/opal-crystal-cache crystal spec \
   spec/data/schema/renderer_spec.cr \
   spec/data/dialects/sqlite/schema_renderer_spec.cr \
   spec/data/migration_history_spec.cr \
-  spec/data/migration_runner_spec.cr --no-color
+  spec/data/migration_runner_spec.cr \
+  spec/data/migration_runner_concurrency_spec.cr --no-color
 CRYSTAL_CACHE_DIR=/tmp/opal-crystal-cache crystal spec --no-color
 git diff --check
 ```

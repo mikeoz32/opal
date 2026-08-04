@@ -28,6 +28,8 @@ module LF
       rows_affected : Int64?,
       error : Exception?
 
+    alias StatementObserver = Proc(StatementCompletionEvent, Nil)
+
     module Listener
       def on_transaction_begin(event : TransactionBeginEvent) : Nil
       end

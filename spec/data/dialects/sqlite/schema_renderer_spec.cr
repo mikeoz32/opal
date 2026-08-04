@@ -17,6 +17,29 @@ private def sqlite_schema_editor(
 end
 
 describe LF::Data::Dialects::SQLite::SchemaRenderer do
+  it "creates a table idempotently when requested" do
+    LF::DataSpecSupport::SQLiteDatabase.with_memory do |database|
+      database.using_connection do |connection|
+        events = [] of LF::Data::StatementCompletionEvent
+        schema = sqlite_schema_editor(connection, events)
+
+        2.times do
+          schema.create_table("settings", if_not_exists: true) do |table|
+            table.string("name", null: false)
+            table.index("idx_settings_name", "name")
+          end
+        end
+
+        events.map(&.sql).should eq([
+          %(CREATE TABLE IF NOT EXISTS "settings" ("name" VARCHAR(255) NOT NULL)),
+          %(CREATE INDEX IF NOT EXISTS "idx_settings_name" ON "settings" ("name")),
+          %(CREATE TABLE IF NOT EXISTS "settings" ("name" VARCHAR(255) NOT NULL)),
+          %(CREATE INDEX IF NOT EXISTS "idx_settings_name" ON "settings" ("name")),
+        ])
+      end
+    end
+  end
+
   it "creates a table with portable columns, constraints, defaults, and indexes" do
     LF::DataSpecSupport::SQLiteDatabase.with_memory do |database|
       database.using_connection do |connection|

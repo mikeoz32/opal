@@ -53,7 +53,9 @@ module LF
         unique_constraints : Array(UniqueDefinition),
         indexes : Array(IndexDefinition)
 
-      record CreateTable, table : TableDefinition
+      record CreateTable,
+        table : TableDefinition,
+        if_not_exists : Bool = false
       record DropTable, table_name : String
       record AddColumn, table_name : String, column : ColumnDefinition
       record RenameColumn, table_name : String, from : String, to : String

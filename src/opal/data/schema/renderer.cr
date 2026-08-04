@@ -1,8 +1,6 @@
 module LF
   module Data
     abstract class SchemaRenderer
-      alias StatementObserver = Proc(StatementCompletionEvent, Nil)
-
       getter connection : DB::Connection
 
       def initialize(@connection : DB::Connection)
