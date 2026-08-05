@@ -38,6 +38,12 @@ module LF
           StaticSQLPolicy::PLACEHOLDER_TOKEN
         end
 
+        def setup_connection(connection : DB::Connection) : Nil
+          connection.exec("PRAGMA foreign_keys = ON")
+          value = connection.scalar("PRAGMA foreign_keys").as(Int64)
+          raise ForeignKeySetupError.new(name, value) unless value == 1_i64
+        end
+
         def offset_without_limit(placeholder : String) : String
           "LIMIT -1 OFFSET #{placeholder}"
         end

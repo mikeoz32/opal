@@ -289,6 +289,25 @@ shutdown, and state/error contracts; it does not expose the mutable root
 container. Application extensions receive a controlled `LF::ApplicationContext`
 for bean registration and scope creation.
 
+## Data Transaction Rollback
+
+`LF::Data::EntityManager` is transaction-local. If a transaction fails after an
+explicit `flush`, generated IDs or optimistic-lock versions may already have
+been written to in-memory entities even though the database rolled back.
+Discard every entity obtained from the failed manager and do not reuse it:
+
+```crystal
+begin
+  source.transaction do |manager|
+    manager.persist(entity)
+    manager.flush
+    raise "abort"
+  end
+rescue
+  # `entity` belongs to the failed manager and must be discarded.
+end
+```
+
 ## Configuration
 
 Application bootstrap eagerly registers one immutable `LF::ConfigService`

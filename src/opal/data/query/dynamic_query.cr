@@ -34,6 +34,14 @@ module LF
           self
         end
 
+        def limit_value : Int64?
+          @limit
+        end
+
+        def offset_value : Int64?
+          @offset
+        end
+
         def to_a : Array(EntityType)
           @manager.__lf_dynamic_select_to_a(self)
         end

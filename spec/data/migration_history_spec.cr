@@ -86,7 +86,7 @@ describe LF::Data::MigrationHistory do
     end
   end
 
-  it "retains applied versions absent from the current migration set" do
+  it "rejects applied versions absent from the current migration set" do
     LF::DataSpecSupport::SQLiteDatabase.with_memory do |database|
       database.using_connection do |connection|
         history = LF::Data::MigrationHistory.new(
@@ -98,8 +98,12 @@ describe LF::Data::MigrationHistory do
         history.ensure_table
         history.record(old)
 
-        history.pending(LF::Data::MigrationSet.new(current))
-          .map(&.version).should eq([10_i64])
+        error = expect_raises(LF::Data::UnknownAppliedMigrationError) do
+          history.pending(LF::Data::MigrationSet.new(current))
+        end
+
+        error.version.should eq(5_i64)
+        error.applied_name.should eq("old")
         history.load.map(&.version).should eq([5_i64])
       end
     end

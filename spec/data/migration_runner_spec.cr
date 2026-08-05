@@ -23,6 +23,20 @@ end
 private class RunnerSpecFailure < Exception
 end
 
+private class MutableIdentityMigration < LF::Data::Migration
+  property version : Int64
+  property name : String
+
+  def initialize(@version : Int64, @name : String)
+  end
+
+  def up(schema : LF::Data::SchemaEditor) : Nil
+    schema.create_table("mutable_identity") { |table| table.generated_id("id") }
+    @version = 999_i64
+    @name = "mutated"
+  end
+end
+
 private class RunnerSpecListener
   include LF::Data::Listener
 
@@ -123,6 +137,26 @@ describe LF::Data::MigrationRunner do
 
       migration.runs.should eq(1)
       database.scalar("SELECT count(*) FROM _lf_migrations").should eq(1_i64)
+    end
+  end
+
+  it "records the validated migration identity snapshot" do
+    LF::DataSpecSupport::SQLiteDatabase.with_memory do |database|
+      source = LF::Data::DataSource.new(
+        database,
+        dialect: LF::Data::Dialects::SQLite.new
+      )
+      migration = MutableIdentityMigration.new(10_i64, "original")
+
+      LF::Data::MigrationRunner.new(source).run(
+        LF::Data::MigrationSet.new(migration)
+      )
+
+      database.query_one(
+        "SELECT version, name FROM _lf_migrations"
+      ) do |result|
+        {result.read(Int64), result.read(String)}
+      end.should eq({10_i64, "original"})
     end
   end
 

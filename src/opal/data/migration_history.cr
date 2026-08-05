@@ -26,13 +26,21 @@ module LF
       end
 
       def record(migration : Migration, applied_at : Time = Time.utc) : Nil
+        record(migration.version, migration.name, applied_at)
+      end
+
+      def record(migration : PlannedMigration, applied_at : Time = Time.utc) : Nil
+        record(migration.version, migration.name, applied_at)
+      end
+
+      def record(version : Int64, name : String, applied_at : Time = Time.utc) : Nil
         columns = %w(version name applied_at).map { |column| quote(column) }
         placeholders = (1..columns.size).map { |position| @dialect.placeholder(position) }
         sql = "INSERT INTO #{quote(TABLE_NAME)} (#{columns.join(", ")}) " \
               "VALUES (#{placeholders.join(", ")})"
         arguments = {
-          migration.version,
-          migration.name,
+          version,
+          name,
           applied_at.to_rfc3339,
         }
         return @connection.exec(sql, *arguments) unless @observer
@@ -108,10 +116,20 @@ module LF
         rows
       end
 
-      def pending(migrations : MigrationSet) : Array(Migration)
+      def pending(migrations : MigrationSet) : Array(PlannedMigration)
         migrations.validate!
         applied = load.to_h { |entry| {entry.version, entry} }
-        pending = [] of Migration
+        known_versions = {} of Int64 => String
+        migrations.each do |migration|
+          known_versions[migration.version] = migration.name
+        end
+        applied.each do |version, entry|
+          unless known_versions.has_key?(version)
+            raise UnknownAppliedMigrationError.new(version, entry.name)
+          end
+        end
+
+        pending = [] of PlannedMigration
 
         migrations.each do |migration|
           if entry = applied[migration.version]?
@@ -123,7 +141,11 @@ module LF
               )
             end
           else
-            pending << migration
+            pending << PlannedMigration.new(
+              migration.version,
+              migration.name,
+              migration
+            )
           end
         end
 
