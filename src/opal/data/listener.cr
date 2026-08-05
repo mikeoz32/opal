@@ -5,6 +5,14 @@ module LF
       RolledBack
     end
 
+    # Framework-internal state used to distinguish a rollback from a
+    # successful commit that later failed during manager cleanup.
+    enum TransactionFinalization
+      Committed
+      RolledBack
+      CleanupFailed
+    end
+
     enum StatementOperation
       Select
       Insert

@@ -41,7 +41,7 @@ module LF
         arguments = {
           version,
           name,
-          applied_at.to_rfc3339,
+          applied_at,
         }
         return @connection.exec(sql, *arguments) unless @observer
 
@@ -109,7 +109,7 @@ module LF
             entries << Entry.new(
               result.read(Int64),
               result.read(String),
-              Time.parse_rfc3339(result.read(String))
+              result.read(Time)
             )
           end
         end
