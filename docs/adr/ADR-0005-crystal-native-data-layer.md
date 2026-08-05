@@ -110,6 +110,9 @@ Application integration additionally requires:
 require "opal/autoconfig/data"
 ```
 
+That adapter belongs to the separate application-bootstrap layer and is not
+part of the standalone Data core package described by this ADR.
+
 Manual SQLite use additionally loads the concrete dialect:
 
 ```crystal

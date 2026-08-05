@@ -1,6 +1,7 @@
 require "./spec_helper"
 require "../../src/opal/data/dialects/sqlite"
 require "./support/sqlite_database"
+require "./support/probe_entity_manager"
 
 private class RunnerSpecMigration < LF::Data::Migration
   property version : Int64
@@ -349,6 +350,94 @@ describe LF::Data::MigrationRunner do
       listener.statements.last.operation.should eq(LF::Data::StatementOperation::Schema)
       listener.statements.last.error.should be(error)
       database.scalar("SELECT count(*) FROM _lf_migrations").should eq(0_i64)
+    end
+  end
+
+  it "does not reconcile a post-commit cleanup failure" do
+    LF::DataSpecSupport::SQLiteDatabase.with_memory do |database|
+      database.exec("CREATE TABLE cleanup_failure_effects (value TEXT NOT NULL)")
+      source = LF::DataSpecSupport::ProbeDataSource.new(
+        database,
+        dialect: LF::Data::Dialects::SQLite.new
+      )
+      close_calls = 0
+      failure = RunnerSpecFailure.new("cleanup failed")
+      source.close_hook = ->(_manager : LF::DataSpecSupport::ProbeEntityManager) {
+        close_calls += 1
+        raise failure if close_calls == 2
+      }
+      migration = RunnerSpecMigration.new(10_i64, "cleanup_failure") do |schema|
+        schema.raw(
+          "cleanup_failure_effect",
+          "INSERT INTO cleanup_failure_effects (value) VALUES ('applied')"
+        )
+      end
+
+      raised = expect_raises(RunnerSpecFailure) do
+        LF::Data::MigrationRunner.new(source).run(
+          LF::Data::MigrationSet.new(migration)
+        )
+      end
+
+      raised.should be(failure)
+      migration.runs.should eq(1)
+      database.scalar("SELECT count(*) FROM cleanup_failure_effects").should eq(1_i64)
+      database.scalar("SELECT count(*) FROM _lf_migrations WHERE version = 10")
+        .should eq(1_i64)
+    ensure
+      source.try &.close
+    end
+  end
+
+  it "classifies only sqlite unique history-record conflicts" do
+    path = LF::DataSpecSupport::TempPath.database
+    url = "sqlite3:#{path}?busy_timeout=0"
+    database = DB.open(url)
+    locker = DB.open(url)
+    begin
+      source = LF::Data::DataSource.new(
+        database,
+        dialect: LF::Data::Dialects::SQLite.new
+      )
+      runner = LF::Data::MigrationRunner.new(source)
+      database.using_connection do |connection|
+        history = LF::Data::MigrationHistory.new(
+          connection,
+          LF::Data::Dialects::SQLite.new
+        )
+        history.ensure_table
+
+        locker.exec("BEGIN IMMEDIATE")
+        busy = expect_raises(SQLite3::Exception) do
+          history.record(10_i64, "busy")
+        end
+        runner.__lf_history_record_conflict?(busy).should be_false
+        locker.exec("ROLLBACK")
+
+        conflict = expect_raises(SQLite3::Exception) do
+          history.record(10_i64, "first")
+          history.record(10_i64, "second")
+        end
+
+        runner.__lf_history_record_conflict?(conflict).should be_true
+      end
+    ensure
+      begin
+        source.try &.close
+      rescue SQLite3::Exception
+        # sqlite3 repeats a cached failed statement error while finalizing the pool.
+      end
+      begin
+        locker.close
+      rescue SQLite3::Exception
+        # sqlite3 repeats a cached failed statement error while finalizing the pool.
+      end
+      begin
+        database.close
+      rescue SQLite3::Exception
+        # sqlite3 repeats a cached failed statement error while finalizing the pool.
+      end
+      LF::DataSpecSupport::TempPath.cleanup_database(path) if path
     end
   end
 

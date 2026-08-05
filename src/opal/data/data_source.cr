@@ -53,10 +53,22 @@ module LF
       def transaction(& : EntityManager -> T) : T forall T
         ensure_open(:transaction)
 
+        __lf_transaction do |manager|
+          yield manager
+        end
+      end
+
+      # Framework internal: migration reconciliation needs to distinguish a
+      # rollback from a successful commit that failed during manager cleanup.
+      def __lf_transaction(
+        completion : Proc(TransactionFinalization, Nil)? = nil,
+        & : EntityManager -> T
+      ) : T forall T
         observed = !@dispatcher.empty?
         started_at = Time.instant if observed
         @dispatcher.transaction_begin(TransactionBeginEvent.new) if observed
         outcome = TransactionOutcome::RolledBack
+        finalization = TransactionFinalization::RolledBack
 
         begin
           result = @database.using_connection do |connection|
@@ -79,27 +91,31 @@ module LF
 
               raise rollback_error.not_nil! if rollback_error
               outcome = TransactionOutcome::Committed
+              finalization = TransactionFinalization::Committed
               wrapped.not_nil!.value
             rescue error
               primary_error = error
+              finalization = TransactionFinalization::RolledBack
               raise error
             ensure
               begin
                 manager.close
               rescue close_error
+                finalization = primary_error ? TransactionFinalization::RolledBack : TransactionFinalization::CleanupFailed
                 raise close_error unless primary_error
               end
             end
           end
 
-          result
         ensure
+          completion.try &.call(finalization)
           if started_at
             @dispatcher.transaction_completion(
               TransactionCompletionEvent.new(outcome, Time.instant - started_at)
             )
           end
         end
+        result
       end
 
       protected def build_entity_manager(
@@ -115,6 +131,7 @@ module LF
       def __lf_migration_applied?(version : Int64, name : String) : Bool
         ensure_open(:migration_reconciliation)
         @database.using_connection do |connection|
+          @dialect.setup_connection(connection)
           history = MigrationHistory.new(connection, @dialect)
           entry = history.load.find { |candidate| candidate.version == version }
           if entry

@@ -26,8 +26,10 @@ module LF
         end
 
         pending.each do |planned|
+          finalization = TransactionFinalization::RolledBack
+          history_record_failed = false
           begin
-            @source.transaction do |manager|
+            @source.__lf_transaction(->(value : TransactionFinalization) { finalization = value; nil }) do |manager|
               connection = manager.connection
               observer = manager.__lf_statement_observer
               history = MigrationHistory.new(connection, @source.dialect, observer)
@@ -36,12 +38,32 @@ module LF
                 observer
               )
               planned.migration.up(schema)
-              history.record(planned)
+              begin
+                history.record(planned)
+              rescue error
+                history_record_failed = true
+                raise error
+              end
             end
           rescue error
-            raise error unless @source.__lf_migration_applied?(planned.version, planned.name)
+              if history_record_failed &&
+               finalization == TransactionFinalization::RolledBack &&
+               __lf_history_record_conflict?(error) &&
+               @source.__lf_migration_applied?(planned.version, planned.name)
+              next
+            end
+            raise error
           end
         end
+      end
+
+      def __lf_history_record_conflict?(error : Exception) : Bool
+        return false unless @source.dialect.name == "sqlite"
+        return false unless error.class.name == "SQLite3::Exception"
+
+        message = error.message || error.to_s
+        message.includes?("UNIQUE constraint failed: #{MigrationHistory::TABLE_NAME}.version") ||
+          message.includes?("PRIMARY KEY")
       end
     end
   end
