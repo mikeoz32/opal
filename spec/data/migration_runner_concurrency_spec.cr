@@ -81,10 +81,8 @@ describe "concurrent migration runners" do
       end
     end.to_a
 
-    results.count(&.nil?).should eq(1)
-    errors = results.compact
-    errors.size.should eq(1)
-    errors.first.should be_a(SQLite3::Exception)
+    results.count(&.nil?).should eq(2)
+    results.compact.should be_empty
 
     DB.open(url) do |verification_database|
       verification_database.scalar(

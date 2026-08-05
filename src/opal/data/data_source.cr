@@ -15,12 +15,23 @@ module LF
         dialect : Dialect,
         listeners : Enumerable(Listener)? = nil,
       ) : self
-        new(
-          DB.open(url),
-          dialect: dialect,
-          owns_database: true,
-          listeners: listeners
-        )
+        database = DB.open(url)
+        begin
+          source = new(
+            database,
+            dialect: dialect,
+            owns_database: true,
+            listeners: listeners
+          )
+          source.__lf_setup_connection
+          source
+        rescue error
+          begin
+            database.close
+          rescue
+          end
+          raise error
+        end
       end
 
       def initialize(
@@ -49,6 +60,7 @@ module LF
 
         begin
           result = @database.using_connection do |connection|
+            @dialect.setup_connection(connection)
             manager = build_entity_manager(connection, @dialect, @dispatcher)
             primary_error = nil.as(Exception?)
 
@@ -96,6 +108,33 @@ module LF
         dispatcher : Internal::ListenerDispatcher,
       ) : EntityManager
         EntityManager.new(connection, dialect, dispatcher)
+      end
+
+      # Framework internal: migration reconciliation must not emit a second
+      # transaction/listener event after a failed migration transaction.
+      def __lf_migration_applied?(version : Int64, name : String) : Bool
+        ensure_open(:migration_reconciliation)
+        @database.using_connection do |connection|
+          history = MigrationHistory.new(connection, @dialect)
+          entry = history.load.find { |candidate| candidate.version == version }
+          if entry
+            unless entry.name == name
+              raise MigrationHistoryMismatchError.new(version, name, entry.name)
+            end
+            true
+          else
+            false
+          end
+        end
+      end
+
+      # Framework internal: validate the first owned connection before open
+      # returns. Future connections are initialized on transaction checkout.
+      def __lf_setup_connection : Nil
+        ensure_open(:connection_setup)
+        @database.using_connection do |connection|
+          @dialect.setup_connection(connection)
+        end
       end
 
       private def ensure_open(operation : Symbol) : Nil

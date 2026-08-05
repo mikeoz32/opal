@@ -161,7 +161,9 @@ History behavior:
 - same version and same name is applied;
 - same version and different name raises
   `MigrationHistoryMismatchError`;
-- an applied version absent from the current set is retained and not reversed.
+- an applied version absent from the current executable is rejected before
+  pending migrations are planned. Applied versions remain forward-only and
+  are never reversed automatically.
 
 No source checksum is stored in v1.
 
@@ -203,8 +205,9 @@ schema rendering.
 
 Use two DataSources against one temporary SQLite file. Coordinate two fibers so
 both observe a pending migration. The history primary key must prevent double
-application. One runner may receive a typed concurrency/history error; neither
-may leave a partial schema or duplicate history row.
+application. The losing runner rereads history and succeeds when the exact
+version/name was committed by its peer; neither may leave a partial schema or
+duplicate history row.
 
 Do not add process-global migration locks. Database constraints and
 transactions remain the coordination mechanism.

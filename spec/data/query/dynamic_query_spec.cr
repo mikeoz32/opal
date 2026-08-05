@@ -36,8 +36,9 @@ private class DynamicQueryRecord
 
   getter active : Bool
   getter score : Int32
+  getter note : String?
 
-  def initialize(@id, @title, @active, @score)
+  def initialize(@id, @title, @active, @score, @note : String? = nil)
   end
 end
 
@@ -56,7 +57,7 @@ private def with_dynamic_query_source(& : LF::Data::DataSource, DynamicQueryList
     database.exec(
       "CREATE TABLE dynamic_query_records (" \
       "id INTEGER PRIMARY KEY, stored_title TEXT NOT NULL, " \
-      "active INTEGER NOT NULL, score INTEGER NOT NULL)"
+      "active INTEGER NOT NULL, score INTEGER NOT NULL, note TEXT)"
     )
     {
       {1_i64, "one", true, 10},
@@ -155,6 +156,22 @@ describe LF::Data::Query::DynamicQuery do
     end
   end
 
+  it "renders nullable equality and inequality without NULL bind values" do
+    with_dynamic_query_source do |source, listener|
+      source.transaction do |manager|
+        manager.dynamic_query(DynamicQueryRecord)
+          .where(fields.note.eq(nil))
+          .to_a.size.should eq(4)
+        manager.dynamic_query(DynamicQueryRecord)
+          .where(fields.note.ne(nil))
+          .to_a.should be_empty
+      end
+
+      listener.statements[-2].sql.should end_with(%(WHERE ("note" IS NULL)))
+      listener.statements[-1].sql.should end_with(%(WHERE ("note" IS NOT NULL)))
+    end
+  end
+
   it "implements terminal semantics without implicit flush" do
     with_dynamic_query_source do |source, listener|
       source.transaction do |manager|
@@ -185,6 +202,17 @@ describe LF::Data::Query::DynamicQuery do
         expect_raises(LF::Data::InvalidQueryError) { query.limit(-1) }
         expect_raises(LF::Data::InvalidQueryError) { query.offset(-1) }
         listener.statements.should be_empty
+      end
+    end
+  end
+
+  it "returns no row when the query limit is zero" do
+    with_dynamic_query_source do |source, _listener|
+      source.transaction do |manager|
+        manager.dynamic_query(DynamicQueryRecord)
+          .order_by(fields.id.asc)
+          .limit(0)
+          .first?.should be_nil
       end
     end
   end

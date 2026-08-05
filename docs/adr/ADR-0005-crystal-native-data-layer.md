@@ -349,7 +349,9 @@ The manager cannot restore arbitrary user mutations after rollback. Generated
 ID and version changes are therefore applied only after their statement
 succeeds. A later transaction rollback can still occur after a successful
 explicit flush has advanced the in-memory version, so an application must
-discard every entity from a rolled-back manager.
+discard every entity from a rolled-back manager. Such entities are invalid for
+reuse even when their in-memory values look usable; the manager is terminal
+after the failed transaction.
 
 An explicit `flush` is required when a generated ID or database-visible state
 is needed before block completion. Repeated successful flushes are allowed.
@@ -670,7 +672,10 @@ executing SQL. It stores version, name, and application timestamp in
 `MigrationSet` preserves declared instance order and exposes no mutable global
 registry. Validation runs again at the start of `MigrationRunner#run`, before
 the runner opens a datasource transaction. This protects the execution boundary
-even when a migration instance exposes mutable version or name state.
+even when a migration instance exposes mutable version or name state. Pending
+work is represented by immutable `PlannedMigration` descriptors containing the
+validated version and name; history records that snapshot rather than rereading
+the mutable migration object after `up`.
 
 `SchemaEditor` produces typed schema-operation values and delegates them to the
 `SchemaRenderer` supplied by the active dialect. Data core contains no concrete
@@ -682,7 +687,10 @@ this mode to create `_lf_migrations` idempotently.
 Each pending migration and its history insert run in one transaction when the
 dialect supports transactional DDL. Failed migrations are not recorded.
 Already applied versions are skipped. An applied version with a different name
-is an error.
+is an error. An applied version absent from the current migration set is also
+an error: the executable refuses to run against a schema newer than the set it
+knows how to describe. The history remains forward-only and no rollback is
+attempted.
 
 The runner first opens one datasource transaction to ensure and read history.
 It then opens one independent datasource transaction per pending migration. The
@@ -694,9 +702,13 @@ their original types.
 Concurrent runners use database transactions and the `_lf_migrations.version`
 primary key as their coordination mechanism. There is no process-global lock.
 Two runners may both observe a version as pending, but at most one can commit
-the migration side effects together with its history row. This atomicity covers
-database work on dialects with transactional DDL; arbitrary external side
-effects performed by migration code are outside the transaction guarantee.
+the migration side effects together with its history row. The loser rereads
+history and treats an exact committed version/name as success without rerunning
+`up`; otherwise the original error propagates. This atomicity covers database
+work on dialects with transactional DDL; arbitrary external side effects
+performed by migration code are outside the transaction guarantee. Pending
+migrations are rejected when the dialect does not advertise
+`DialectCapability::TransactionalDDL`.
 
 The portable schema DSL covers create/drop table, scalar columns, generated
 primary keys, foreign keys, unique constraints, indexes, add column, and rename

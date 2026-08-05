@@ -88,6 +88,15 @@ module LF
       end
     end
 
+    class InvalidPredicateError < Error
+      getter operation : Symbol
+      getter field : String
+
+      def initialize(@operation : Symbol, @field : String, reason : String)
+        super("Invalid predicate: operation=#{operation}, field=#{field.inspect}, #{reason}")
+      end
+    end
+
     class OptimisticLockError < Error
       getter operation : Symbol
       getter entity_name : String
@@ -177,6 +186,52 @@ module LF
           expected_name,
           "Migration version #{version} is named #{expected_name.inspect}, " \
           "but history contains #{applied_name.inspect}"
+        )
+      end
+    end
+
+    class UnknownAppliedMigrationError < MigrationError
+      getter applied_name : String
+
+      def initialize(@version : Int64, @applied_name : String)
+        super(
+          :unknown_applied_version,
+          version,
+          nil,
+          "Database contains applied migration version #{version} " \
+          "(#{applied_name.inspect}) which is absent from the current migration set"
+        )
+      end
+    end
+
+    class UnsupportedMigrationCapabilityError < MigrationError
+      getter dialect : String
+      getter capability : DialectCapability
+
+      def initialize(
+        @dialect : String,
+        @capability : DialectCapability,
+        version : Int64? = nil,
+        migration_name : String? = nil,
+      )
+        super(
+          :unsupported_capability,
+          version,
+          migration_name,
+          "Dialect #{dialect.inspect} does not support migration capability " \
+          "#{capability}"
+        )
+      end
+    end
+
+    class ForeignKeySetupError < Error
+      getter dialect : String
+      getter value : Int64
+
+      def initialize(@dialect : String, @value : Int64)
+        super(
+          "Dialect #{dialect.inspect} failed to enable foreign-key enforcement: " \
+          "PRAGMA foreign_keys=#{value}"
         )
       end
     end

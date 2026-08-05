@@ -118,6 +118,19 @@ describe LF::Data::Query::SelectQuery do
     end
   end
 
+  it "returns no row when the query limit is zero" do
+    with_select_query_source do |_database, source, listener|
+      source.transaction do |manager|
+        manager.query(SelectQueryRecord)
+          .order_by(fields.id.asc)
+          .limit(0)
+          .first?.should be_nil
+      end
+
+      listener.statements.should be_empty
+    end
+  end
+
   it "reuses an existing managed identity without replacing its fields" do
     with_select_query_source do |_database, source, _listener|
       source.transaction do |manager|

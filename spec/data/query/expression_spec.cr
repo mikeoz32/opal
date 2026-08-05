@@ -37,6 +37,10 @@ private class ExpressionEntity
   end
 end
 
+private def nullable_expression_value(value : String?) : String?
+  value
+end
+
 describe LF::Data::Query do
   it "builds typed comparison predicates with dumped arguments" do
     dumps = ExpressionTitleConverter.dumps
@@ -70,9 +74,36 @@ describe LF::Data::Query do
   end
 
   it "builds nil and string predicates only on compatible fields" do
+    equal_nil = ExpressionEntity::Fields.note.eq(nil)
+    not_equal_nil = ExpressionEntity::Fields.note.ne(nil)
+
+    typeof(equal_nil).should eq(
+      typeof(ExpressionEntity::Fields.note.is_nil)
+    )
+    typeof(not_equal_nil).should eq(
+      typeof(ExpressionEntity::Fields.note.is_not_nil)
+    )
+    equal_nil.__lf_args.should eq(Tuple.new)
+    not_equal_nil.__lf_args.should eq(Tuple.new)
     ExpressionEntity::Fields.note.is_nil.__lf_args.should eq(Tuple.new)
     ExpressionEntity::Fields.note.is_not_nil.__lf_args.should eq(Tuple.new)
     ExpressionEntity::Fields.title.like("%Opal%").__lf_args.should eq({"%opal%"})
+  end
+
+  it "rejects nilable runtime values instead of generating NULL comparisons" do
+    optional = nullable_expression_value(nil)
+
+    ExpressionEntity::Fields.note.eq(optional).__lf_args.should eq(Tuple.new)
+    ExpressionEntity::Fields.note.ne(optional).__lf_args.should eq(Tuple.new)
+    runtime = nullable_expression_value("runtime")
+    ExpressionEntity::Fields.note.eq(runtime).__lf_args.should eq({"runtime"})
+    ExpressionEntity::Fields.note.ne(runtime).__lf_args.should eq({"runtime"})
+  end
+
+  it "rejects NULL values in ordered and IN predicates at runtime or compile time" do
+    expect_raises(LF::Data::InvalidPredicateError) do
+      ExpressionEntity::Fields.note.in(["value", nil] of String?)
+    end
   end
 
   it "composes argument order depth-first" do

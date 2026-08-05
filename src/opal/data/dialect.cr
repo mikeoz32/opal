@@ -17,6 +17,9 @@ module LF
         "OFFSET #{placeholder}"
       end
 
+      def setup_connection(connection : DB::Connection) : Nil
+      end
+
       def schema_renderer(connection : DB::Connection) : SchemaRenderer
         raise UnsupportedSchemaOperationError.new(name, "schema migrations")
       end

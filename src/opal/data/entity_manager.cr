@@ -178,6 +178,7 @@ module LF
         query : Query::SelectQuery(T, P, O, L, F),
       ) : T? forall T, P, O, L, F
         ensure_available(:query)
+        return nil if query.limit_value == 0_i64
         plan = @dialect.select_plan(T, Query::First(typeof(query)))
         execute_entity_select_first(T, plan.sql, query.__lf_first_args)
       end
@@ -210,6 +211,7 @@ module LF
       # Framework internal: invoked by DynamicQuery(T).
       def __lf_dynamic_select_first(query : Query::DynamicQuery(T)) : T? forall T
         ensure_available(:dynamic_query)
+        return nil if query.limit_value == 0_i64
         rendered = query.__lf_render(@dialect, Query::DynamicTerminal::First)
         execute_entity_select_first(T, rendered.sql, rendered.arguments)
       end

@@ -29,6 +29,12 @@ private class DataSourceListenerProbe
   end
 end
 
+private class FailingSetupSQLiteDialect < LF::Data::Dialects::SQLite
+  def setup_connection(connection : DB::Connection) : Nil
+    raise "connection setup failed"
+  end
+end
+
 @[LF::Data::Table("datasource_entities")]
 private class DataSourceEntity
   include LF::Data::Entity
@@ -44,6 +50,48 @@ private class DataSourceEntity
 end
 
 describe LF::Data::DataSource do
+  it "closes an owned database when initial connection setup fails" do
+    expect_raises(Exception, "connection setup failed") do
+      LF::Data::DataSource.open(
+        "sqlite3://%3Amemory%3A",
+        dialect: FailingSetupSQLiteDialect.new
+      )
+    end
+  end
+
+  it "enables SQLite foreign-key enforcement on every connection" do
+    database = DB.open("sqlite3://%3Amemory%3A")
+    begin
+      database.exec("CREATE TABLE fk_parents (id INTEGER PRIMARY KEY)")
+      database.exec(
+        "CREATE TABLE fk_children " \
+        "(parent_id INTEGER NOT NULL REFERENCES fk_parents(id))"
+      )
+      source = LF::Data::DataSource.new(
+        database,
+        dialect: LF::Data::Dialects::SQLite.new
+      )
+
+      source.transaction { nil }
+      database.scalar("PRAGMA foreign_keys").should eq(1_i64)
+      expect_raises(SQLite3::Exception) do
+        source.transaction do |manager|
+          manager.connection.exec(
+            "INSERT INTO fk_children (parent_id) VALUES (?)",
+            999_i64
+          )
+        end
+      end
+    ensure
+      source.try &.close
+      begin
+        database.close
+      rescue SQLite3::Exception
+        # sqlite3 can repeat the failed foreign-key statement while closing.
+      end
+    end
+  end
+
   it "borrows an injected database by default" do
     LF::DataSpecSupport::SQLiteDatabase.with_memory do |database|
       source = LF::Data::DataSource.new(

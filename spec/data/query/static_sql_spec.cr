@@ -153,6 +153,13 @@ describe LF::Data::SQL::StaticPlanCompiler do
     )
   end
 
+  it "compiles eq and ne nil as SQL NULL predicates" do
+    static_rows_plan(dialect, StaticQueryRecord, fields.note.eq(nil))
+      .sql.should end_with(%(WHERE "note" IS NULL))
+    static_rows_plan(dialect, StaticQueryRecord, fields.note.ne(nil))
+      .sql.should end_with(%(WHERE "note" IS NOT NULL))
+  end
+
   it "compiles typed ordering and SQLite pagination policy" do
     first_order = LF::Data::Query::OrderList(
       LF::Data::Query::NoOrdering,
