@@ -1852,6 +1852,15 @@ describe "LF::HTTP::Router" do
     end
   end
 
+  it "rejects duplicate websocket routes" do
+    router = LF::HTTP::Router.new
+    router.ws("/chat") { |_ws, _params| }
+
+    expect_raises(LF::HTTP::RouteConflictError) do
+      router.ws("/chat") { |_ws, _params| }
+    end
+  end
+
   it "detects websocket and HTTP conflicts across parameter names and slashes" do
     router = LF::HTTP::Router.new
     router.ws("/chat/:id") { |_ws, _params| }

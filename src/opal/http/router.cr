@@ -33,6 +33,20 @@ module LF::HTTP
     end
 
     def ws(path : String, protocols : Array(String)? = nil, &handler : ::HTTP::WebSocket, Hash(String, String) -> Nil) : Nil
+      add_websocket_route(path, protocols) do |websocket, params, _context|
+        handler.call(websocket, params)
+      end
+    end
+
+    # :nodoc:
+    # The controller macro needs the request context for DI and request binding.
+    # Crystal cannot overload these callbacks by block arity, so keep this bridge
+    # separate from the public two-argument `ws` contract.
+    def ws_with_context(path : String, protocols : Array(String)? = nil, &handler : ::HTTP::WebSocket, Hash(String, String), ::HTTP::Server::Context -> Nil) : Nil
+      add_websocket_route(path, protocols, &handler)
+    end
+
+    private def add_websocket_route(path : String, protocols : Array(String)?, &handler : ::HTTP::WebSocket, Hash(String, String), ::HTTP::Server::Context -> Nil) : Nil
       route_key = normalize_route_path(path)
       if @http_paths.includes?(route_key) || @websocket_paths.includes?(route_key)
         raise LF::HTTP::RouteConflictError.new(path)
@@ -41,8 +55,8 @@ module LF::HTTP
       @websocket_paths << route_key
       @root.add_route(path, ->(context : ::HTTP::Server::Context, params : Hash(String, String)) {
         if websocket_upgrade_request?(context.request)
-          websocket_handler = ::HTTP::WebSocketHandler.new(protocols) do |websocket, _|
-            handler.call(websocket, params)
+          websocket_handler = ::HTTP::WebSocketHandler.new(protocols) do |websocket, websocket_context|
+            handler.call(websocket, params, websocket_context)
           end
           websocket_handler.call(context)
         else

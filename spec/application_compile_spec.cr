@@ -264,6 +264,14 @@ describe "application compiler fixtures" do
     result[:error].should contain("inject services through the controller constructor")
   end
 
+  it "requires websocket controller actions to declare a Nil return type" do
+    fixture = File.expand_path("fixtures/http/controller_websocket_invalid_return.cr", __DIR__)
+    result = compile_fixture(fixture)
+
+    result[:status].success?.should be_false
+    result[:error].should contain("websocket actions must declare an explicit : Nil return type")
+  end
+
   it "does not retain the legacy controller instance setup API" do
     fixture = File.expand_path("fixtures/http/legacy_controller_setup.cr", __DIR__)
     result = compile_fixture(fixture)

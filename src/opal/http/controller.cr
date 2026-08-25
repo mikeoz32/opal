@@ -1,4 +1,5 @@
 require "json"
+require "log"
 require "./di_integration"
 require "./errors"
 require "./execution_pipeline"
@@ -31,11 +32,15 @@ module LF::HTTP::Controller
   annotation Options
   end
 
+  annotation WebSocket
+  end
+
   macro included
     {% verbatim do %}
       macro setup_routes(router, scope_provider, global_owner = nil)
         {% controller_type = @type %}
         {% controller_name = "__lf_http_controller__" + controller_type.name.stringify %}
+        {% websocket_controller_name = "__lf_http_websocket_controller__" + controller_type.name.stringify %}
         {% global_guard_types = [] of ASTNode %}
         {% global_pipe_types = [] of ASTNode %}
         {% global_interceptor_types = [] of ASTNode %}
@@ -371,6 +376,91 @@ module LF::HTTP::Controller
                 end
               end
             {% end %}
+          {% end %}
+        {% end %}
+
+        {% websocket_methods = controller_type.methods.select { |method| !method.annotations(LF::HTTP::Controller::WebSocket).empty? } %}
+        {% if websocket_methods.size > 0 %}
+          {{ scope_provider }}.add_bean(
+            name: {{ websocket_controller_name }},
+            scope: "websocket",
+            type: {{ controller_type }}
+          ) do |scope|
+            {% if initializer %}
+              {{ controller_type }}.new(
+                {% for argument in initializer.args %}
+                  scope.resolve_dependency({{ argument.name.stringify }}, {{ argument.restriction }}),
+                {% end %}
+              )
+            {% else %}
+              {{ controller_type }}.new
+            {% end %}
+          end
+        {% end %}
+        {% for method in controller_type.methods.sort_by(&.line_number) %}
+          {% for ann in method.annotations(LF::HTTP::Controller::WebSocket) %}
+            {% path = ann[0] || ann[:path] || raise "Missing path in #{controller_type}##{method.name}" %}
+            {% protocols = ann[:protocols] %}
+            {% websocket_arguments = method.args.select { |argument| argument.restriction.stringify == "HTTP::WebSocket" } %}
+            {% request_arguments = method.args.select { |argument| argument.name.stringify == "request" && argument.restriction.stringify == "HTTP::Request" } %}
+
+            {% unless websocket_arguments.size == 1 %}
+              {% raise "Invalid websocket route #{controller_type}##{method.name}: expected exactly one HTTP::WebSocket argument" %}
+            {% end %}
+            {% if request_arguments.size > 1 %}
+              {% raise "Invalid websocket route #{controller_type}##{method.name}: expected at most one HTTP::Request argument" %}
+            {% end %}
+            {% if method.return_type.nil? || method.return_type.stringify != "Nil" %}
+              {% raise "Invalid websocket route #{controller_type}##{method.name}: websocket actions must declare an explicit : Nil return type" %}
+            {% end %}
+
+            {% for argument in method.args %}
+              {% restriction = argument.restriction %}
+              {% websocket_argument = restriction.stringify == "HTTP::WebSocket" %}
+              {% request_argument = argument.name.stringify == "request" && restriction.stringify == "HTTP::Request" %}
+              {% scalar_argument = {"Int32", "Int64", "Float32", "Float64", "Bool", "UUID", "String"}.includes?(restriction.stringify) %}
+              {% unless websocket_argument || request_argument || scalar_argument %}
+                {% raise "Invalid websocket route argument '#{argument.name}' in #{controller_type}##{method.name}: expected HTTP::WebSocket, HTTP::Request, or a scalar route/query parameter" %}
+              {% end %}
+            {% end %}
+
+            {% if protocols %}
+              {{ router }}.ws_with_context({{ path }}, protocols: {{ protocols }}) do |websocket, route_params, ctx|
+            {% else %}
+              {{ router }}.ws_with_context({{ path }}) do |websocket, route_params, ctx|
+            {% end %}
+                begin
+                  scope = ctx.dependency_scope
+                  raise LF::HTTP::InternalServerError.new("DI context not initialized") if scope.nil?
+
+                  {% for argument in method.args %}
+                    {% restriction = argument.restriction %}
+                    {% if restriction.stringify == "HTTP::WebSocket" %}
+                      {{ argument.name }} = websocket
+                    {% elsif argument.name.stringify == "request" && restriction.stringify == "HTTP::Request" %}
+                      {{ argument.name }} = ctx.request
+                    {% elsif {"Int32", "Int64", "Float32", "Float64", "Bool", "UUID", "String"}.includes?(restriction.stringify) %}
+                      if route_params.has_key?({{ argument.name.stringify }})
+                        {{ argument.name }} = LF::HTTP::ParameterDecoder.decode(route_params, {{ argument.name.stringify }}, {{ restriction }})
+                      elsif ctx.request.query_params.has_key?({{ argument.name.stringify }})
+                        {{ argument.name }} = LF::HTTP::ParameterDecoder.decode(ctx.request.query_params, {{ argument.name.stringify }}, {{ restriction }})
+                      else
+                        raise LF::HTTP::BadRequest.new({{ "Missing required parameter '#{argument.name}'" }})
+                      end
+                    {% end %}
+                  {% end %}
+
+                  controller = scope.as(LF::DI::Container).resolve({{ websocket_controller_name }}, {{ controller_type }})
+                  controller.{{ method.name }}(
+                    {% for argument in method.args %}
+                      {{ argument.name }},
+                    {% end %}
+                  )
+                rescue error : Exception
+                  Log.error(exception: error) { {{ "WebSocket route failed: #{path}" }} }
+                  websocket.close(::HTTP::WebSocket::CloseCode::InternalServerError)
+                end
+            end
           {% end %}
         {% end %}
       end
