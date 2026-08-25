@@ -1,0 +1,107 @@
+# ADR-0005: Native WebSocket Routes
+
+- Status: Accepted
+- Date: 2026-08-05
+- Deciders: Opal maintainers
+- Extends: ADR-0003 and ADR-0004
+- Related: `LF::HTTP::Router`, `LF::HTTP::Controller`, `LF::HTTP::AutoConfig`
+
+## Context
+
+Opal needs native WebSocket support as an HTTP route type. This is a lower
+layer than Phoenix LiveView: it must expose Crystal's WebSocket API without
+introducing a second web framework, a reactive runtime, or a custom socket
+abstraction. The initial target is Crystal 1.19, whose WebSocket API is
+callback-based and whose `HTTP::WebSocketHandler` owns the `ws.run` loop.
+
+WebSocket connections also outlive the HTTP request that initiated their
+upgrade. They therefore require an explicit DI lifetime and shutdown policy.
+
+## Decision
+
+### Routes and controller actions
+
+`LF::HTTP::Router` gains a first-class `ws` route:
+
+```crystal
+router.ws("/chat/:id", protocols: ["chat.v1"]) do |ws, params|
+  ws.on_message { |message| ws.send("echo: #{message}") }
+end
+```
+
+The handler receives the unwrapped `HTTP::WebSocket` and route parameters. It
+registers callbacks and returns `Nil`; `HTTP::WebSocketHandler` invokes
+`ws.run`. Opal adds no wrapper, receive loop, callback DSL, or outbound-write
+serialization policy over the Crystal standard library.
+
+Controllers use the same compile-time discovery path as HTTP controllers:
+
+```crystal
+@[LF::HTTP::Controller::WebSocket("/chat/:id", protocols: ["chat.v1"])]
+def chat(ws : HTTP::WebSocket, id : Int64, request : HTTP::Request) : Nil
+  ws.on_message { |message| ws.send("#{id}: #{message}") }
+end
+```
+
+The action name is arbitrary. Valid arguments are the raw socket, supported
+scalar route/query parameters, and an optional `HTTP::Request`; dependencies
+remain constructor-injected. A WebSocket action must return `Nil`.
+
+An HTTP route and a WebSocket route may not share a path. A non-upgrade request
+to a known WebSocket path returns `426 Upgrade Required` and includes
+`Upgrade: websocket`. Optional `protocols : Array(String)` is passed to
+Crystal's subprotocol negotiation.
+
+### Lifecycle, errors, and shutdown
+
+After a successful upgrade, Opal opens one child DI scope named `"websocket"`.
+WebSocket controller actions use a distinct `"websocket"` bean registration,
+so a controller class may safely contain both HTTP and WebSocket actions. The
+connection scope and everything it owns exit on disconnect, connection setup
+failure, or server shutdown.
+
+Opal tracks active WebSocket connections. During application shutdown it stops
+accepting new connections, sends each active connection close code `1001 Going
+Away`, waits up to `http.websocket.shutdown_timeout_ms`, and force-closes any
+remaining connections. The setting is an `Int32` in milliseconds and defaults
+to `5000`.
+
+An exception after upgrade, including controller construction or callback
+execution, is logged through `Log.error` with the exception and route path
+only, then closes the connection with `1011 Internal Error`. The close reason
+does not expose the exception message to the peer. Opal never attempts to
+write an HTTP error response after upgrade.
+
+Origin, authentication, and authorization that must reject a handshake run in
+ordinary HTTP middleware before the router. The optional `HTTP::Request` in a
+WebSocket action is for connection logic after upgrade, not handshake rejection.
+
+## Compatibility and non-goals
+
+This feature is additive: existing HTTP routes, request scopes, controller
+semantics, and standalone server assembly remain unchanged.
+
+The first release does not implement Phoenix channels, the Phoenix LiveView
+protocol, DOM diffs, template rendering, reconnect state, presence, heartbeat
+policy, or a replacement for Crystal's callback API. A later LiveView layer
+may reuse Phoenix's JavaScript client by implementing its wire protocol above
+these native routes; it must not require a change to the native socket API.
+
+## Consequences
+
+- WebSocket applications use Crystal's documented text, binary, ping, pong,
+  and close callbacks directly.
+- Security policy stays application-owned and can run before HTTP upgrade.
+- Long-lived controllers and disposable dependencies have connection lifetime,
+  rather than accidentally retaining request-scoped metadata.
+- Crystal 1.19 does not provide synchronous receive methods. A future Crystal
+  upgrade may add an additive higher-level API, but the callback API remains
+  the stable baseline.
+
+## Verification plan
+
+Tests must cover route conflict rejection, `426` behavior, successful upgrade,
+text/binary callback delivery, subprotocol negotiation, controller discovery
+and argument binding, connection-scope disposal, `1011` error handling and
+safe logging, and graceful shutdown including timeout fallback. Existing HTTP
+and autoconfiguration specs remain part of the compatibility suite.
