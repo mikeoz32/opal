@@ -333,6 +333,7 @@ module LF::HTTP::AutoConfig
       app = @app_builder.call(context)
       handler = ::HTTP::Server.build_middleware([
         ::HTTP::LogHandler.new,
+        LF::HTTP::DI::WebSocketScopeHandler.new(context),
         app,
       ])
       requests = ConnectionDrainHandler.new(handler, context)

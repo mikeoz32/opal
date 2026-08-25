@@ -2297,6 +2297,88 @@ describe LF::HTTP::DI::RequestScopeHandler do
   end
 end
 
+describe LF::HTTP::DI::WebSocketScopeHandler do
+  it "does not create a websocket scope for a non-upgrade request" do
+    root = LF::DI::DefaultContainer.new
+    handler = LF::HTTP::DI::WebSocketScopeHandler.new(TestScopeProvider.new(root))
+    handler.next = ->(_context : HTTP::Server::Context) { }
+    context = HTTP::Server::Context.new(
+      HTTP::Request.new("GET", "/chat"),
+      HTTP::Server::Response.new(IO::Memory.new)
+    )
+
+    handler.call(context)
+
+    context.dependency_scope.should be_nil
+    root.shutdown
+  end
+
+  it "wraps the native upgrade handler with a websocket scope" do
+    TestDisposableCounterBean.reset
+    root = LF::DI::DefaultContainer.new
+    root.add_bean(name: "connection_resource", scope: "websocket", type: TestDisposableCounterBean) do |_ctx|
+      TestDisposableCounterBean.new
+    end
+
+    provider = TestScopeProvider.new(root)
+    websocket_scope_handler = LF::HTTP::DI::WebSocketScopeHandler.new(provider)
+    observed_scope = ""
+
+    websocket_scope_handler.next = ->(context : HTTP::Server::Context) {
+      context.response.upgrade_handler = ->(_io : IO) {
+        scope = context.dependency_scope.not_nil!
+        observed_scope = scope.scope
+        scope.resolve("connection_resource", TestDisposableCounterBean)
+      }
+    }
+
+    request = HTTP::Request.new("GET", "/chat")
+    request.headers["Upgrade"] = "websocket"
+    request.headers["Connection"] = "Upgrade"
+    context = HTTP::Server::Context.new(request, HTTP::Server::Response.new(IO::Memory.new))
+
+    websocket_scope_handler.call(context)
+    context.response.upgrade_handler.not_nil!.call(IO::Memory.new)
+
+    observed_scope.should eq("websocket")
+    provider.entered_scopes.should eq(["websocket"])
+    TestDisposableCounterBean.destroy_calls.should eq(1)
+    context.dependency_scope.should be_nil
+    root.shutdown
+  end
+
+  it "closes the websocket scope when the downstream handler fails" do
+    TestDisposableCounterBean.reset
+    root = LF::DI::DefaultContainer.new
+    root.add_bean(name: "connection_resource", scope: "websocket", type: TestDisposableCounterBean) do |_ctx|
+      TestDisposableCounterBean.new
+    end
+
+    handler = LF::HTTP::DI::WebSocketScopeHandler.new(root)
+    handler.next = ->(context : HTTP::Server::Context) {
+      context.response.upgrade_handler = ->(_io : IO) {
+        context.dependency_scope.not_nil!.resolve("connection_resource", TestDisposableCounterBean)
+        raise "websocket handler failed"
+      }
+    }
+
+    request = HTTP::Request.new("GET", "/chat")
+    request.headers["Upgrade"] = "websocket"
+    request.headers["Connection"] = "Upgrade"
+    context = HTTP::Server::Context.new(request, HTTP::Server::Response.new(IO::Memory.new))
+
+    handler.call(context)
+
+    expect_raises(Exception, "websocket handler failed") do
+      context.response.upgrade_handler.not_nil!.call(IO::Memory.new)
+    end
+
+    TestDisposableCounterBean.destroy_calls.should eq(1)
+    context.dependency_scope.should be_nil
+    root.shutdown
+  end
+end
+
 describe "LF Parameter Binding and Type Coercion" do
   describe "LF::HTTP::ParameterDecoder" do
     it "converts to Int32 successfully" do

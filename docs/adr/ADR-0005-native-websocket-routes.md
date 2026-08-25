@@ -61,6 +61,15 @@ so a controller class may safely contain both HTTP and WebSocket actions. The
 connection scope and everything it owns exit on disconnect, connection setup
 failure, or server shutdown.
 
+The HTTP integration places `LF::HTTP::DI::WebSocketScopeHandler` before
+`RequestScopeHandler`. After the router installs Crystal's
+`HTTP::Server::Response#upgrade_handler`, it wraps that handler. The wrapper
+creates the connection scope only after a successful upgrade, stores it on the
+HTTP context, and keeps it alive around the stdlib handler's full `ws.run`
+execution. The ordinary request scope has already exited by then, so an
+upgraded connection does not create a second request scope. The wrapper
+restores the context and exits only the scope it owns.
+
 Opal tracks active WebSocket connections. During application shutdown it stops
 accepting new connections, sends each active connection close code `1001 Going
 Away`, waits up to `http.websocket.shutdown_timeout_ms`, and force-closes any
