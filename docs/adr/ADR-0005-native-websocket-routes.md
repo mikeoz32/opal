@@ -35,6 +35,14 @@ registers callbacks and returns `Nil`; `HTTP::WebSocketHandler` invokes
 `ws.run`. Opal adds no wrapper, receive loop, callback DSL, or outbound-write
 serialization policy over the Crystal standard library.
 
+The same route may use Crystal's synchronous API instead: the action can call
+`ws.receive` or `ws.receive?`, process messages, and close after its own loop.
+A finite action must call `ws.close`; returning alone hands control back to
+Crystal's handler, which then starts `ws.run`. This is not a second route type.
+Applications should avoid mixing a manual receive loop with receive callbacks
+on the same socket unless double processing is intentional; callback-mode
+routes leave the loop to Crystal's handler.
+
 Controllers use the same compile-time discovery path as HTTP controllers:
 
 ```crystal

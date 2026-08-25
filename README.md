@@ -251,6 +251,33 @@ server = HTTP::Server.new([
 ])
 ```
 
+WebSocket controller actions use the same route discovery and expose the raw
+Crystal socket. They may use callbacks:
+
+```crystal
+@[LF::HTTP::Controller::WebSocket("/chat")]
+def chat(ws : HTTP::WebSocket) : Nil
+  ws.on_message { |message| ws.send("echo: #{message}") }
+end
+```
+
+Or they may use an explicit synchronous receive loop in the action body:
+
+```crystal
+@[LF::HTTP::Controller::WebSocket("/echo")]
+def echo(ws : HTTP::WebSocket) : Nil
+  while message = ws.receive?
+    ws.send("echo: #{message}")
+  end
+end
+```
+
+These are two handler styles for the same WebSocket route type. Avoid mixing a
+manual `receive` loop and receive callbacks on one socket unless double
+processing is intentional. A finite synchronous action must call `ws.close`;
+returning alone hands control back to Crystal's `HTTP::WebSocketHandler`,
+which then starts its callback-mode `ws.run` loop.
+
 ## DI Container
 
 The built-in DI container lives under `LF::DI`.
