@@ -1,24 +1,19 @@
 # Opal
 
-Opal is a high-performance HTTP router and lightweight API layer for Crystal.
+Opal is a modular HTTP, dependency injection, and application bootstrap toolkit for Crystal.
 
 It is built on top of Crystal's standard `HTTP::Handler` stack and focuses on:
 
 - trie-based path matching
 - path parameter extraction
 - method-aware routing with `404` / `405` handling
-- lightweight API handlers via `LF::APIRoute`
-- small dependency injection container for request-scoped services
+- lightweight API handlers via `LF::HTTP::Controller`
+- scoped dependency injection with deterministic lifecycle cleanup
+- optional compile-time application bootstrap
 
 ## Status
 
-The router core, `APIRoute`, and DI container are covered by specs in this repository.
-
-Current verified test status:
-
-- `107 examples`
-- `0 failures`
-- `0 errors`
+The routing, HTTP binding, DI lifecycle, and Application compiler contracts are covered by specs in this repository.
 
 ## Installation
 
@@ -38,23 +33,29 @@ shards install
 
 ## Core API
 
-Opal exposes three main layers:
+Opal exposes four independent layers:
 
-1. `LF::Router`
+1. `LF::HTTP::Router`
    Low-level router with explicit handlers.
 
-2. `LF::LFApi`
+2. `LF::HTTP::App`
    `HTTP::Handler` wrapper around a router with consistent HTTP error handling.
 
-3. `LF::APIRoute`
-   Macro-based API route definition with parameter binding and optional DI lookup.
+3. `LF::HTTP::Controller`
+   Compile-time route definition with request binding and constructor DI.
+
+4. `@[LF::Application]` and `LF::ApplicationRuntime`
+   Optional compile-time application assembly and root-container ownership.
+
+5. `require "opal/autoconfig/http"`
+   Optional HTTP controller discovery, server assembly, and lifecycle integration.
 
 ## Basic Router
 
 ```crystal
 require "opal"
 
-router = LF::Router.new
+router = LF::HTTP::Router.new
 
 router.get("/") do |ctx, _params|
   ctx.response.print "Welcome"
@@ -78,14 +79,14 @@ server.bind_tcp(8080)
 server.listen
 ```
 
-## LFApi
+## HTTP App
 
-`LF::LFApi` wraps `LF::Router` and converts `LF::BadRequest`, `LF::NotFound`, and other internal exceptions into HTTP responses.
+`LF::HTTP::App` wraps `LF::HTTP::Router` and converts `LF::HTTP::BadRequest`, `LF::HTTP::NotFound`, and other internal exceptions into HTTP responses.
 
 ```crystal
 require "opal"
 
-app = LF::LFApi.new do |router|
+app = LF::HTTP::App.new do |router|
   router.get("/hello/:name") do |ctx, params|
     ctx.response.print "Hello, #{params["name"]}"
   end
@@ -100,16 +101,20 @@ server.bind_tcp(8080)
 server.listen
 ```
 
-## APIRoute
+## HTTP Controller
 
-`LF::APIRoute` is the higher-level API surface. It supports:
+`LF::HTTP::Controller` is the higher-level API surface. It supports:
 
 - route params
 - query params
 - `HTTP::Request`
-- DI lookup from `context.state`
 - JSON body parsing for `JSON::Serializable`
-- `LF::Response` return types such as `LF::JSONResponse`
+- automatic JSON responses for returned `JSON::Serializable` models
+- `LF::HTTP::Response` return types such as `LF::HTTP::JSONResponse`
+- constructor injection for controller dependencies
+
+Route arguments are request inputs only. Inject services through the controller
+constructor; unsupported route arguments fail at compile time.
 
 ### Example
 
@@ -132,23 +137,45 @@ class UserView
   end
 end
 
+@[LF::DI::Service]
+class UserService
+  def find(id : Int32) : UserView
+    UserView.new(id, "User #{id}")
+  end
+
+  def create(name : String) : UserView
+    UserView.new(1, name)
+  end
+end
+
 class UsersApi
-  include LF::APIRoute
+  include LF::HTTP::Controller
 
-  @[LF::APIRoute::Get("/users/:id")]
+  def initialize(@users : UserService)
+  end
+
+  @[LF::HTTP::Controller::Get("/users/:id")]
   def show(id : Int32)
-    LF::JSONResponse.create(UserView.new(id, "User #{id}"))
+    @users.find(id)
   end
 
-  @[LF::APIRoute::Post("/users")]
+  @[LF::HTTP::Controller::Post("/users")]
   def create(payload : UserPayload)
-    LF::JSONResponse.create(UserView.new(1, payload.name))
+    @users.create(payload.name)
   end
 end
 
-app = LF::LFApi.new do |router|
-  UsersApi.new.setup_routes(router)
+root = LF::DI::DefaultContainer.new
+root.register(LF::DI::ServiceConfiguration.new)
+
+app = LF::HTTP::App.new do |router|
+  UsersApi.setup_routes(router, root)
 end
+
+server = HTTP::Server.new([
+  LF::HTTP::DI::RequestScopeHandler.new(root),
+  app,
+])
 ```
 
 ## DI Container
@@ -158,7 +185,7 @@ The built-in DI container lives under `LF::DI`.
 ### Registering beans manually
 
 ```crystal
-root = LF::DI::AnnotationApplicationContext.new
+root = LF::DI::DefaultContainer.new
 
 root.add_bean(name: "greeting_service", scope: "request", type: GreetingService) do |_ctx|
   GreetingService.new("Hello")
@@ -167,30 +194,22 @@ end
 
 ### Request scope
 
-`LF::APIRoute` expects `context.state` to contain an `LF::DI::AnnotationApplicationContext`.
+Controllers are request-scoped beans. Their constructor dependencies use the
+normal DI resolution rules. Route arguments bind only path, query, request, and
+JSON body values.
 
-A common pattern is to create request-scoped child contexts in middleware:
+A built-in handler creates and closes a child scope around each request:
 
 ```crystal
-class RequestScopeHandler
-  include HTTP::Handler
-
-  def initialize(@root : LF::DI::AnnotationApplicationContext)
-  end
-
-  def call(context)
-    scope = @root.enter_scope("request")
-    context.state = scope
-    call_next(context)
-  ensure
-    scope.exit
-  end
-end
+server = HTTP::Server.new([
+  LF::HTTP::DI::RequestScopeHandler.new(root),
+  app,
+])
 ```
 
 ### Autowired services
 
-You can also declare services with `@[LF::DI::Service]` and register `LF::DI::AutowiredApplicationConfig`.
+You can also declare services with `@[LF::DI::Service]` and register `LF::DI::ServiceConfiguration`.
 
 Autowiring currently works like this:
 
@@ -229,7 +248,7 @@ class RequestResource
   end
 end
 
-root = LF::DI::AnnotationApplicationContext.new
+root = LF::DI::DefaultContainer.new
 
 root.add_bean(name: "request_resource", scope: "request", type: RequestResource) do |_ctx|
   RequestResource.new
@@ -241,6 +260,76 @@ scope.exit
 
 root.shutdown
 ```
+
+## Application Bootstrap
+
+Application bootstrap is optional. Standalone DI and HTTP usage remain valid without an application marker.
+
+```crystal
+@[LF::ApplicationConfiguration(priority: 10)]
+class Infrastructure
+  @[LF::DI::Bean]
+  def clock : Clock
+    Clock.new
+  end
+end
+
+@[LF::Application]
+class TodoApplication
+end
+
+TodoApplication.run do |application|
+  application.resolve(TodoService).start
+end
+```
+
+The generated `bootstrap` method owns a fresh root container.
+`LF::ApplicationRuntime` exposes typed resolution, extension installation,
+shutdown, and state/error contracts; it does not expose the mutable root
+container. Application extensions receive a controlled `LF::ApplicationContext`
+for bean registration and scope creation.
+
+## Configuration
+
+Application bootstrap eagerly registers one immutable `LF::ConfigService`
+singleton. It reads `config/application.yml` by default. A missing default file
+means empty configuration; setting `OPAL_CONFIG` selects an explicit file and a
+missing explicit file is an error.
+
+```yaml
+http:
+  host: 127.0.0.1
+  port: 8080
+```
+
+```crystal
+config.get("http.port")       # YAML::Any
+config.get("http.port", 8080) # Int32
+config.section("http")        # YAML::Any mapping
+```
+
+## HTTP Autoconfiguration
+
+HTTP autoconfiguration is an explicit optional require:
+
+```crystal
+require "opal"
+require "opal/autoconfig/http"
+
+@[LF::Application]
+@[LF::AutoConfig::HTTP]
+class TodoApplication
+end
+
+TodoApplication.run_http
+```
+
+At compile time Opal discovers `LF::HTTP::Controller` includers in
+fully-qualified name order. At startup it builds the controller route table,
+the standard log and request-scope handlers, and an `HTTP::Server`. The server
+uses `http.host` (`0.0.0.0` by default) and `http.port` (`8080` by default).
+`run_http` blocks in `HTTP::Server#listen`; process termination closes the
+server before application DI shutdown.
 
 ## Integration Pattern
 
@@ -264,26 +353,29 @@ server = HTTP::Server.new([
 
 Where `app_or_router` can be either:
 
-- `LF::Router`
-- `LF::LFApi`
+- `LF::HTTP::Router`
+- `LF::HTTP::App`
 
 ## Examples
 
 The repository includes these examples:
 
-- [examples/router_example.cr](/home/mike/opal/examples/router_example.cr)
+- [examples/router_example.cr](examples/router_example.cr)
   Basic router + JSON response example.
 
-- [examples/api_route_di_example.cr](/home/mike/opal/examples/api_route_di_example.cr)
-  `APIRoute` with request-scoped DI and `LF::JSONResponse`.
+- [examples/api_route_di_example.cr](examples/api_route_di_example.cr)
+  `LF::HTTP::Controller` with request-scoped DI and direct JSON model responses.
 
-- [examples/di_lifecycle_example.cr](/home/mike/opal/examples/di_lifecycle_example.cr)
+- [examples/di_lifecycle_example.cr](examples/di_lifecycle_example.cr)
   Standalone lifecycle example showing `after_properties_set`, `exit`, and `shutdown`.
 
-- [examples/handler_stack_example.cr](/home/mike/opal/examples/handler_stack_example.cr)
+- [examples/handler_stack_example.cr](examples/handler_stack_example.cr)
   Integration through a normal `HTTP::Handler` middleware stack.
 
-- [examples/todo_api_sqlite](/home/mike/opal/examples/todo_api_sqlite/README.md)
+- [examples/application_bootstrap_example.cr](examples/application_bootstrap_example.cr)
+  Compile-time application discovery, generated entrypoints, and typed resolution.
+
+- [examples/todo_api_sqlite](examples/todo_api_sqlite/README.md)
   Standalone Todo API project with SQLite persistence.
 
 Run them with:
@@ -292,6 +384,7 @@ Run them with:
 crystal run examples/router_example.cr
 crystal run examples/api_route_di_example.cr
 crystal run examples/handler_stack_example.cr
+crystal run examples/application_bootstrap_example.cr
 ```
 
 For the standalone SQLite Todo API example, run commands from `examples/todo_api_sqlite`:
@@ -317,18 +410,21 @@ Current route behavior covered by specs:
 
 Opal includes these response helpers:
 
-- `LF::TextResponse.create("...")`
-- `LF::JSONResponse.create(serializable_object)`
+- `LF::HTTP::TextResponse.create("...")`
+- `LF::HTTP::JSONResponse.create(serializable_object)`
 
-If an `APIRoute` method returns an `LF::Response`, Opal writes it to the HTTP response.
+Controller methods may return a `JSON::Serializable` model directly; Opal writes it as
+`application/json`. Explicit `LF::HTTP::Response` implementations remain available when
+the response must control headers, status, or serialization behavior. Strings remain
+plain text; collections are not auto-serialized.
 
 ## Error Types
 
 ### HTTP layer
 
-- `LF::BadRequest`
-- `LF::NotFound`
-- `LF::InternalServerError`
+- `LF::HTTP::BadRequest`
+- `LF::HTTP::NotFound`
+- `LF::HTTP::InternalServerError`
 
 ### DI layer
 
@@ -337,6 +433,15 @@ If an `APIRoute` method returns an `LF::Response`, Opal writes it to the HTTP re
 - `LF::DI::DuplicateBeanError`
 - `LF::DI::ScopeMismatchError`
 - `LF::DI::AmbiguousBeanError`
+- `LF::DI::ContextClosedError`
+
+### Application layer
+
+- `LF::ConfigService::LoadError`
+- `LF::ConfigService::MissingKeyError`
+- `LF::ApplicationRuntime::ClosedError`
+- `LF::ApplicationRuntime::ShutdownError`
+- `LF::HTTP::AutoConfig::ConfigurationError`
 
 ## Testing
 
@@ -348,4 +453,4 @@ crystal spec
 
 ## License
 
-See [LICENSE](/home/mike/opal/LICENSE).
+See [LICENSE](LICENSE).

@@ -35,7 +35,7 @@ class RootResource
   end
 end
 
-root = LF::DI::AnnotationApplicationContext.new
+root = LF::DI::DefaultContainer.new
 
 root.add_bean(name: "root_resource", type: RootResource) do |_ctx|
   RootResource.new

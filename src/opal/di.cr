@@ -1,7 +1,4 @@
 module LF::DI
-    # TODO find all annotated classes and create AutowiredApplicationConfig class
-    # or move this logic into AutoriredApplicationConfig
-
   class Error < Exception
   end
 
@@ -15,6 +12,12 @@ module LF::DI
   class ChildContextMutationError < Error
     def initialize
       super("Child context can not add beans")
+    end
+  end
+
+  class ContextClosedError < Error
+    def initialize(scope : String)
+      super("DI context is closed: scope=#{scope}")
     end
   end
 
@@ -68,6 +71,10 @@ module LF::DI
     abstract def destroy : Nil
   end
 
+  module ScopeProvider
+    abstract def enter_scope(scope : String) : Container
+  end
+
   annotation Service
   end
 
@@ -86,7 +93,9 @@ module LF::DI
   end
 
   module BeanInstance
+    abstract def name : String
     abstract def scope : String
+    abstract def type_name : String
     abstract def owner_context_id : UInt64
     abstract def destroy_if_disposable : Nil
   end
@@ -94,29 +103,31 @@ module LF::DI
   class BeanFactoryImpl(T)
     include BeanFactory
 
-    def initialize(*, name : String, scope : String = "singleton", @factory : Proc(ApplicationContext, T))
+    def initialize(*, name : String, scope : String = "singleton", @factory : Proc(Container, T))
       @name = name
       @scope = scope
       @type_name = T.to_s
     end
 
-    def create(context : ApplicationContext) : T
+    def create(context : Container) : T
       @factory.call(context)
-
     end
   end
 
   class BeanInstanceImpl(T)
     include BeanInstance
 
+    getter name : String
     getter instance : T
     getter scope : String
+    getter type_name : String
     getter owner_scope : String
     getter owner_context_id : UInt64
 
-    def initialize(*, instance : T, scope : String, owner_scope : String, owner_context_id : UInt64)
+    def initialize(*, @name : String, instance : T, scope : String, owner_scope : String, owner_context_id : UInt64)
       @instance = instance
       @scope = scope
+      @type_name = T.to_s
       @owner_scope = owner_scope
       @owner_context_id = owner_context_id
     end
@@ -127,37 +138,12 @@ module LF::DI
     end
   end
 
-  module ApplicationContext
-    # ApplicationContext interface
-    # Should be included in implementations
-  end
-
-  module ApplicationConfig
-    # ApplicationConfig interface
-    # Should be included in implementations
-
+  module BeanConfiguration
     macro included
       macro finished
         {% verbatim do %}
-          def configure(ctx : LF::DI::AbstractApplicationContext)
-          {% factories = [] of NamedTuple %}
-          {%
-            @type.methods.each do |method|
-              method.annotations(LF::DI::Bean).each do |ann|
-                bean_name = ann["name"] || method.name.stringify
-                factories << { name: bean_name, method: method.body, type: method.return_type, args: method.args }
-              end
-            end
-          %}
-          {% for factory in factories %}
-            ctx.add_bean name: {{ factory[:name] }}, type: {{ factory[:type] }}  do |ctx|
-              {%for arg in factory[:args]%}
-                {{ arg.name }} = ctx.resolve_dependency("{{ arg.name }}", {{ arg.restriction }})
-              {% end %}
-
-              {{ factory[:method] }}
-            end
-          {% end %}
+          def configure(ctx : LF::DI::Container) : Nil
+            ctx.register_provider(self)
           end
         {% end %}
       end
@@ -165,17 +151,16 @@ module LF::DI
   end
 
   macro finished
-    class AutowiredApplicationConfig
-      include ApplicationConfig
+    class ServiceConfiguration
+      include BeanConfiguration
       {% for klass, idx in Object.all_subclasses %}
         {% service_name = klass.name.stringify
-              .gsub(/([A-Z]+)([A-Z][a-z])/,"\\1_\\2")
-              .gsub(/([a-z0-9])([A-Z])/,"\\1_\\2")
-              .downcase
-        %}
+             .gsub(/([A-Z]+)([A-Z][a-z])/, "\\1_\\2")
+             .gsub(/([a-z0-9])([A-Z])/, "\\1_\\2")
+             .downcase %}
         {% for ann in klass.annotations(LF::DI::Service) %}
           {% init = klass.methods.find { |method| method.name.stringify == "initialize" } %}
-          {% init_args = init ? init.args.map {|arg| arg.name.stringify + " : " + arg.restriction.stringify} : [] of String %}
+          {% init_args = init ? init.args.map { |arg| arg.name.stringify + " : " + arg.restriction.stringify } : [] of String %}
           @[LF::DI::Bean(name: {{ service_name }})]
           def __autowired_service_{{ idx.id }}({{ init_args.join(", ").id }}) : {{ klass.id }}
             {% if init %}
@@ -189,34 +174,58 @@ module LF::DI
     end
   end
 
-  abstract class AbstractApplicationContext
-    include ApplicationContext
+  abstract class Container
+    include ScopeProvider
 
-    @configurations : Set(ApplicationConfig) = Set(ApplicationConfig).new
+    @configurations : Set(BeanConfiguration) = Set(BeanConfiguration).new
     @factories = Hash(String, BeanFactory).new
-    @parent : AbstractApplicationContext?
+    @parent : Container?
     @scope : String = "singleton"
+    @closed = false
     @instances = Hash(String, BeanInstance).new
-    @owned_instance_order = [] of String
+    @owned_instances = [] of BeanInstance
 
     getter scope
     getter parent
 
+    def closed? : Bool
+      @closed
+    end
+
     def initialize
     end
 
-    def initialize(parent : AbstractApplicationContext, scope : String)
+    def initialize(parent : Container, scope : String)
       raise InvalidChildScopeError.new(scope) if scope == "singleton"
       @parent = parent
       @scope = scope
     end
 
-    def register(config : ApplicationConfig)
+    def register(config : BeanConfiguration)
+      ensure_open
       @configurations.add(config)
       config.configure(self)
     end
 
-    def add_bean(*, name : String, scope : String = "singleton", type : T.class, &factory : Proc(ApplicationContext, T)) forall T
+    def register_provider(provider : T) : Nil forall T
+      ensure_open
+
+      {% for method in T.methods %}
+        {% for ann in method.annotations(LF::DI::Bean) %}
+          {% bean_name = ann["name"] || method.name.stringify %}
+          {% bean_scope = ann["scope"] || "singleton" %}
+          add_bean(name: {{ bean_name }}, scope: {{ bean_scope }}, type: {{ method.return_type }}) do |ctx|
+            {% for argument in method.args %}
+              {{ argument.name }} = ctx.resolve_dependency("{{ argument.name }}", {{ argument.restriction }})
+            {% end %}
+            provider.{{ method.name }}({% for argument in method.args %}{{ argument.name }},{% end %})
+          end
+        {% end %}
+      {% end %}
+    end
+
+    def add_bean(*, name : String, scope : String = "singleton", type : T.class, &factory : Proc(Container, T)) forall T
+      ensure_open
       raise ChildContextMutationError.new if @parent
       raise DuplicateBeanError.new(name) if @factories.has_key?(name)
       @factories[name] = BeanFactoryImpl(T).new(name: name, scope: scope, factory: factory).as(BeanFactory)
@@ -224,6 +233,14 @@ module LF::DI
 
     def get_bean(name : String, type : T.class) : T forall T
       get_bean_instance(name, type).instance
+    end
+
+    def resolve(type : T.class) : T forall T
+      get_bean_by_type(type)
+    end
+
+    def resolve(name : String, type : T.class) : T forall T
+      get_bean(name, type)
     end
 
     def resolve_dependency(name : String, type : T.class) : T forall T
@@ -236,17 +253,18 @@ module LF::DI
 
     protected def cache_instance(name : String, instance : BeanInstance)
       @instances[name] = instance
-      if instance.owner_context_id == object_id && !@owned_instance_order.includes?(name)
-        @owned_instance_order << name
-      end
+    end
+
+    protected def track_owned_instance(instance : BeanInstance)
+      @owned_instances << instance
     end
 
     protected def visible_factory_names : Array(String)
       names = [] of String
-      context : AbstractApplicationContext? = self
+      context : Container? = self
 
       while context
-        context.as(AbstractApplicationContext).factories.each_key do |name|
+        context.as(Container).factories.each_key do |name|
           names << name unless names.includes?(name)
         end
         context = context.parent
@@ -268,7 +286,7 @@ module LF::DI
       if factory = @factories[name]?
         factory
       elsif @parent
-        @parent.as(AbstractApplicationContext).find_factory(name)
+        @parent.as(Container).find_factory(name)
       else
         nil
       end
@@ -287,11 +305,15 @@ module LF::DI
       end
     end
 
-    def get_bean_instance(name : String, type : T.class, caller : AbstractApplicationContext? = nil) : BeanInstanceImpl(T) forall T
+    def get_bean_instance(name : String, type : T.class, caller : Container? = nil) : BeanInstanceImpl(T) forall T
+      ensure_open
       if @instances.has_key?(name)
-        @instances[name].as(BeanInstanceImpl(T))
+        cached = @instances[name]
+        if cached.type_name != T.to_s
+          raise BeanTypeMismatchError.new(name, T.to_s, cached.type_name)
+        end
+        cached.as(BeanInstanceImpl(T))
       elsif @factories.has_key?(name)
-        # Root only could have facroties
         factory_meta = @factories[name]
         if factory_meta.type_name != T.to_s
           raise BeanTypeMismatchError.new(name, T.to_s, factory_meta.type_name)
@@ -316,17 +338,19 @@ module LF::DI
 
         owner = factory.scope == "singleton" ? self : (caller || self)
         instance = BeanInstanceImpl(T).new(
+          name: name,
           instance: created,
           scope: factory.scope,
           owner_scope: owner.scope,
           owner_context_id: owner.object_id
         )
+        owner.track_owned_instance(instance)
         if factory.scope != "prototype"
           owner.cache_instance(name, instance)
         end
         instance
       elsif @parent
-        instance = @parent.as(AbstractApplicationContext).get_bean_instance(name, type, caller || self)
+        instance = @parent.as(Container).get_bean_instance(name, type, caller || self)
         @instances[name] = instance if instance.scope != "prototype"
         instance
       else
@@ -334,41 +358,29 @@ module LF::DI
       end
     end
 
-    def to_t(name : String, type : T.class) : T forall T
-      get_bean(name, type)
-    end
-
     def has_key?(name : String) : Bool
+      ensure_open
       @instances.has_key?(name) || !find_factory(name).nil?
     end
 
-    def enter_scope(scope : String)
+    def enter_scope(scope : String) : Container
+      ensure_open
       self.class.new(self, scope)
     end
 
-    def exit
-      if @parent
-        errors = [] of String
-        each_owned_instance_in_destroy_order do |name, bean|
-          begin
-            bean.destroy_if_disposable
-          rescue ex : Exception
-            reason = ex.message || ex.class.to_s
-            errors << "name=#{name}, scope=#{bean.scope}, reason=#{reason}"
-          end
-        end
-
-        unless errors.empty?
-          raise BeanDestructionError.new("Lifecycle error: phase=destroy, scope=#{scope}, failures=#{errors.size}; #{errors.join(" | ")}")
-        end
-      end
-
-      @instances.clear
-      @owned_instance_order.clear
+    def exit : Nil
+      close
     end
 
-    def shutdown
+    def shutdown : Nil
+      close
+    end
+
+    private def close : Nil
+      return if @closed
+      @closed = true
       errors = [] of String
+
       each_owned_instance_in_destroy_order do |name, bean|
         begin
           bean.destroy_if_disposable
@@ -379,32 +391,25 @@ module LF::DI
       end
 
       @instances.clear
-      @owned_instance_order.clear
+      @owned_instances.clear
 
       unless errors.empty?
         raise BeanDestructionError.new("Lifecycle error: phase=destroy, scope=#{scope}, failures=#{errors.size}; #{errors.join(" | ")}")
       end
     end
 
+    private def ensure_open : Nil
+      raise ContextClosedError.new(scope) if @closed
+    end
+
     private def each_owned_instance_in_destroy_order(&block : String, BeanInstance ->)
-      @owned_instance_order.reverse_each do |name|
-        bean = @instances[name]?
-        next unless bean
+      @owned_instances.reverse_each do |bean|
         next unless bean.owner_context_id == object_id
-        yield name, bean
+        yield bean.name, bean
       end
     end
   end
 
-  class AnnotationApplicationContext < AbstractApplicationContext
+  class DefaultContainer < Container
   end
 end
-
-# Pass tuple as arguments to a function
-# def test1(a : String, b : Int32)
-#   puts "test1 called"
-# end
-
-# t = {"test", 1}
-
-# test1(*t)

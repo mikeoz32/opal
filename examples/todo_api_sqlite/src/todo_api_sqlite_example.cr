@@ -1,4 +1,5 @@
 require "opal"
+require "opal/autoconfig/http"
 require "sqlite3"
 
 class Todo
@@ -42,8 +43,8 @@ class TodoDatabase
 
   getter db : DB::Database
 
-  def initialize
-    @db = DB.open("sqlite3://./todo.db")
+  def initialize(config_service : LF::ConfigService)
+    @db = DB.open(config_service.get("database.url", "sqlite3://./todo.db"))
   end
 
   def after_properties_set : Nil
@@ -128,79 +129,46 @@ class TodoRepository
 end
 
 class TodoApi
-  include LF::APIRoute
+  include LF::HTTP::Controller
 
-  @[LF::APIRoute::Get("/todos")]
-  def index(todo_repository : TodoRepository)
-    LF::JSONResponse.create(TodoListResponse.new(todo_repository.all))
+  def initialize(@todo_repository : TodoRepository)
   end
 
-  @[LF::APIRoute::Get("/todos/:id")]
-  def show(id : Int64, todo_repository : TodoRepository)
-    todo = todo_repository.find(id)
-    raise LF::NotFound.new("Todo not found") unless todo
-    LF::JSONResponse.create(todo)
+  @[LF::HTTP::Controller::Get("/todos")]
+  def index
+    TodoListResponse.new(@todo_repository.all)
   end
 
-  @[LF::APIRoute::Post("/todos")]
-  def create(payload : CreateTodoPayload, todo_repository : TodoRepository)
-    LF::JSONResponse.create(todo_repository.create(payload.title))
+  @[LF::HTTP::Controller::Get("/todos/:id")]
+  def show(id : Int64)
+    todo = @todo_repository.find(id)
+    raise LF::HTTP::NotFound.new("Todo not found") unless todo
+    todo
   end
 
-  @[LF::APIRoute::Put("/todos/:id")]
-  def update(id : Int64, payload : UpdateTodoPayload, todo_repository : TodoRepository)
-    todo = todo_repository.update(id, payload.title, payload.completed)
-    raise LF::NotFound.new("Todo not found") unless todo
-    LF::JSONResponse.create(todo)
+  @[LF::HTTP::Controller::Post("/todos")]
+  def create(payload : CreateTodoPayload)
+    @todo_repository.create(payload.title)
   end
 
-  @[LF::APIRoute::Delete("/todos/:id")]
-  def destroy(id : Int64, todo_repository : TodoRepository)
-    deleted = todo_repository.delete(id)
-    raise LF::NotFound.new("Todo not found") unless deleted
-    LF::TextResponse.create("deleted")
-  end
-end
-
-class RequestScopeHandler
-  include HTTP::Handler
-
-  def initialize(@root : LF::DI::AnnotationApplicationContext)
+  @[LF::HTTP::Controller::Put("/todos/:id")]
+  def update(id : Int64, payload : UpdateTodoPayload)
+    todo = @todo_repository.update(id, payload.title, payload.completed)
+    raise LF::HTTP::NotFound.new("Todo not found") unless todo
+    todo
   end
 
-  def call(context)
-    scope = @root.enter_scope("request")
-    context.state = scope
-    call_next(context)
-  ensure
-    scope.try(&.exit)
+  @[LF::HTTP::Controller::Delete("/todos/:id")]
+  def destroy(id : Int64)
+    deleted = @todo_repository.delete(id)
+    raise LF::HTTP::NotFound.new("Todo not found") unless deleted
+    LF::HTTP::TextResponse.create("deleted")
   end
 end
 
-root = LF::DI::AnnotationApplicationContext.new
-root.register(LF::DI::AutowiredApplicationConfig.new)
-
-app = LF::LFApi.new do |router|
-  TodoApi.new.setup_routes(router)
+@[LF::Application]
+@[LF::AutoConfig::HTTP]
+class TodoApplication
 end
 
-server = HTTP::Server.new([
-  HTTP::LogHandler.new,
-  RequestScopeHandler.new(root),
-  app,
-])
-
-address = server.bind_tcp(8083)
-puts "Todo API listening on http://#{address}"
-puts "Routes:"
-puts "  GET    /todos"
-puts "  GET    /todos/:id"
-puts "  POST   /todos"
-puts "  PUT    /todos/:id"
-puts "  DELETE /todos/:id"
-
-begin
-  server.listen
-ensure
-  root.shutdown
-end
+TodoApplication.run_http

@@ -4,6 +4,7 @@ This is a standalone example project that uses:
 
 - `opal` for routing/API handling
 - `crystal-sqlite3` for persistence
+- application and HTTP autoconfiguration
 - annotation-based DI (`@[LF::DI::Service]`)
 - lifecycle callbacks for opening/closing the SQLite database and creating the schema
 
@@ -18,8 +19,14 @@ crystal run src/todo_api_sqlite_example.cr
 
 Server starts on `http://127.0.0.1:8083`.
 
-The server stack includes a request-scope middleware that sets `context.state` for `LF::APIRoute` dependency resolution.
-`TodoDatabase` and `TodoRepository` are registered through `LF::DI::AutowiredApplicationConfig`, so the example does not need manual `add_bean` calls.
+`TodoApplication.run_http` discovers `TodoApi` at compile time, creates the
+request-scope middleware, and owns server shutdown. `TodoApi` receives
+`TodoRepository` through constructor injection. `TodoDatabase` receives
+`LF::ConfigService`, opens `database.url`, and owns schema creation through its
+DI lifecycle callback.
+
+HTTP and database settings live in `config/application.yml`. Set
+`OPAL_CONFIG=/path/to/application.yml` to select another file.
 
 ## Endpoints
 

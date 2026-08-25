@@ -1,202 +1,242 @@
-# ADR-0002: Application Bootstrap Layer
+# ADR-0002: Compile-Time Application Layer
 
-- Status: Proposed
-- Date: 2026-07-02
+- Status: Accepted
+- Date: 2026-07-17
 - Deciders: Opal maintainers
-- Related: `LF::DI` container, `LF::APIRoute` integration, future `LF::Data` layer
+- Related: `LF::DI`, `LF::HTTP::Router`, `LF::HTTP::App`, future application configuration and data layers
+- Supersedes: the previous proposed application-bootstrap API in this ADR
+- Extended by: ADR-0003 and ADR-0004
 
 ## Context
 
-Opal currently has a DI core and HTTP API layer, but application startup is still assembled manually.
-Applications create a root `LF::DI::AnnotationApplicationContext`, explicitly register DI configurations, wire HTTP handlers, and manually decide when to call `shutdown`.
+Opal already has an independent DI container, router, and HTTP API layer. A
+program can construct `LF::DI::DefaultContainer`, register its
+configurations, manage request scopes, and call `shutdown` itself. That remains
+the correct model for a small Crystal application or a library integration.
 
-That is acceptable for a small example, but it does not give future infrastructure layers a stable place to plug in. A database layer, configuration system, profiles, health checks, and other enterprise-style capabilities all need a shared bootstrap model.
+What is missing is an optional, consistent entrypoint for applications that
+want conventional DI assembly and deterministic lifetime management without
+moving DI, HTTP, database, or configuration concerns into one framework type.
+The application layer must:
 
-At the same time, Opal should keep the simple path simple. The application layer should not turn the DI container into a magic runtime scanner, and runtime configuration values such as database URLs or credentials should not be embedded into compile-time annotations.
+- do structural discovery at Crystal compile time rather than runtime scanning;
+- create and own exactly one root DI context for an opted-in application;
+- make standard DI configuration available consistently;
+- preserve the standalone `LF::DI` API and its existing lifecycle semantics;
+- add no request-time reflection, registry lookup, or per-request bootstrap
+  overhead.
+
+This ADR intentionally separates application orchestration from DI mechanics.
+`LF::DI` owns bean factories, dependency resolution, scopes, bean lifecycle,
+and DI errors. `LF::ApplicationRuntime` coordinates only the application
+boundary around that existing container.
 
 ## Decision
 
-We will introduce a thin application bootstrap layer above `LF::DI`.
+### 1. Application opt-in and executable model
 
-The application layer is responsible for creating the root application context, registering standard framework configurations, discovering application configuration classes at compile time, and coordinating shutdown.
-
-The DI container remains responsible for bean registration, lookup, scoping, lifecycle callbacks, and dependency resolution. It should not become responsible for discovering whole applications.
-
-### 1) Compile-time discovery, runtime values
-
-Compile-time mechanisms should describe the shape of the application:
-
-- application entrypoint
-- configuration classes
-- service classes
-- bean factory methods
-- dependency graph shape where Crystal macros can observe it
-
-Runtime configuration should provide environment-specific values:
-
-- database URLs
-- credentials
-- pool sizes
-- timeouts
-- feature flags
-- profile names
-
-Annotations may identify application structure, but they should not carry environment-specific values.
-
-### 2) Application entrypoint
-
-Add an application marker annotation for the top-level application type.
+An application opts in with one marker annotation:
 
 ```crystal
-@[LF::Application]
+@[LF::Application(priority: 0)]
 class TodoApp
 end
 ```
 
-The exact runtime API can evolve, but the expected shape is:
+There may be exactly one annotated application class in one Crystal
+executable. Zero markers are valid: the executable is simply an ordinary
+Crystal application, which may use `LF::DI`, `LF::HTTP::Router`, and `LF::HTTP::App`
+directly. More than one marker is a compile-time error.
+
+`LF::Application` is an annotation, not an inheritable runtime base class.
+This keeps application declaration declarative and avoids mixing a user entry
+class with the object that owns a running context.
+
+### 2. Runtime API
+
+The runtime owner is `LF::ApplicationRuntime`. Compile-time expansion on the
+annotated application class generates the public entrypoints:
 
 ```crystal
-app = LF::Application.run(TodoApp)
-```
+runtime = TodoApp.bootstrap
 
-or:
-
-```crystal
-context = LF::Application.bootstrap(TodoApp)
-```
-
-The bootstrap result should expose the root context and provide an explicit shutdown path.
-
-### 3) Configuration discovery
-
-Add a configuration marker for classes that participate in application bootstrap.
-
-```crystal
-@[LF::Application::Configuration]
-class AppConfig
-  include LF::DI::ApplicationConfig
-
-  @[LF::DI::Bean]
-  def database_config : LF::Data::DatabaseConfig
-    LF::Data::DatabaseConfig.from_env("APP_DB")
-  end
+TodoApp.run do |app|
+  service = app.resolve(TodoService)
+  service.start
 end
 ```
 
-In v1, configuration classes should still use `include LF::DI::ApplicationConfig` to get the existing compile-time bean factory behavior. The annotation makes the class discoverable by the application bootstrap layer.
+The generated API has this contract:
 
-### 4) Standard bootstrap behavior
+- `TodoApp.bootstrap : LF::ApplicationRuntime` creates a new root
+  `LF::DI::DefaultContainer`, registers application configuration,
+  and returns an open runtime.
+- `TodoApp.run(&block) : T` bootstraps, yields the runtime, shuts it down, and
+  returns the block result when both the block and shutdown succeed.
+- Neither method accepts a caller-provided DI context. The root context belongs
+  to the runtime for its whole lifetime.
+- `ApplicationRuntime` does not expose its raw context. It exposes typed DI
+  lookup through `resolve(Type)` and `resolve(name, Type)` only. These methods
+  delegate to public typed resolver APIs provided by `LF::DI`; they do not
+  redefine DI resolution rules.
 
-Application bootstrap v1 should:
+The application layer does not provide HTTP server startup, request scope
+creation, routing setup, or database setup in this version. Such code remains
+explicit in the `run` block or in the independent HTTP integration until a
+separate HTTP application-integration ADR exists.
 
-1. Create the root `LF::DI::AnnotationApplicationContext`.
-2. Register `LF::DI::AutowiredApplicationConfig`.
-3. Register all discovered `@[LF::Application::Configuration]` classes.
-4. Return an application/context object that can be shut down explicitly.
-5. Ensure shutdown delegates to the root context.
+### 3. Configuration declaration and discovery
 
-## Not In Scope For v1
-
-- database layer
-- web server auto-start
-- property binding
-- profiles
-- conditional beans
-- module system
-- classpath-style runtime scanning
-- automatic external dependency installation
-- repository abstraction
-- ORM
-- health checks and metrics
-
-These capabilities should build on the application layer after the bootstrap contract is stable.
-
-## Detailed Requirements
-
-1. Application bootstrap must be explicit from user code.
-2. Configuration discovery must happen at compile time.
-3. Runtime values must come from runtime sources, not application annotations.
-4. Existing explicit DI registration must keep working.
-5. The application layer must not remove the ability to use `LF::Router`, `LF::LFApi`, or `LF::DI` independently.
-6. Shutdown must be explicit and deterministic.
-7. The implementation must be small enough to support the future data layer without pulling database concerns into bootstrap.
-
-## Proposed API Shape (v1)
-
-### Annotations
-
-- `@[LF::Application]`
-- `@[LF::Application::Configuration]`
-
-### Runtime types
-
-- `LF::ApplicationContext` or `LF::ApplicationInstance`
-- `LF::Application.run(AppType)`
-- `LF::Application.bootstrap(AppType)`
-
-The final names should be validated during implementation. The important contract is that the application layer owns bootstrap orchestration and exposes the root DI context.
-
-### Configuration classes
-
-Configuration classes remain ordinary Crystal classes:
+Application-discovered configuration is declared by the application layer, while bean metadata and registration behavior remain owned by DI:
 
 ```crystal
-@[LF::Application::Configuration]
+@[LF::ApplicationConfiguration(priority: 0)]
 class DataConfig
-  include LF::DI::ApplicationConfig
-
   @[LF::DI::Bean]
-  def database_config : LF::Data::DatabaseConfig
-    LF::Data::DatabaseConfig.from_env("APP_DB")
+  def database : Database
+    Database.open
   end
 end
 ```
 
-This preserves the existing `@[LF::DI::Bean]` model and avoids adding database-specific annotations before the data layer is designed.
+`@[LF::ApplicationConfiguration]` marks providers for compile-time application
+discovery. Authors do not manually include `LF::DI::BeanConfiguration` for this
+normal path. Application bootstrap passes each provider to DI's generic
+`register_provider` API, so interpretation of `@[LF::DI::Bean]`, dependency
+resolution, scopes, and duplicate validation remain DI responsibilities. Configuration providers are
+bootstrap-only objects: they must have a zero-argument constructor, are
+instantiated only to register factories, and are not resolvable beans.
+Resource allocation belongs in bean factories, where existing DI lifecycle
+callbacks can manage it.
+
+The application class itself is also a DI configuration. This permits the
+smallest application to declare its own `@[LF::DI::Bean]` factory methods
+without a second class:
+
+```crystal
+@[LF::Application]
+class TodoApp
+  @[LF::DI::Bean]
+  def clock : Clock
+    SystemClock.new
+  end
+end
+```
+
+Discovery is generated by Crystal macros during compilation. The runtime does
+not scan classes. `LF::DI::ServiceConfiguration` is always registered
+first by application bootstrap; service discovery and constructor dependency
+resolution remain DI behavior.
+
+Discovered configurations are ordered only for automatic application
+registration:
+
+1. higher `priority` first;
+2. equal priorities by fully qualified class name in ascending order.
+
+The default priority is `0`; `@[LF::Application]` accepts the same optional
+priority because the application class is itself a configuration. Explicit
+`context.register(config)` calls retain their caller-defined order because that
+API belongs to standalone DI.
+
+### 4. Lifecycle and error contract
+
+`ApplicationRuntime` has two states: open and closed.
+
+- Calling `shutdown` on an open runtime delegates to root-context shutdown and
+  then marks the runtime closed, even if DI raises a destruction error.
+- A second `shutdown`, or any `resolve` after closure, raises a typed
+  application-runtime error.
+- If bootstrap registration fails, bootstrap shuts down the newly created root
+  context and re-raises the original failure. The failed bootstrap never
+  returns a runtime.
+- `run` always attempts shutdown. If both the user block and shutdown fail, it
+  raises `RunError`, retaining both original exceptions for inspection. If only
+  one phase fails, that phase's original error is raised.
+
+Crystal does not allow types to be declared inside an `annotation`; therefore
+the application-specific error hierarchy cannot be named
+`LF::Application::Error`. The accepted equivalent is:
+
+```crystal
+LF::ApplicationRuntime::Error
+LF::ApplicationRuntime::ClosedError
+LF::ApplicationRuntime::AlreadyClosedError
+LF::ApplicationRuntime::RunError
+```
+
+`RunError` exposes the block failure and shutdown failure as typed fields.
+DI errors, including `LF::DI::BeanDestructionError`, remain DI errors unless
+both run phases fail and `RunError` is required to preserve both causes.
+
+### 5. Validation boundaries
+
+Application macros validate application metadata at compile time:
+
+- zero or exactly one `@[LF::Application]` class;
+- valid `priority` metadata on application-discovered configurations;
+- zero-argument construction for generated configuration providers;
+- generated entrypoints only on the selected application class.
+
+DI owns validation of DI metadata and behavior: duplicate bean names, bean
+types, dependency resolution, scopes, lifecycle callbacks, and any future
+compile-time DI validations. Application bootstrap must not duplicate those
+checks or alter their errors.
 
 ## Consequences
 
 ### Positive
 
-- Gives future infrastructure layers a stable bootstrap foundation.
-- Keeps DI core focused on dependency resolution instead of application discovery.
-- Makes configuration registration less manual without requiring runtime scanning.
-- Preserves a simple path for small applications.
-- Creates a natural place for future auto-configuration, profiles, and data infrastructure.
+- Application startup becomes conventional without making standalone DI less
+  useful.
+- Class discovery and registration order are fixed at compile time, with no
+  runtime scanning cost.
+- Users get a small public runtime facade instead of a mutable root context.
+- The future application configuration and data layers receive a stable
+  ownership boundary.
+- Existing DI lifecycle management remains the sole lifecycle mechanism for
+  resources such as database connections.
 
 ### Trade-offs
 
-- Introduces a new top-level concept in Opal.
-- Requires clear documentation so users understand the difference between DI core and application bootstrap.
-- Compile-time discovery can surprise users if the inclusion rules are too broad.
-- Future features must avoid pushing runtime values into annotations.
+- Application configuration providers cannot use constructor injection in v1.
+- There is no automatic HTTP/request-scope bridge yet; HTTP examples continue
+  to use explicit handler wiring until that boundary is designed separately.
+- Application bootstrap intentionally couples to the standard autowiring
+  configuration. Users needing a fully manual container can continue to use
+  standalone `LF::DI`.
+- Compile-time validation requires dedicated compiler-fixture tests in addition
+  to normal Crystal specs.
 
-## Implementation Plan (High-Level)
+## Non-Goals
 
-1. Add `@[LF::Application]` marker annotation.
-2. Add `@[LF::Application::Configuration]` marker annotation.
-3. Add a small application bootstrap type/module.
-4. Generate a compile-time bootstrap plan for discovered configuration classes.
-5. Register `LF::DI::AutowiredApplicationConfig` by default.
-6. Register discovered configuration instances in deterministic order.
-7. Return an application/context object with access to the root DI context.
-8. Add explicit shutdown support.
-9. Update examples to show both explicit DI and application bootstrap styles.
+- HTTP server lifecycle, request-scope middleware, or route discovery.
+- Environment/property binding, profiles, conditions, or module imports.
+- Database abstractions, ORM, repositories, transactions, or migrations.
+- Runtime classpath-style scanning or reflection registries.
+- Changes to DI bean creation policy, scopes, lifecycle order, or resolution
+  semantics.
 
-## Testing Strategy
+## Compatibility and Migration
 
-- Unit tests for configuration discovery.
-- Tests that `@[LF::Application::Configuration]` classes are registered automatically during application bootstrap.
-- Tests that explicit DI registration still works without the application layer.
-- Tests that `LF::DI::AutowiredApplicationConfig` is registered by default.
-- Tests that shutdown delegates to the root context.
-- Regression tests for duplicate beans and ambiguous bean behavior during bootstrap.
+Standalone code can continue to use `LF::DI::DefaultContainer` without an
+application marker. During this pre-release boundary cleanup, the former DI
+application-oriented type names were replaced with DI-specific names, and the
+HTTP API moved under `LF::HTTP`. `LF::Application` as the old runtime class is replaced
+by the annotation and therefore the previously proposed APIs
+`LF::Application.bootstrap(context)` and subclass-based applications are not
+kept. The feature is not released yet, so this source incompatibility is
+accepted before a stable release.
 
-## Future Work
+Examples will distinguish both supported styles:
 
-- `LF::Data` database infrastructure built as explicit auto-configuration.
-- Profiles and conditional beans.
-- Property binding from environment/config files.
-- Module imports.
-- Web application bootstrap that can assemble an `HTTP::Server`.
-- Health checks, metrics, and observability hooks.
+- a minimal application-bootstrap example for `@[LF::Application]`;
+- the SQLite HTTP Todo API remains explicit around HTTP/request scopes until an
+  HTTP integration contract is accepted.
+
+## Follow-up Work
+
+Implement this ADR using the detailed plan in
+[`docs/plans/2026-07-12-application-bootstrap.md`](../plans/2026-07-12-application-bootstrap.md).
+Future ADRs may add application configuration binding, data infrastructure,
+and HTTP application integration on top of this contract.

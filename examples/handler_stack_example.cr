@@ -10,7 +10,7 @@ class RequestIdHandler
   end
 end
 
-app = LF::LFApi.new do |router|
+app = LF::HTTP::App.new do |router|
   router.get("/hello") do |ctx, _params|
     ctx.response.content_type = "text/plain"
     ctx.response.print "Hello from handler stack"
