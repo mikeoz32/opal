@@ -74,13 +74,17 @@ Opal tracks active WebSocket connections. During application shutdown it stops
 accepting new connections, sends each active connection close code `1001 Going
 Away`, waits up to `http.websocket.shutdown_timeout_ms`, and force-closes any
 remaining connections. The setting is an `Int32` in milliseconds and defaults
-to `5000`.
+to `5000`. Force-close closes the upgrade IO; Crystal does not provide safe
+forced cancellation for arbitrary user callback code, so callback bodies must
+return for their DI scope to finish cleanup.
 
-An exception after upgrade, including controller construction or callback
-execution, is logged through `Log.error` with the exception and route path
-only, then closes the connection with `1011 Internal Error`. The close reason
-does not expose the exception message to the peer. Opal never attempts to
-write an HTTP error response after upgrade.
+An exception during controller construction or action setup is logged through
+`Log.error` with the exception and route path only, then closes the connection
+with `1011 Internal Error`. Exceptions from callbacks registered directly on
+the raw Crystal `HTTP::WebSocket` follow Crystal's native handler behavior;
+Opal does not wrap the socket or serialize application writes. The close reason
+does not expose the exception message to the peer. Opal never attempts to write
+an HTTP error response after upgrade.
 
 Origin, authentication, and authorization that must reject a handshake run in
 ordinary HTTP middleware before the router. The optional `HTTP::Request` in a

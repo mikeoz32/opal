@@ -148,6 +148,29 @@ class HTTPAutoConfigOutputFinalizer
   end
 end
 
+class HTTPAutoConfigWebSocketController
+  @@connected = Channel(Nil).new
+
+  def self.reset : Nil
+    @@connected = Channel(Nil).new
+  end
+
+  def self.wait_until_connected : Nil
+    select
+    when @@connected.receive
+    when timeout(5.seconds)
+      fail "websocket controller did not connect"
+    end
+  end
+
+  include LF::HTTP::Controller
+
+  @[LF::HTTP::Controller::WebSocket("/autoconfig/ws")]
+  def connect(ws : HTTP::WebSocket) : Nil
+    @@connected.send(nil)
+  end
+end
+
 private def with_http_config(contents : String, &block : String ->)
   path = "/tmp/opal-http-autoconfig-#{Process.pid}-#{Random.rand(1_000_000)}.yml"
   File.write(path, contents)
@@ -208,8 +231,51 @@ describe LF::HTTP::AutoConfig do
       extension.configured_host.should eq("0.0.0.0")
       extension.configured_port.should eq(8080)
       extension.configured_drain_timeout.should eq(30.seconds)
+      extension.websocket_shutdown_timeout_ms.should eq(5000)
 
       runtime.shutdown
+    end
+  end
+
+  it "uses the configured websocket shutdown timeout" do
+    with_http_config("http:\n  websocket:\n    shutdown_timeout_ms: 125\n") do |path|
+      runtime = build_http_runtime(path)
+      extension = LF::HTTP::AutoConfig.install(runtime)
+
+      extension.websocket_shutdown_timeout_ms.should eq(125)
+
+      runtime.shutdown
+    end
+  end
+
+  it "sends Going Away to active websocket connections during stop" do
+    HTTPAutoConfigWebSocketController.reset
+
+    with_http_config("http:\n  host: 127.0.0.1\n  port: 0\n  websocket:\n    shutdown_timeout_ms: 100\n") do |path|
+      runtime = build_http_runtime(path)
+      extension = LF::HTTP::AutoConfig.install(runtime)
+      address = extension.bind
+      spawn { extension.listen }
+
+      protocol = HTTP::WebSocket::Protocol.new("127.0.0.1", "/autoconfig/ws", address.port)
+      websocket = HTTP::WebSocket.new(protocol)
+      HTTPAutoConfigWebSocketController.wait_until_connected
+
+      closed = Channel(HTTP::WebSocket::CloseCode).new(1)
+      websocket.on_close { |code, _message| closed.send(code) }
+      spawn { websocket.receive? rescue nil }
+
+      extension.stop
+
+      select
+      when code = closed.receive
+        code.should eq(HTTP::WebSocket::CloseCode::GoingAway)
+      when timeout(2.seconds)
+        fail "websocket was not closed during extension stop"
+      end
+      runtime.shutdown
+    ensure
+      websocket.try(&.close)
     end
   end
 

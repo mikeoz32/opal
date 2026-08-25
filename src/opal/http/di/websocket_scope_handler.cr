@@ -4,7 +4,7 @@ module LF::HTTP::DI
   class WebSocketScopeHandler
     include ::HTTP::Handler
 
-    def initialize(@root : LF::DI::ScopeProvider, @scope : String = "websocket")
+    def initialize(@root : LF::DI::ScopeProvider, @scope : String = "websocket", @connections : LF::HTTP::WebSocketConnectionRegistry? = nil)
     end
 
     def call(context : ::HTTP::Server::Context) : Nil
@@ -17,15 +17,32 @@ module LF::HTTP::DI
       context.response.upgrade_handler = ->(io : IO) {
         scope = @root.enter_scope(@scope)
         previous_scope = context.dependency_scope
+        previous_registry = context.websocket_connection_registry
+        previous_connection = context.websocket_connection
+        previous_io = context.websocket_io
         context.dependency_scope = scope
+        context.websocket_connection_registry = @connections
+        context.websocket_connection = nil
+        context.websocket_io = io
 
         begin
           upgrade_handler.call(io)
         ensure
           begin
-            scope.exit
+            if connections = @connections
+              if connection = context.websocket_connection
+                connections.unregister(connection)
+              end
+            end
+            context.websocket_connection_registry = previous_registry
+            context.websocket_connection = previous_connection
+            context.websocket_io = previous_io
           ensure
-            context.dependency_scope = previous_scope
+            begin
+              scope.exit
+            ensure
+              context.dependency_scope = previous_scope
+            end
           end
         end
       }

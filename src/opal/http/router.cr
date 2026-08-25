@@ -2,6 +2,7 @@ require "http/server"
 require "http/server/handlers/websocket_handler"
 require "set"
 require "../trie"
+require "./di_integration"
 require "./errors"
 
 module LF::HTTP
@@ -56,6 +57,10 @@ module LF::HTTP
       @root.add_route(path, ->(context : ::HTTP::Server::Context, params : Hash(String, String)) {
         if websocket_upgrade_request?(context.request)
           websocket_handler = ::HTTP::WebSocketHandler.new(protocols) do |websocket, websocket_context|
+            if registry = websocket_context.websocket_connection_registry
+              io = websocket_context.websocket_io || raise "WebSocket upgrade IO is not initialized"
+              websocket_context.websocket_connection = registry.register(websocket, io)
+            end
             handler.call(websocket, params, websocket_context)
           end
           websocket_handler.call(context)
