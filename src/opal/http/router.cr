@@ -1,5 +1,8 @@
 require "http/server"
+require "http/server/handlers/websocket_handler"
+require "set"
 require "../trie"
+require "./errors"
 
 module LF::HTTP
   class Router
@@ -9,6 +12,8 @@ module LF::HTTP
 
     @root : LF::Routing::Trie::Node
     @error_mapper : ErrorMapper
+    @http_paths = Set(String).new
+    @websocket_paths = Set(String).new
 
     def initialize(error_mapper : ErrorMapper? = nil)
       @root = LF::Routing::Trie::Node.new
@@ -18,11 +23,33 @@ module LF::HTTP
     end
 
     def add(path : String, methods : Set(String) = Set{"GET"}, &handler : ::HTTP::Server::Context, Hash(String, String) -> Nil)
+      register_http_path(path)
       @root.add_route(path, handler, methods)
     end
 
     def add(path : String, handler : LF::Routing::Trie::Handler, methods : Set(String) = Set{"GET"})
+      register_http_path(path)
       @root.add_route(path, handler, methods)
+    end
+
+    def ws(path : String, protocols : Array(String)? = nil, &handler : ::HTTP::WebSocket, Hash(String, String) -> Nil) : Nil
+      route_key = normalize_route_path(path)
+      if @http_paths.includes?(route_key) || @websocket_paths.includes?(route_key)
+        raise LF::HTTP::RouteConflictError.new(path)
+      end
+
+      @websocket_paths << route_key
+      @root.add_route(path, ->(context : ::HTTP::Server::Context, params : Hash(String, String)) {
+        if websocket_upgrade_request?(context.request)
+          websocket_handler = ::HTTP::WebSocketHandler.new(protocols) do |websocket, _|
+            handler.call(websocket, params)
+          end
+          websocket_handler.call(context)
+        else
+          context.response.headers["Upgrade"] = "websocket"
+          write_status(context, ::HTTP::Status::UPGRADE_REQUIRED, "Upgrade Required")
+        end
+      })
     end
 
     def get(path : String, &handler : ::HTTP::Server::Context, Hash(String, String) -> Nil)
@@ -76,6 +103,29 @@ module LF::HTTP
     private def default_error(context : ::HTTP::Server::Context, status : ::HTTP::Status, body : String) : Nil
       context.response.content_type = "text/plain"
       context.response.print body
+    end
+
+    private def register_http_path(path : String) : Nil
+      route_key = normalize_route_path(path)
+      if @websocket_paths.includes?(route_key)
+        raise LF::HTTP::RouteConflictError.new(path)
+      end
+
+      @http_paths << route_key
+    end
+
+    private def normalize_route_path(path : String) : String
+      segments = path.split('/').reject(&.empty?)
+      return "/" if segments.empty?
+
+      "/" + segments.map { |segment| segment.starts_with?(':') ? ":*" : segment }.join("/")
+    end
+
+    private def websocket_upgrade_request?(request : ::HTTP::Request) : Bool
+      return false unless upgrade = request.headers["Upgrade"]?
+      return false unless upgrade.compare("websocket", case_insensitive: true) == 0
+
+      request.headers.includes_word?("Connection", "Upgrade")
     end
   end
 end

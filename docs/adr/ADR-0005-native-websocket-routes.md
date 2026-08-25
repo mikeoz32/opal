@@ -11,8 +11,9 @@
 Opal needs native WebSocket support as an HTTP route type. This is a lower
 layer than Phoenix LiveView: it must expose Crystal's WebSocket API without
 introducing a second web framework, a reactive runtime, or a custom socket
-abstraction. The initial target is Crystal 1.19, whose WebSocket API is
-callback-based and whose `HTTP::WebSocketHandler` owns the `ws.run` loop.
+abstraction. The initial target is Crystal 1.21, whose WebSocket API supports
+callbacks and synchronous receive methods, and whose
+`HTTP::WebSocketHandler` owns the `ws.run` loop.
 
 WebSocket connections also outlive the HTTP request that initiated their
 upgrade. They therefore require an explicit DI lifetime and shutdown policy.
@@ -94,9 +95,10 @@ these native routes; it must not require a change to the native socket API.
 - Security policy stays application-owned and can run before HTTP upgrade.
 - Long-lived controllers and disposable dependencies have connection lifetime,
   rather than accidentally retaining request-scoped metadata.
-- Crystal 1.19 does not provide synchronous receive methods. A future Crystal
-  upgrade may add an additive higher-level API, but the callback API remains
-  the stable baseline.
+- Crystal 1.21 provides both callback and synchronous receive APIs. Opal's
+  first route layer exposes the native socket directly, so applications may
+  choose either style while the stdlib handler remains responsible for
+  `ws.run` in callback-based handlers.
 
 ## Verification plan
 

@@ -1826,6 +1826,113 @@ describe "LF::HTTP::Router" do
       body.should eq(method)
     end
   end
+
+  it "registers websocket routes" do
+    router = LF::HTTP::Router.new
+
+    router.ws("/chat") do |_ws, _params|
+    end
+  end
+
+  it "rejects an HTTP route when a websocket route uses the same path" do
+    router = LF::HTTP::Router.new
+    router.ws("/chat") { |_ws, _params| }
+
+    expect_raises(LF::HTTP::RouteConflictError) do
+      router.get("/chat") { |_ctx, _params| }
+    end
+  end
+
+  it "rejects a websocket route when an HTTP route uses the same path" do
+    router = LF::HTTP::Router.new
+    router.get("/chat") { |_ctx, _params| }
+
+    expect_raises(LF::HTTP::RouteConflictError) do
+      router.ws("/chat") { |_ws, _params| }
+    end
+  end
+
+  it "detects websocket and HTTP conflicts across parameter names and slashes" do
+    router = LF::HTTP::Router.new
+    router.ws("/chat/:id") { |_ws, _params| }
+
+    expect_raises(LF::HTTP::RouteConflictError) do
+      router.get("//chat/:name/") { |_ctx, _params| }
+    end
+  end
+
+  it "returns 426 for a non-upgrade request to a websocket route" do
+    router = LF::HTTP::Router.new
+    router.ws("/chat") { |_ws, _params| }
+
+    io = IO::Memory.new
+    request = HTTP::Request.new("GET", "/chat")
+    response = HTTP::Server::Response.new(io)
+    context = HTTP::Server::Context.new(request, response)
+
+    router.call(context)
+    response.close
+
+    response.status.should eq(HTTP::Status::UPGRADE_REQUIRED)
+    response.headers["Upgrade"].should eq("websocket")
+    io.to_s.split("\r\n\r\n", 2)[1].should eq("Upgrade Required")
+  end
+
+  it "upgrades websocket routes and passes route parameters to the callback" do
+    router = LF::HTTP::Router.new
+    router.ws("/chat/:id") do |ws, params|
+      ws.on_message do |message|
+        ws.send("#{params["id"]}: #{message}")
+      end
+    end
+
+    server = HTTP::Server.new([router])
+    address = server.bind_tcp("127.0.0.1", 0)
+    listening = Channel(Nil).new
+    spawn do
+      listening.send(nil)
+      server.listen
+    end
+    listening.receive
+    Fiber.yield
+
+    client = HTTP::WebSocket.new("127.0.0.1", "/chat/42", port: address.port)
+    client.send("hello")
+    client.receive.should eq("42: hello")
+    client.close
+  ensure
+    server.try(&.close)
+  end
+
+  it "negotiates a configured websocket subprotocol" do
+    router = LF::HTTP::Router.new
+    router.ws("/chat", protocols: ["chat.v1"]) { |_ws, _params| }
+
+    server = HTTP::Server.new([router])
+    address = server.bind_tcp("127.0.0.1", 0)
+    listening = Channel(Nil).new
+    spawn do
+      listening.send(nil)
+      server.listen
+    end
+    listening.receive
+    Fiber.yield
+
+    protocol = HTTP::WebSocket::Protocol.new(
+      "127.0.0.1",
+      "/chat",
+      address.port,
+      nil,
+      HTTP::Headers.new,
+      ["chat.v1"]
+    )
+    websocket = HTTP::WebSocket.new(protocol)
+
+    protocol.protocol.should eq("chat.v1")
+  ensure
+    websocket.try(&.close)
+    server.try(&.close)
+  end
 end
 
 describe "LF::HTTP::App" do

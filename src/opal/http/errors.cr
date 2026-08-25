@@ -1,6 +1,12 @@
 require "http/status"
 
 module LF::HTTP
+  class RouteConflictError < Exception
+    def initialize(path : String)
+      super("HTTP and WebSocket routes can not share path: #{path}")
+    end
+  end
+
   class Error < Exception
     getter status_code : ::HTTP::Status
 
