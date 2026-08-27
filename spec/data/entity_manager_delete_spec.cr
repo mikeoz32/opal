@@ -64,6 +64,29 @@ describe LF::Data::EntityManager do
     end
   end
 
+  it "rejects a delete that affects more than one row" do
+    LF::DataSpecSupport::SQLiteDatabase.with_memory do |database|
+      database.exec("CREATE TABLE delete_records (id TEXT, value TEXT NOT NULL)")
+      database.exec("INSERT INTO delete_records (id, value) VALUES (?, ?)", "dup", "first")
+      database.exec("INSERT INTO delete_records (id, value) VALUES (?, ?)", "dup", "second")
+      source = LF::Data::DataSource.new(database, dialect: LF::Data::Dialects::SQLite.new)
+
+      error = expect_raises(LF::Data::EntityStateError) do
+        source.transaction do |manager|
+          entity = DeleteRecord.new("dup", "third")
+          manager.persist(entity)
+          manager.flush
+          manager.remove(entity)
+          manager.flush
+        end
+      end
+
+      error.operation.should eq(:delete)
+    ensure
+      source.try &.close
+    end
+  end
+
   it "reports one DELETE and removes the identity-map entry" do
     LF::DataSpecSupport::SQLiteDatabase.with_memory do |database|
       prepare_delete_table(database)

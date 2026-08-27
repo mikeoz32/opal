@@ -48,6 +48,17 @@ module LF
           "LIMIT -1 OFFSET #{placeholder}"
         end
 
+        def migration_history_record_conflict?(
+          error : Exception,
+          table : String,
+          column : String,
+        ) : Bool
+          return false unless error.class.name == "SQLite3::Exception"
+
+          message = error.message || error.to_s
+          message.includes?("UNIQUE constraint failed: #{table}.#{column}")
+        end
+
         def supports?(capability : DialectCapability) : Bool
           case capability
           when .last_insert_id?, .transactional_ddl?, .add_column?, .rename_column?, .foreign_key_ddl?

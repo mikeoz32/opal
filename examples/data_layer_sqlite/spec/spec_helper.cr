@@ -11,9 +11,10 @@ module DataLayerExampleSpecSupport
     allow_sqlite_cleanup_error : Bool = false,
     & : DataLayerExample::Store ->
   )
+    store = nil.as(DataLayerExample::Store?)
     store = DataLayerExample::Store.open("sqlite3://%3Amemory%3A")
-    store.migrate
-    yield store
+    store.not_nil!.migrate
+    yield store.not_nil!
   ensure
     begin
       store.try &.close

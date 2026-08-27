@@ -46,8 +46,8 @@ module LF
       def close : Nil
         return if closed?
 
+        close_database if owns_database?
         @closed = true
-        @database.close if owns_database?
       end
 
       def transaction(& : EntityManager -> T) : T forall T
@@ -141,6 +141,10 @@ module LF
         dispatcher : Internal::ListenerDispatcher,
       ) : EntityManager
         EntityManager.new(connection, dialect, dispatcher)
+      end
+
+      protected def close_database : Nil
+        @database.close
       end
 
       protected def build_read_entity_manager(

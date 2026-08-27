@@ -86,9 +86,7 @@ module DataLayerExample
               if title = payload.title
                 found_task.title = title
               end
-              if completed = payload.completed
-                found_task.completed = completed
-              end
+            found_task.completed = payload.completed.as(Bool) unless payload.completed.nil?
               manager.persist(found_task)
               found_task
             end

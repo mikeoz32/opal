@@ -58,12 +58,11 @@ module LF
       end
 
       def __lf_history_record_conflict?(error : Exception) : Bool
-        return false unless @source.dialect.name == "sqlite"
-        return false unless error.class.name == "SQLite3::Exception"
-
-        message = error.message || error.to_s
-        message.includes?("UNIQUE constraint failed: #{MigrationHistory::TABLE_NAME}.version") ||
-          message.includes?("PRIMARY KEY")
+        @source.dialect.migration_history_record_conflict?(
+          error,
+          MigrationHistory::TABLE_NAME,
+          "version"
+        )
       end
     end
   end
