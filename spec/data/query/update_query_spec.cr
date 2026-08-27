@@ -16,13 +16,15 @@ describe LF::Data::Query::UpdateQuery do
 
       affected.should eq(1_i64)
       database.query_one(
-        "SELECT title, active FROM bulk_query_records WHERE id = 3"
+        "SELECT title, active, version FROM bulk_query_records WHERE id = 3"
       ) do |result|
         result.read(String).should eq("updated")
         result.read(Bool).should be_false
+        result.read(Int64).should eq(1_i64)
       end
       listener.statements.last.sql.should eq(
-        %(UPDATE "bulk_query_records" SET "title" = ?, "active" = ? ) +
+        %(UPDATE "bulk_query_records" SET "title" = ?, "active" = ?, ) +
+        %("version" = "version" + 1 ) +
         %(WHERE ("active" = ?) AND ("id" >= ?))
       )
     end

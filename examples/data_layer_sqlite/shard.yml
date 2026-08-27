@@ -1,0 +1,23 @@
+name: data_layer_sqlite_example
+version: 0.1.0
+
+authors:
+  - Opal Example
+
+dependencies:
+  opal:
+    path: ../..
+  sqlite3:
+    github: crystal-lang/crystal-sqlite3
+
+targets:
+  data_layer_sqlite_example:
+    main: src/data_layer_example_cli.cr
+  data_layer_sqlite_http_example:
+    main: src/data_layer_example_http_cli.cr
+  data_layer_sqlite_application_http_example:
+    main: src/data_layer_example_application_cli.cr
+
+crystal: ">= 1.18.2"
+
+license: MIT

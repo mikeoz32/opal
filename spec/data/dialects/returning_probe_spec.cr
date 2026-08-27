@@ -129,7 +129,8 @@ describe "returning dialect probe" do
     ).sql
 
     update_sql.should eq(
-      %(UPDATE "probe_items" SET "name" = $1 WHERE "version" = $2)
+      %(UPDATE "probe_items" SET "name" = $1, "version" = "version" + 1 ) +
+      %(WHERE "version" = $2)
     )
     delete_sql.should eq(
       %(DELETE FROM "probe_items" WHERE "version" = $1)

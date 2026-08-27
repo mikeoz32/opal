@@ -2010,7 +2010,7 @@ describe "LF::HTTP::Controller" do
     root.shutdown
 
     parsed = HTTP::Client::Response.from_io(IO::Memory.new(io.to_s))
-    parsed.content_type.should_not eq("application/json")
+    parsed.content_type.should eq("text/plain")
     parsed.body.should eq("plain")
   end
 
@@ -2033,7 +2033,7 @@ describe "LF::HTTP::Controller" do
     root.shutdown
 
     parsed = HTTP::Client::Response.from_io(IO::Memory.new(io.to_s))
-    parsed.content_type.should_not eq("application/json")
+    parsed.content_type.should eq("text/plain")
     parsed.body.should eq("plain fallback")
   end
 

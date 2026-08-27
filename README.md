@@ -397,6 +397,11 @@ The repository includes these examples:
 - [examples/todo_api_sqlite](examples/todo_api_sqlite/README.md)
   Standalone Todo API project with SQLite persistence.
 
+- [examples/data_layer_sqlite](examples/data_layer_sqlite/README.md)
+  Standalone SQLite data-layer showcase covering mappings, queries, unit of
+  work, migrations, optimistic locking, rollback behavior, manual HTTP, and
+  Application + DI + controller-discovery HTTP.
+
 Run them with:
 
 ```bash
@@ -411,6 +416,17 @@ For the standalone SQLite Todo API example, run commands from `examples/todo_api
 ```bash
 shards install
 crystal run src/todo_api_sqlite_example.cr
+```
+
+For the standalone data-layer showcase, run commands from
+`examples/data_layer_sqlite`:
+
+```bash
+shards install
+crystal spec --no-color
+crystal run src/data_layer_example_cli.cr
+crystal run src/data_layer_example_http_cli.cr
+crystal run src/data_layer_example_application_cli.cr
 ```
 
 ## Route Matching Rules
