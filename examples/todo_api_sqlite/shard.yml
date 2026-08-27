@@ -14,6 +14,6 @@ targets:
   todo_api_sqlite_example:
     main: src/todo_api_sqlite_example.cr
 
-crystal: ">= 1.18.2"
+crystal: ">= 1.21.0"
 
 license: MIT

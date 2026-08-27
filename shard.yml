@@ -8,7 +8,7 @@ targets:
   opal:
     main: src/opal.cr
 
-crystal: ">= 1.18.2"
+crystal: ">= 1.21.0"
 
 license: MIT
 
