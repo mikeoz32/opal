@@ -36,6 +36,13 @@ therefore ends in a usable, documented, fully tested repository state.
 | 09 | [Conditional Application autoconfiguration](data/09-conditional-application-autoconfiguration.md) | generic marker-driven extension installation | 01-08 |
 | 10 | [Data autoconfiguration](data/10-data-autoconfiguration.md) | YAML-driven DataSource and startup migration integration | 03, 08, 09 |
 | 11 | [Todo example and public documentation](data/11-todo-example-and-documentation.md) | end-to-end example, process checks, user guides | 04-10 |
+| 12 | [Data correctness hardening](data/12-data-correctness-hardening.md) | correctness regressions and lifecycle hardening | 01-11 |
+| 13 | [Typed entity IDs](data/13-typed-entity-ids.md) | compile-time ID-safe entity operations | 01-12 |
+| 14 | [PostgreSQL dialect](data/14-postgresql-dialect.md) | optional PostgreSQL SQL and schema support | 01-08, 12 |
+| 15 | [Dialect-specific migration locks](data/15-dialect-migration-locks.md) | explicit concurrent migration safety | 08, 14 |
+| 16 | [Relationships and cascades](data/16-relationships-and-cascades.md) | explicit relationship metadata and flush policies | 04-08, 13-14 |
+| 17 | [Repository and query API](data/17-repository-query-api.md) | typed convenience API over existing queries | 05-07, 13 |
+| 18 | [Schema diff and migration generation](data/18-schema-diff-and-migration-generation.md) | deterministic schema plans and source generation | 02, 08, 14, 16 |
 
 Plans 01 through 08 deliver a complete standalone Data layer before any
 Application integration starts. Within that boundary, Plan 08 depends only on
@@ -113,7 +120,7 @@ files, executables, and server processes live under `/tmp` and are removed in
 
 ## Release Gate
 
-After Plan 11, run:
+After Plan 18, run:
 
 ```bash
 CRYSTAL_CACHE_DIR=/tmp/opal-crystal-cache crystal spec --no-color
@@ -123,6 +130,7 @@ git status --short --branch
 ```
 
 Then audit every normative ADR-0005 section and confirm deferred features were
-not partially introduced: relations, lazy loading, cascades, joins, composite
-IDs, inheritance mapping, projections, savepoints, second-level cache,
-generated repositories, `attach`, `merge`, and dirty checking.
+not partially introduced: lazy loading, joins, composite IDs, inheritance
+mapping, projections, savepoints, second-level cache, generated repositories,
+`attach`, `merge`, and dirty checking. Plans 13-18 may add only the explicitly
+scoped capabilities described in their own documents.
