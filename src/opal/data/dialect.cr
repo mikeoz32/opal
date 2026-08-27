@@ -24,6 +24,14 @@ module LF
         raise UnsupportedSchemaOperationError.new(name, "schema migrations")
       end
 
+      def migration_history_record_conflict?(
+        error : Exception,
+        table : String,
+        column : String,
+      ) : Bool
+        false
+      end
+
       abstract def supports?(capability : DialectCapability) : Bool
     end
   end

@@ -35,6 +35,18 @@ private class FailingSetupSQLiteDialect < LF::Data::Dialects::SQLite
   end
 end
 
+private class TransientCloseFailureDataSource < LF::Data::DataSource
+  property failures_remaining = 1
+
+  protected def close_database : Nil
+    if @failures_remaining > 0
+      @failures_remaining -= 1
+      raise "transient close failure"
+    end
+    super
+  end
+end
+
 @[LF::Data::Table("datasource_entities")]
 private class DataSourceEntity
   include LF::Data::Entity
@@ -120,6 +132,22 @@ describe LF::Data::DataSource do
       expect_raises(LF::Data::ClosedDataSourceError) do
         source.transaction { nil }
       end
+    end
+  end
+
+  it "allows owned database cleanup to be retried after a close failure" do
+    LF::DataSpecSupport::SQLiteDatabase.with_memory do |database|
+      source = TransientCloseFailureDataSource.new(
+        database,
+        dialect: LF::Data::Dialects::SQLite.new,
+        owns_database: true
+      )
+
+      expect_raises(Exception, "transient close failure") { source.close }
+      source.closed?.should be_false
+      source.close
+      source.closed?.should be_true
+      database.pool.stats.open_connections.should eq(0)
     end
   end
 

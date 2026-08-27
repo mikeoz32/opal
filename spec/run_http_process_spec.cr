@@ -5,6 +5,7 @@ describe "generated run_http entrypoint" do
     suffix = "#{Process.pid}-#{Random.rand(1_000_000)}"
     binary = "/tmp/opal-run-http-#{suffix}"
     config = "/tmp/opal-run-http-#{suffix}.yml"
+    process = nil.as(Process?)
     fixture = File.expand_path("fixtures/http/run_http_application.cr", __DIR__)
     File.write(config, "http:\n  host: 127.0.0.1\n  port: 0\n")
 

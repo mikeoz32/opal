@@ -83,6 +83,15 @@ describe "data layer HTTP example" do
       updated_task["completed"].as_bool.should be_true
       updated_task["version"].as_i64.should eq(1_i64)
 
+      reverted = call_data_layer_app(
+        app,
+        "PATCH",
+        "/tasks/#{task_id}",
+        %({"completed":false})
+      )
+      reverted.status.should eq(HTTP::Status::OK)
+      JSON.parse(reverted.body)["completed"].as_bool.should be_false
+
       empty_update = call_data_layer_app(app, "PATCH", "/tasks/#{task_id}", %({}))
       empty_update.status.should eq(HTTP::Status::BAD_REQUEST)
 

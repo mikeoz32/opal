@@ -342,7 +342,7 @@ module LF
             plan.sql,
             entity.__lf_update_args(expected_version)
           )
-          if result.rows_affected == 0
+          if result.rows_affected != 1
             raise OptimisticLockError.new(
               :update,
               T.name,
@@ -360,7 +360,7 @@ module LF
             plan.sql,
             entity.__lf_update_args
           )
-          if result.rows_affected == 0
+          if result.rows_affected != 1
             raise EntityStateError.new(:update, T.name, entry.state)
           end
         {% end %}
@@ -380,7 +380,7 @@ module LF
             plan.sql,
             entity.__lf_delete_args(expected_version)
           )
-          if result.rows_affected == 0
+          if result.rows_affected != 1
             raise OptimisticLockError.new(
               :delete,
               T.name,
@@ -395,7 +395,7 @@ module LF
             plan.sql,
             entity.__lf_delete_args
           )
-          if result.rows_affected == 0
+          if result.rows_affected != 1
             raise EntityStateError.new(:delete, T.name, entry.state)
           end
         {% end %}

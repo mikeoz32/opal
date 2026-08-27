@@ -66,6 +66,30 @@ describe LF::Data::EntityManager do
     end
   end
 
+  it "rejects an update that affects more than one row" do
+    LF::DataSpecSupport::SQLiteDatabase.with_memory do |database|
+      database.exec("CREATE TABLE update_records (id TEXT, value TEXT NOT NULL, note TEXT)")
+      database.exec("INSERT INTO update_records (id, value) VALUES (?, ?)", "dup", "first")
+      database.exec("INSERT INTO update_records (id, value) VALUES (?, ?)", "dup", "second")
+      source = LF::Data::DataSource.new(database, dialect: LF::Data::Dialects::SQLite.new)
+
+      error = expect_raises(LF::Data::EntityStateError) do
+        source.transaction do |manager|
+          entity = UpdateRecord.new("dup", "third", nil)
+          manager.persist(entity)
+          manager.flush
+          entity.value = "updated"
+          manager.persist(entity)
+          manager.flush
+        end
+      end
+
+      error.operation.should eq(:update)
+    ensure
+      source.try &.close
+    end
+  end
+
   it "removes successful work from the queue before a later batch" do
     LF::DataSpecSupport::SQLiteDatabase.with_memory do |database|
       prepare_update_table(database)

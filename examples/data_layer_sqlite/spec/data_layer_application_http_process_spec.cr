@@ -20,6 +20,7 @@ describe "data layer Application HTTP executable" do
     database = "/tmp/opal-data-layer-application-http-#{suffix}.db"
     config = "/tmp/opal-data-layer-application-http-#{suffix}.yml"
     port = reserve_data_layer_application_http_port
+    process = nil.as(Process?)
     source = File.expand_path("../src/data_layer_example_application_cli.cr", __DIR__)
     cache_dir = ENV.fetch("CRYSTAL_CACHE_DIR", "/tmp/opal-crystal-cache")
     File.write(
@@ -108,6 +109,15 @@ describe "data layer Application HTTP executable" do
     )
     updated.status.should eq(HTTP::Status::OK)
     JSON.parse(updated.body)["completed"].as_bool.should be_true
+
+    reverted = HTTP::Client.exec(
+      "PATCH",
+      "http://127.0.0.1:#{port}/tasks/#{task_id}",
+      headers,
+      %({"completed":false})
+    )
+    reverted.status.should eq(HTTP::Status::OK)
+    JSON.parse(reverted.body)["completed"].as_bool.should be_false
 
     invalid_update = HTTP::Client.exec(
       "PATCH",

@@ -18,6 +18,7 @@ describe "data layer HTTP executable" do
     binary = "/tmp/opal-data-layer-http-#{suffix}"
     database = "/tmp/opal-data-layer-http-#{suffix}.db"
     port = reserve_data_layer_http_port
+    process = nil.as(Process?)
     source = File.expand_path("../src/data_layer_example_http_cli.cr", __DIR__)
     cache_dir = ENV.fetch("CRYSTAL_CACHE_DIR", "/tmp/opal-crystal-cache")
 

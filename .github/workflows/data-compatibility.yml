@@ -37,3 +37,6 @@ jobs:
           spec/data/dialects/returning_probe_spec.cr
           spec/data/dialects/specialization_spec.cr
           --no-color
+
+      - name: Run complete data specs
+        run: crystal spec spec/data --no-color
