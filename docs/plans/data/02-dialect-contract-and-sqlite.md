@@ -320,7 +320,7 @@ Cover:
 6. generic dispatch works through an abstract dialect reference;
 7. the fixture passes `--no-codegen`.
 
-Run the compile fixture on the minimum supported Crystal version, 1.18.2, in
+Run the compile fixture on the minimum supported Crystal version, 1.21.0, in
 CI. The local implementation environment may be newer, but the generic virtual
 dispatch and macro specialization are release compatibility requirements.
 
