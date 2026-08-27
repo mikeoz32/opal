@@ -168,6 +168,88 @@ describe LF::Data::DataSource do
     end
   end
 
+  it "provides a connection-scoped read without opening a transaction" do
+    LF::DataSpecSupport::SQLiteDatabase.with_memory do |database|
+      database.exec(
+        "CREATE TABLE datasource_entities " \
+        "(id INTEGER PRIMARY KEY AUTOINCREMENT, value TEXT NOT NULL)"
+      )
+      database.exec("INSERT INTO datasource_entities (value) VALUES (?)", "read-only")
+      listener = DataSourceListenerProbe.new
+      source = LF::Data::DataSource.new(
+        database,
+        dialect: LF::Data::Dialects::SQLite.new,
+        listeners: [listener] of LF::Data::Listener
+      )
+
+      values = source.read do |manager|
+        manager.query(DataSourceEntity).to_a.map(&.value)
+      end
+
+      values.should eq(["read-only"])
+      listener.events.should eq(["statement:Select"])
+    ensure
+      source.try &.close
+    end
+  end
+
+  it "rejects mutations in a read scope" do
+    LF::DataSpecSupport::SQLiteDatabase.with_memory do |database|
+      database.exec(
+        "CREATE TABLE datasource_entities " \
+        "(id INTEGER PRIMARY KEY AUTOINCREMENT, value TEXT NOT NULL)"
+      )
+      source = LF::Data::DataSource.new(
+        database,
+        dialect: LF::Data::Dialects::SQLite.new
+      )
+
+      error = expect_raises(LF::Data::ReadOnlyEntityManagerError) do
+        source.read do |manager|
+          manager.persist(DataSourceEntity.new("must not persist"))
+        end
+      end
+
+      error.operation.should eq(:persist)
+      database.scalar("SELECT count(*) FROM datasource_entities").should eq(0_i64)
+    ensure
+      source.try &.close
+    end
+  end
+
+  it "rejects every public write escape hatch in a read scope" do
+    LF::DataSpecSupport::SQLiteDatabase.with_memory do |database|
+      database.exec(
+        "CREATE TABLE datasource_entities " \
+        "(id INTEGER PRIMARY KEY AUTOINCREMENT, value TEXT NOT NULL)"
+      )
+      source = LF::Data::DataSource.new(
+        database,
+        dialect: LF::Data::Dialects::SQLite.new
+      )
+
+      source.read do |manager|
+        expect_raises(LF::Data::ReadOnlyEntityManagerError, /bulk_update/) do
+          manager.update(DataSourceEntity)
+        end
+        expect_raises(LF::Data::ReadOnlyEntityManagerError, /bulk_delete/) do
+          manager.delete(DataSourceEntity)
+        end
+        expect_raises(LF::Data::ReadOnlyEntityManagerError, /remove/) do
+          manager.remove(DataSourceEntity.new("must not remove"))
+        end
+        expect_raises(LF::Data::ReadOnlyEntityManagerError, /flush/) do
+          manager.flush
+        end
+        expect_raises(LF::Data::ReadOnlyEntityManagerError, /connection/) do
+          manager.connection
+        end
+      end
+    ensure
+      source.try &.close
+    end
+  end
+
   it "returns nil without confusing it with an explicit rollback" do
     LF::DataSpecSupport::SQLiteDatabase.with_memory do |database|
       source = LF::Data::DataSource.new(

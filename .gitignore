@@ -1,4 +1,5 @@
 /.shards/
+/bin/
 /lib/
 /docs/*
 !/docs/adr/

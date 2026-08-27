@@ -784,6 +784,18 @@ module LF
                   {% assignment_fields = S.type_vars[1] %}
                   {% raise "#{T} bulk UPDATE requires at least one SET clause" if assignment_fields.type_vars.empty? %}
                   {% assignments = [] of String %}
+                  {% version_column = nil %}
+                  {% for ivar in T.instance_vars %}
+                    {% if column_annotation = ivar.annotation(LF::Data::Column) %}
+                      {% unless column_annotation[:ignore] %}
+                        {% if ivar.annotation(LF::Data::Version) %}
+                          {% version_column = column_annotation[:name] || ivar.name.stringify %}
+                        {% end %}
+                      {% end %}
+                    {% elsif ivar.annotation(LF::Data::Version) %}
+                      {% version_column = ivar.name.stringify %}
+                    {% end %}
+                  {% end %}
                   {% for field in assignment_fields.type_vars %}
                     {% field_entity = field.type_vars[0] %}
                     {% unless field_entity == T %}
@@ -801,6 +813,10 @@ module LF
                     {% end %}
                     {% placeholder_position += 1 %}
                     {% assignments << quoted_column + " = " + placeholder %}
+                  {% end %}
+                  {% if version_column %}
+                    {% quoted_version = identifier_open + version_column.split(identifier_escape_from).join(identifier_escape_to) + identifier_close %}
+                    {% assignments << quoted_version + " = " + quoted_version + " + 1" %}
                   {% end %}
                   {% sql = "UPDATE " + quoted_table + " SET " + assignments.join(", ") %}
                 {% else %}

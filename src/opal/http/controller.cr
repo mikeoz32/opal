@@ -109,6 +109,7 @@ module LF::HTTP::Controller
                     ctx.response.content_type = "application/json"
                     result.to_json(ctx.response)
                   else
+                    ctx.response.content_type = "text/plain"
                     ctx.response.print result
                   end
                 rescue error : LF::HTTP::Error
