@@ -44,8 +44,9 @@ block-based resource management, and structural converter protocols.
 - Arbitrary runtime filter collections remain possible through an explicit
   dynamic-query API.
 - A transaction must own exactly one short-lived persistence context.
-- The first release must avoid snapshots, proxy objects, lazy loading, and
-  automatic dirty checking.
+- The first release must avoid snapshots and automatic dirty checking.
+- Proxy objects, lazy loading, and implicit relationship queries are permanent
+  non-goals; all database access remains explicit.
 - Simple applications should need little setup, while manual construction must
   remain available for standalone libraries and tests.
 
@@ -218,6 +219,12 @@ ID is nilable before its first successful flush and is written through a
 generated framework-internal persistence method. Composite IDs are not
 supported in v1.
 
+The application-facing non-nil ID type is generated as entity metadata and is
+the exact type accepted by lookup and delete-by-ID operations. Generated
+`Int32?` and `Int64?` properties expose non-nil `Int32` and `Int64` lookup
+types; lifecycle nilability never permits a nil lookup. Converters validate the
+application-facing ID before producing the database identity-map value.
+
 An optional `LF::Data::Version` field is a non-nil `Int64` getter initialized to
 zero for new entities. It cannot also be the ID, be ignored, or define a
 converter. Application code does not receive a public version setter. The
@@ -242,6 +249,7 @@ Including `LF::Data::Entity` generates:
 - direct bind tuples for INSERT, UPDATE, DELETE, and find-by-ID;
 - a result-set hydrator;
 - internal generated-ID and version writers;
+- an exact, non-nil lookup ID descriptor;
 - typed field descriptors exposed through `Entity::Fields`.
 
 Compilation fails with an actionable entity and field name when:
@@ -312,6 +320,11 @@ The identity map key consists of entity type plus converted primary-key value.
 `find` and entity queries return the existing managed instance when that key is
 already present. Result-set data does not silently overwrite an already managed
 instance.
+
+`delete(T, id)` accepts the same exact lookup ID type as `find(T, id)`, loads or
+reuses the managed entity, and schedules its normal `remove` transition. It
+returns false when no row exists and does not bypass optimistic locking or
+flush ownership.
 
 Operations are coalesced per object identity and retain their first scheduling
 position. An UPDATE writes every persistent non-ID, non-version field because
@@ -868,6 +881,7 @@ Updates require `persist`, and generated IDs needed mid-transaction require
 `flush`.
 
 The first release intentionally does not solve every ORM problem. Relations,
-lazy loading, cascades, joins, projections, composite IDs, entity inheritance,
-savepoints, second-level cache, generated repositories, `attach`, `merge`, and
-dirty checking require separate ADRs.
+cascades, joins, projections, composite IDs, entity inheritance, savepoints,
+second-level cache, generated repositories, `attach`, `merge`, and dirty
+checking require separate ADRs. Lazy loading, proxy objects, and implicit
+relationship queries remain rejected rather than deferred.

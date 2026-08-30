@@ -60,10 +60,13 @@ composition pattern and [autoconfiguration](autoconfiguration.md) when an
 
 ## Deliberate v1 boundaries
 
-V1 does not provide relationship mapping, lazy loading, joins, projections,
-composite IDs, inheritance mapping, generated repositories, automatic
-timestamps, dirty checking, `attach`/`merge`, savepoints, transparent retries,
-schema synchronization, migration rollback, or a second-level cache.
+V1 does not provide relationship mapping, joins, projections, composite IDs,
+inheritance mapping, generated repositories, automatic timestamps, dirty
+checking, `attach`/`merge`, savepoints, transparent retries, schema
+synchronization, migration rollback, or a second-level cache.
 Additional dialects beyond SQLite and PostgreSQL are post-v1 packages. These
 features must be added through explicit contracts rather than partially
 inferred behavior.
+
+Lazy loading, proxy objects, and implicit relationship queries are permanent
+non-goals. Relationship APIs must keep database access explicit.

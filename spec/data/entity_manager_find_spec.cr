@@ -43,6 +43,32 @@ private class OtherFindRecord
   end
 end
 
+private record FindDomainId, value : String
+
+private module FindDomainIdConverter
+  def self.load(result : DB::ResultSet) : FindDomainId
+    FindDomainId.new(result.read(String))
+  end
+
+  def self.dump(value : FindDomainId) : String
+    value.value
+  end
+end
+
+@[LF::Data::Table("converted_find_records")]
+private class ConvertedFindRecord
+  include LF::Data::Entity
+
+  @[LF::Data::Id]
+  @[LF::Data::Column(converter: FindDomainIdConverter)]
+  getter id : FindDomainId
+
+  property value : String
+
+  def initialize(@id : FindDomainId, @value : String)
+  end
+end
+
 private class FindListener
   include LF::Data::Listener
 
@@ -69,6 +95,7 @@ private def with_find_database(& : DB::Database, FindListener ->)
       "(id INTEGER PRIMARY KEY AUTOINCREMENT, value TEXT NOT NULL)"
     )
     database.exec("CREATE TABLE other_find_records (id TEXT, value TEXT NOT NULL)")
+    database.exec("CREATE TABLE converted_find_records (id TEXT, value TEXT NOT NULL)")
     listener = FindListener.new
     yield database, listener
   end
@@ -154,6 +181,67 @@ describe LF::Data::EntityManager do
         first.value.should eq("first")
         second.value.should eq("second")
       end
+    end
+  end
+
+  it "uses the application-facing converted ID for lookup and identity" do
+    with_find_database do |database, listener|
+      source = LF::Data::DataSource.new(
+        database,
+        dialect: LF::Data::Dialects::SQLite.new,
+        listeners: [listener] of LF::Data::Listener
+      )
+      database.exec(
+        "INSERT INTO converted_find_records (id, value) VALUES (?, ?)",
+        "domain-key",
+        "stored"
+      )
+
+      source.transaction do |manager|
+        id = FindDomainId.new("domain-key")
+        first = manager.find(ConvertedFindRecord, id).not_nil!
+        second = manager.find(ConvertedFindRecord, id).not_nil!
+
+        first.id.should eq(id)
+        second.should be(first)
+        listener.statements.size.should eq(1)
+
+        first.value = "updated"
+        manager.persist(first)
+      end
+
+      database.scalar(
+        "SELECT value FROM converted_find_records WHERE id = ?",
+        "domain-key"
+      ).should eq("updated")
+
+      source.transaction do |manager|
+        manager.delete(ConvertedFindRecord, FindDomainId.new("domain-key")).should be_true
+      end
+
+      database.scalar("SELECT count(*) FROM converted_find_records").should eq(0_i64)
+    end
+  end
+
+  it "deletes assigned and generated entities by their non-nil lookup IDs" do
+    with_find_database do |database, listener|
+      source = LF::Data::DataSource.new(
+        database,
+        dialect: LF::Data::Dialects::SQLite.new,
+        listeners: [listener] of LF::Data::Listener
+      )
+      database.exec("INSERT INTO find_records (id, value) VALUES (?, ?)", "key", "assigned")
+      database.exec("INSERT INTO generated_find_records (value) VALUES (?)", "generated")
+      generated_id = database.scalar("SELECT last_insert_rowid()").as(Int64)
+
+      source.transaction do |manager|
+        manager.delete(FindRecord, "key").should be_true
+        manager.delete(GeneratedFindRecord, generated_id).should be_true
+        manager.delete(FindRecord, "missing").should be_false
+      end
+
+      database.scalar("SELECT count(*) FROM find_records").should eq(0_i64)
+      database.scalar("SELECT count(*) FROM generated_find_records").should eq(0_i64)
     end
   end
 

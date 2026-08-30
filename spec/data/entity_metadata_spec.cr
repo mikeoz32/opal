@@ -60,6 +60,7 @@ describe LF::Data::Entity do
 
   it "generates ID and version metadata" do
     MetadataTodo.__lf_id_column.should eq("id")
+    MetadataTodo.__lf_id_type.should eq(Int64)
     MetadataTodo.__lf_generated_id?.should be_true
     MetadataTodo.__lf_version_column.should eq("lock_version")
   end
@@ -72,6 +73,7 @@ describe LF::Data::Entity do
     MetadataNamespace::AuditEvent.__lf_table_name.should eq("audit_records")
     MetadataNamespace::AuditEvent.__lf_persistent_columns.should eq({"event_key"})
     MetadataNamespace::AuditEvent.__lf_id_column.should eq("event_key")
+    MetadataNamespace::AuditEvent.__lf_id_type.should eq(String)
     MetadataNamespace::AuditEvent.__lf_generated_id?.should be_false
     MetadataNamespace::AuditEvent.__lf_version_column.should be_nil
   end

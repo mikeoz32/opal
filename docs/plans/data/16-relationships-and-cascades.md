@@ -14,10 +14,11 @@ Support explicit `belongs_to`, `has_many`, and `has_one` declarations generated
 at compile time. Relationship metadata is not inferred from arbitrary fields.
 Foreign-key DDL and EntityManager operation ordering must be separate concerns.
 
-The first version must choose and document ownership for each cascade action:
+The relationship API must choose and document ownership for each cascade action:
 database-level foreign-key cascade, EntityManager-level cascade, or rejection.
-It must not add lazy loading, proxy objects, implicit queries, dirty checking,
-joins, or global relationship registries.
+Lazy loading, proxy objects, and implicit relationship queries are permanent
+non-goals. This plan also does not add dirty checking, joins, or global
+relationship registries.
 
 ## Tasks
 

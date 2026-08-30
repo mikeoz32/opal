@@ -145,8 +145,9 @@ git diff --check
 git status --short --branch
 ```
 
-Then audit every normative ADR-0005 section and confirm deferred features were
-not partially introduced: lazy loading, joins, composite IDs, inheritance
-mapping, projections, savepoints, second-level cache, generated repositories,
-`attach`, `merge`, and dirty checking. After the v1 tag, Plans 13-18 may add
-only the explicitly scoped capabilities described in their own documents.
+Then audit every normative ADR-0005 section, confirm that lazy loading remains
+absent, and confirm deferred features were not partially introduced: joins,
+composite IDs, inheritance mapping, projections, savepoints, second-level
+cache, generated repositories, `attach`, `merge`, and dirty checking. After the
+v1 tag, Plans 13-18 may add only the explicitly scoped capabilities described
+in their own documents.

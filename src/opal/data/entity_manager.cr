@@ -143,6 +143,15 @@ module LF
         )
       end
 
+      def delete(entity : T.class, id) : Bool forall T
+        ensure_available(:delete)
+
+        return false unless found = find(entity, id)
+
+        remove(found)
+        true
+      end
+
       def connection : DB::Connection
         ensure_available(:connection)
         @connection
