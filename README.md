@@ -304,6 +304,7 @@ Public Data guides:
 
 - [dialects](docs/data/dialects.md)
 - [entities](docs/data/entities.md)
+- [relationships and cascades](docs/data/relationships.md)
 - [transactions and repositories](docs/data/transactions-and-repositories.md)
 - [queries](docs/data/queries.md)
 - [migrations](docs/data/migrations.md)

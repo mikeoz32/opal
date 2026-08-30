@@ -14,6 +14,19 @@ module LF
         Delete
       end
 
+      abstract class RelationshipTarget
+        abstract def reference : Reference
+      end
+
+      class TypedRelationshipTarget(T) < RelationshipTarget
+        def initialize(@reference : T)
+        end
+
+        def reference : Reference
+          @reference
+        end
+      end
+
       abstract class TrackedEntity
         property state : EntityState
         property operation : EntityOperation?
@@ -34,6 +47,9 @@ module LF
 
         abstract def reference : Reference
         abstract def entity_name : String
+        abstract def parent_relationships : Array(RelationshipTarget)
+        abstract def child_relationships : Array(RelationshipTarget)
+        abstract def sync_relationship_keys : Nil
         abstract def execute(manager : EntityManager, operation : EntityOperation) : Nil
       end
 
@@ -56,6 +72,18 @@ module LF
 
         def entity_name : String
           T.name
+        end
+
+        def parent_relationships : Array(RelationshipTarget)
+          @entity.__lf_parent_relationships
+        end
+
+        def child_relationships : Array(RelationshipTarget)
+          @entity.__lf_child_relationships
+        end
+
+        def sync_relationship_keys : Nil
+          @entity.__lf_sync_relationship_keys
         end
 
         def execute(manager : EntityManager, operation : EntityOperation) : Nil

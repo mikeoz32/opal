@@ -19,6 +19,8 @@ All notable changes to Opal are documented in this file.
   explicit SQLite transactional-history coordination;
 - explicit SQLite/PostgreSQL schema inspection, deterministic typed diffs, and
   guarded Crystal migration source generation;
+- compile-time `belongs_to`, `has_many`, and `has_one` metadata with explicit
+  loading, dependency-ordered flushes, and opt-in persist/remove cascades;
 - entity-declared lookup ID enforcement and typed delete-by-ID scheduling;
 - end-to-end SQLite Data and Todo examples with process-level verification.
 
