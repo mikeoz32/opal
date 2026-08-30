@@ -270,7 +270,7 @@ macro finished
       {% providers = [] of NamedTuple %}
       {% app_annotation = application.annotation(LF::Application) %}
       {% app_priority = app_annotation["priority"] || 0 %}
-      {% unless app_priority.is_a?(NumberLiteral) %}
+      {% unless app_priority.is_a?(NumberLiteral) && app_priority.kind != :f32 && app_priority.kind != :f64 %}
         {% raise "Invalid application priority for #{application.name}: expected Int32" %}
       {% end %}
       {% providers << {type: application, priority: app_priority, name: application.name.stringify} %}
@@ -278,7 +278,7 @@ macro finished
       {% for klass in Object.all_subclasses %}
         {% if config_annotation = klass.annotation(LF::ApplicationConfiguration) %}
           {% priority = config_annotation["priority"] || 0 %}
-          {% unless priority.is_a?(NumberLiteral) %}
+          {% unless priority.is_a?(NumberLiteral) && priority.kind != :f32 && priority.kind != :f64 %}
             {% raise "Invalid application configuration priority for #{klass.name}: expected Int32" %}
           {% end %}
           {% providers << {type: klass, priority: priority, name: klass.name.stringify} %}

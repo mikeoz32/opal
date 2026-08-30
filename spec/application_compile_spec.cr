@@ -223,6 +223,30 @@ describe "application compiler fixtures" do
     result[:error].should contain("Invalid application configuration priority for InvalidPriorityConfiguration")
   end
 
+  it "rejects a floating-point application priority" do
+    fixture = File.expand_path("fixtures/application/invalid_application_float_priority.cr", __DIR__)
+    result = compile_fixture(fixture)
+
+    result[:status].success?.should be_false
+    result[:error].should contain(
+      "Invalid application priority for InvalidFloatPriorityApplication: expected Int32"
+    )
+  end
+
+  it "rejects a floating-point configuration priority" do
+    fixture = File.expand_path(
+      "fixtures/application/invalid_configuration_float_priority.cr",
+      __DIR__
+    )
+    result = compile_fixture(fixture)
+
+    result[:status].success?.should be_false
+    result[:error].should contain(
+      "Invalid application configuration priority for " \
+      "InvalidFloatPriorityConfiguration: expected Int32"
+    )
+  end
+
   it "does not expose the runtime container" do
     fixture = File.expand_path("fixtures/application/runtime_context_access.cr", __DIR__)
     result = compile_fixture(fixture)

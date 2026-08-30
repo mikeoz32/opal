@@ -58,23 +58,6 @@ module LF
         end
       end
 
-      # Executes read-only work on a checked-out connection without opening a
-      # database transaction. Its EntityManager rejects mutations and raw
-      # connection access; use `transaction` for unit-of-work mutations.
-      def read(& : EntityManager -> T) : T forall T
-        ensure_open(:read)
-
-        @database.using_connection do |connection|
-          @dialect.setup_connection(connection)
-          manager = build_read_entity_manager(connection, @dialect, @dispatcher)
-          begin
-            yield manager
-          ensure
-            manager.close
-          end
-        end
-      end
-
       # Framework internal: migration reconciliation needs to distinguish a
       # rollback from a successful commit that failed during manager cleanup.
       def __lf_transaction(
@@ -146,23 +129,21 @@ module LF
         @database.close
       end
 
-      protected def build_read_entity_manager(
-        connection : DB::Connection,
-        dialect : Dialect,
-        dispatcher : Internal::ListenerDispatcher,
-      ) : EntityManager
-        manager = build_entity_manager(connection, dialect, dispatcher)
-        manager.__lf_read_only!
-        manager
-      end
-
       # Framework internal: migration reconciliation must not emit a second
       # transaction/listener event after a failed migration transaction.
       def __lf_migration_applied?(version : Int64, name : String) : Bool
         ensure_open(:migration_reconciliation)
         @database.using_connection do |connection|
           @dialect.setup_connection(connection)
-          history = MigrationHistory.new(connection, @dialect)
+          observer = if @dispatcher.empty?
+                       nil
+                     else
+                       ->(event : StatementCompletionEvent) do
+                         @dispatcher.statement_completion(event)
+                         nil
+                       end
+                     end
+          history = MigrationHistory.new(connection, @dialect, observer)
           entry = history.load.find { |candidate| candidate.version == version }
           if entry
             unless entry.name == name

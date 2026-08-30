@@ -45,7 +45,7 @@ module DataLayerExample
     end
 
     private def demonstrate_queries(store : Store, project_id : Int64) : Nil
-      store.source.read do |manager|
+      store.source.transaction do |manager|
         fields = Task::Fields
         static = manager.query(Task)
           .where(fields.project_id.eq(project_id))
@@ -95,7 +95,7 @@ module DataLayerExample
     end
 
     private def count_tasks(store : Store) : Int64
-      store.source.read do |manager|
+      store.source.transaction do |manager|
         manager.query(Task).count
       end
     end

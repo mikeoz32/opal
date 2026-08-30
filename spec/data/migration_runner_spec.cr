@@ -122,6 +122,32 @@ describe LF::Data::MigrationRunner do
     end
   end
 
+  it "reports migration reconciliation history reads through datasource listeners" do
+    LF::DataSpecSupport::SQLiteDatabase.with_memory do |database|
+      listener = RunnerSpecListener.new
+      source = LF::Data::DataSource.new(
+        database,
+        dialect: LF::Data::Dialects::SQLite.new,
+        listeners: [listener] of LF::Data::Listener
+      )
+      migration = RunnerSpecMigration.new(10_i64, "create_todos") do |schema|
+        schema.create_table("todos") { |table| table.generated_id("id") }
+      end
+
+      LF::Data::MigrationRunner.new(source).run(
+        LF::Data::MigrationSet.new(migration)
+      )
+      listener.statements.clear
+
+      source.__lf_migration_applied?(10_i64, "create_todos").should be_true
+
+      listener.statements.map(&.operation).should eq([
+        LF::Data::StatementOperation::Select,
+      ])
+      listener.statements.map(&.entity_name).should eq(["_lf_migrations"])
+    end
+  end
+
   it "does not run an already applied migration again" do
     LF::DataSpecSupport::SQLiteDatabase.with_memory do |database|
       source = LF::Data::DataSource.new(

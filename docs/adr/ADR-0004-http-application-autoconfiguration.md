@@ -76,12 +76,14 @@ orders them by fully-qualified class name. Startup builds one route table and
 this handler chain:
 
 1. `HTTP::LogHandler`
-2. `LF::HTTP::DI::RequestScopeHandler`
-3. `LF::HTTP::App`
+2. `LF::HTTP::AutoConfig::RequestDrainHandler`
+3. `LF::HTTP::DI::RequestScopeHandler`
+4. `LF::HTTP::App`
 
-`RequestScopeHandler` depends on `LF::DI::ScopeProvider`, creates a real child
-`LF::DI::Container` per request, stores it on the HTTP context, and always exits
-it.
+`RequestDrainHandler` rejects new work during shutdown and tracks active
+requests. `RequestScopeHandler` depends on `LF::DI::ScopeProvider`, creates a
+real child `LF::DI::Container` per request, stores it on the HTTP context, and
+always exits it.
 
 `http.host` and `http.port` come from `LF::ConfigService`, with defaults
 `0.0.0.0` and `8080`. Port `0` is valid. Invalid values raise

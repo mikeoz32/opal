@@ -19,14 +19,6 @@ module LF
       end
     end
 
-    class ReadOnlyEntityManagerError < Error
-      getter operation : Symbol
-
-      def initialize(@operation : Symbol)
-        super("EntityManager is read-only: operation=#{operation}")
-      end
-    end
-
     class FailedEntityManagerError < Error
       getter operation : Symbol
 

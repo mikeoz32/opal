@@ -16,7 +16,7 @@ module DataLayerExample
         end
 
         router.get("/projects") do |context, _params|
-          projects = @store.source.read do |manager|
+          projects = @store.source.transaction do |manager|
             manager.query(Project).order_by(Project::Fields.name.asc).to_a
           end
           write_json(context, ProjectListResponse.new(projects.map { |project| ProjectResponse.new(project) }))
@@ -43,7 +43,7 @@ module DataLayerExample
 
         router.get("/projects/:project_id/tasks") do |context, params|
           project_id = parse_id(params, "project_id")
-          tasks = @store.source.read do |manager|
+          tasks = @store.source.transaction do |manager|
             unless manager.find(Project, project_id)
               raise LF::HTTP::NotFound.new("Project not found")
             end
