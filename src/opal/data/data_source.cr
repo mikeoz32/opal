@@ -64,46 +64,68 @@ module LF
         completion : Proc(TransactionFinalization, Nil)? = nil,
         & : EntityManager -> T
       ) : T forall T
+        __lf_with_connection do |connection|
+          __lf_transaction_on(connection, completion) do |manager|
+            yield manager
+          end
+        end
+      end
+
+      # Framework internal: pins migration planning, execution, and dialect
+      # coordination to one checked-out connection.
+      def __lf_with_connection(& : DB::Connection -> T) : T forall T
+        ensure_open(:migration_session)
+        @database.using_connection do |connection|
+          @dialect.setup_connection(connection)
+          yield connection
+        end
+      end
+
+      # Framework internal: opens an observed transaction on an already pinned
+      # datasource connection.
+      def __lf_transaction_on(
+        connection : DB::Connection,
+        completion : Proc(TransactionFinalization, Nil)? = nil,
+        & : EntityManager -> T
+      ) : T forall T
+        ensure_open(:transaction)
         observed = !@dispatcher.empty?
         started_at = Time.instant if observed
         @dispatcher.transaction_begin(TransactionBeginEvent.new) if observed
         outcome = TransactionOutcome::RolledBack
         finalization = TransactionFinalization::RolledBack
 
-        begin
-          result = @database.using_connection do |connection|
-            @dialect.setup_connection(connection)
-            manager = build_entity_manager(connection, @dialect, @dispatcher)
-            primary_error = nil.as(Exception?)
+        result = begin
+          manager = build_entity_manager(connection, @dialect, @dispatcher)
+          primary_error = nil.as(Exception?)
 
-            begin
-              rollback_error = nil.as(DB::Rollback?)
-              wrapped = connection.transaction do
-                begin
-                  value = yield manager
-                  manager.flush
-                  TransactionValue(T).new(value)
-                rescue error : DB::Rollback
-                  rollback_error = error
-                  raise error
-                end
-              end
-
-              raise rollback_error.not_nil! if rollback_error
-              outcome = TransactionOutcome::Committed
-              finalization = TransactionFinalization::Committed
-              wrapped.not_nil!.value
-            rescue error
-              primary_error = error
-              finalization = TransactionFinalization::RolledBack
-              raise error
-            ensure
+          begin
+            rollback_error = nil.as(DB::Rollback?)
+            wrapped = connection.transaction do
               begin
-                manager.close
-              rescue close_error
-                finalization = primary_error ? TransactionFinalization::RolledBack : TransactionFinalization::CleanupFailed
-                raise close_error unless primary_error
+                value = yield manager
+                manager.flush
+                TransactionValue(T).new(value)
+              rescue error : DB::Rollback
+                rollback_error = error
+                raise error
               end
+            end
+
+            raise rollback_error.not_nil! if rollback_error
+            outcome = TransactionOutcome::Committed
+            finalization = TransactionFinalization::Committed
+            wrapped.not_nil!.value
+          rescue error
+            primary_error = error
+            finalization = TransactionFinalization::RolledBack
+            raise error
+          ensure
+            begin
+              manager.close
+            rescue close_error
+              finalization = primary_error ? TransactionFinalization::RolledBack : TransactionFinalization::CleanupFailed
+              raise close_error unless primary_error
             end
           end
         ensure
@@ -133,26 +155,34 @@ module LF
       # transaction/listener event after a failed migration transaction.
       def __lf_migration_applied?(version : Int64, name : String) : Bool
         ensure_open(:migration_reconciliation)
-        @database.using_connection do |connection|
-          @dialect.setup_connection(connection)
-          observer = if @dispatcher.empty?
+        __lf_with_connection do |connection|
+          __lf_migration_applied?(connection, version, name)
+        end
+      end
+
+      # Framework internal: reconciliation on the migration session connection.
+      def __lf_migration_applied?(
+        connection : DB::Connection,
+        version : Int64,
+        name : String,
+      ) : Bool
+        observer = if @dispatcher.empty?
+                     nil
+                   else
+                     ->(event : StatementCompletionEvent) do
+                       @dispatcher.statement_completion(event)
                        nil
-                     else
-                       ->(event : StatementCompletionEvent) do
-                         @dispatcher.statement_completion(event)
-                         nil
-                       end
                      end
-          history = MigrationHistory.new(connection, @dialect, observer)
-          entry = history.load.find { |candidate| candidate.version == version }
-          if entry
-            unless entry.name == name
-              raise MigrationHistoryMismatchError.new(version, name, entry.name)
-            end
-            true
-          else
-            false
+                   end
+        history = MigrationHistory.new(connection, @dialect, observer)
+        entry = history.load.find { |candidate| candidate.version == version }
+        if entry
+          unless entry.name == name
+            raise MigrationHistoryMismatchError.new(version, name, entry.name)
           end
+          true
+        else
+          false
         end
       end
 
