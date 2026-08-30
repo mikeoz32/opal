@@ -9,6 +9,7 @@ It is built on top of Crystal's standard `HTTP::Handler` stack and focuses on:
 - path parameter extraction
 - method-aware routing with `404` / `405` handling
 - lightweight API handlers via `LF::HTTP::Controller`
+- compile-time guards, pipes, interceptors, and exception filters
 - scoped dependency injection with deterministic lifecycle cleanup
 - optional compile-time application bootstrap
 - transaction-local persistence with compile-time entity and query contracts
@@ -121,6 +122,59 @@ server.listen
 
 Route arguments are request inputs only. Inject services through the controller
 constructor; unsupported route arguments fail at compile time.
+
+### Guards, pipes, interceptors, and filters
+
+Controller execution policies are ordinary DI beans selected at compile time:
+
+- guards authorize before request binding and return `403 Forbidden` when they
+  reject a request;
+- pipes validate or transform path/query strings and parsed JSON bodies before
+  conversion to the declared action argument type;
+- interceptors wrap the action, can replace its response, or short-circuit it;
+- exception filters map errors raised anywhere in the controller pipeline to a
+  response.
+
+Apply policies globally, to a controller, to an action, or—in the case of
+pipes—to one parameter:
+
+```crystal
+@[LF::DI::Service]
+class AuthGuard < LF::HTTP::Guard
+  def can_activate(context : LF::HTTP::ExecutionContext) : Bool
+    context.request.headers.has_key?("Authorization")
+  end
+end
+
+@[LF::DI::Service]
+class TrimPipe < LF::HTTP::StringPipe
+  def transform_string(value, metadata, context) : String
+    value.strip
+  end
+end
+
+@[LF::HTTP::UseGuards(AuthGuard)]
+class UsersApi
+  include LF::HTTP::Controller
+
+  @[LF::HTTP::Controller::Get("/users")]
+  def index(@[LF::HTTP::UsePipes(TrimPipe)] name : String)
+    "Hello, #{name}"
+  end
+end
+```
+
+The order is global → controller → action → parameter. Interceptors unwind in
+reverse order; filters search action → controller → global. With HTTP
+autoconfiguration, annotations on the `@[LF::Application]` class are global.
+Standalone assembly passes a global annotation owner explicitly:
+
+```crystal
+UsersApi.setup_routes(router, root, HttpPolicies)
+```
+
+See [`examples/http_execution_pipeline_example.cr`](examples/http_execution_pipeline_example.cr)
+for all four policy types together.
 
 ### Example
 

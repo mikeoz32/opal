@@ -21,6 +21,12 @@ module LF::HTTP
     end
   end
 
+  class Forbidden < Error
+    def initialize(message : String = "Forbidden")
+      super(message, ::HTTP::Status::FORBIDDEN)
+    end
+  end
+
   class InternalServerError < Error
     def initialize(message : String = "Internal Server Error")
       super(message, ::HTTP::Status::INTERNAL_SERVER_ERROR)
