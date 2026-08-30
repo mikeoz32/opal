@@ -60,11 +60,10 @@ module DataLayerExample
           project_id = parse_id(params, "project_id")
           payload = parse_body(context, CreateTaskRequest)
           task = @store.source.transaction do |manager|
-            unless manager.find(Project, project_id)
-              raise LF::HTTP::NotFound.new("Project not found")
-            end
+            project = manager.find(Project, project_id)
+            raise LF::HTTP::NotFound.new("Project not found") unless project
 
-            created_task = Task.new(project_id, payload.title)
+            created_task = Task.new(project, payload.title)
             manager.persist(created_task)
             manager.flush
             created_task
@@ -100,9 +99,11 @@ module DataLayerExample
             found_task = manager.find(Task, task_id)
             raise LF::HTTP::NotFound.new("Task not found") unless found_task
 
-            manager.query(TaskEvent)
-              .where(TaskEvent::Fields.task_id.eq(task_id))
-              .to_a.each { |event| manager.remove(event) }
+            found_task.events.concat(
+              manager.query(TaskEvent)
+                .where(TaskEvent::Fields.task_id.eq(task_id))
+                .to_a
+            )
             manager.remove(found_task)
           end
           context.response.content_type = "text/plain"

@@ -304,6 +304,7 @@ Public Data guides:
 
 - [dialects](docs/data/dialects.md)
 - [entities](docs/data/entities.md)
+- [relationships and cascades](docs/data/relationships.md)
 - [transactions and repositories](docs/data/transactions-and-repositories.md)
 - [queries](docs/data/queries.md)
 - [migrations](docs/data/migrations.md)
@@ -474,9 +475,10 @@ The repository includes these examples:
   autoconfiguration, optimistic locking, and SQLite.
 
 - [examples/data_layer_sqlite](examples/data_layer_sqlite/README.md)
-  Standalone SQLite data-layer showcase covering mappings, queries, unit of
-  work, migrations, optimistic locking, rollback behavior, manual HTTP, and
-  Application + DI + controller-discovery HTTP.
+  Standalone SQLite data-layer showcase covering mappings, explicit
+  relationships and cascades, queries, unit of work, migrations, optimistic
+  locking, rollback behavior, manual HTTP, and Application + DI +
+  controller-discovery HTTP.
 
 Run them with:
 

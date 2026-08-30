@@ -43,10 +43,11 @@ therefore ends in a usable, documented, fully tested repository state.
 Plan 11 is the v1 integration gate. Plan 12 is the final correctness and
 release-hardening pass over that complete surface.
 
-### Post-v1 roadmap
+### Data expansion roadmap
 
-The following plans begin only after the Data v1 release. They are not v1
-release prerequisites.
+The following plans extend the initial Data contract. Each remains independently
+scoped so release planning can include the capabilities that are ready without
+silently pulling in the rest of the roadmap.
 
 | Order | Plan | Deliverable | Depends on |
 | --- | --- | --- | --- |
@@ -63,8 +64,8 @@ Dialect and DataSource and may be developed alongside entity mapping and Unit
 of Work, but it is merged before Plan 09. Plans 06 and 07 may be developed in
 parallel after Plan 05. Plan 09 then adds the generic Application mechanism,
 Plan 10 adapts Data to it, and Plan 11 is the final integration gate.
-Plan 12 hardens the complete v1 surface. Plans 13 through 18 are sequenced
-post-v1 capabilities and do not delay the v1 release.
+Plan 12 hardens the initial surface. Plans 13 through 18 are sequenced expansion
+capabilities; the active release scope decides which of them ship together.
 
 ## Branch And Review Strategy
 
@@ -136,7 +137,7 @@ files, executables, and server processes live under `/tmp` and are removed in
 
 ## Release Gate
 
-After Plan 12, run:
+For every release candidate, run:
 
 ```bash
 CRYSTAL_CACHE_DIR=/tmp/opal-crystal-cache crystal spec --no-color
@@ -148,6 +149,6 @@ git status --short --branch
 Then audit every normative ADR-0005 section, confirm that lazy loading remains
 absent, and confirm deferred features were not partially introduced: joins,
 composite IDs, inheritance mapping, projections, savepoints, second-level
-cache, generated repositories, `attach`, `merge`, and dirty checking. After the
-v1 tag, Plans 13-18 may add only the explicitly scoped capabilities described
-in their own documents.
+cache, generated repositories, `attach`, `merge`, and dirty checking. Plans
+13-18 may add only the explicitly scoped capabilities described in their own
+documents.

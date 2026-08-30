@@ -71,6 +71,11 @@ describe "data layer HTTP example" do
       created_task["completed"].as_bool.should be_false
       created_task["version"].as_i64.should eq(0_i64)
 
+      store.source.transaction do |manager|
+        task = manager.find(DataLayerExample::Task, task_id).not_nil!
+        manager.persist(DataLayerExample::TaskEvent.new(task, "http-created"))
+      end
+
       updated = call_data_layer_app(
         app,
         "PATCH",
@@ -101,6 +106,10 @@ describe "data layer HTTP example" do
       deleted = call_data_layer_app(app, "DELETE", "/tasks/#{task_id}")
       deleted.status.should eq(HTTP::Status::OK)
       deleted.body.should eq("deleted")
+
+      store.source.transaction do |manager|
+        manager.query(DataLayerExample::TaskEvent).count.should eq(0_i64)
+      end
 
       empty = call_data_layer_app(app, "GET", "/projects/#{project_id}/tasks")
       JSON.parse(empty.body)["tasks"].as_a.should be_empty

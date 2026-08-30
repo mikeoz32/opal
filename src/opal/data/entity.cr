@@ -3,6 +3,7 @@ module LF
     module Entity
       macro included
         Fields = LF::Data::Query::FieldSet({{@type}}).new
+        Relations = LF::Data::RelationshipSet({{@type}}).new
 
         {% verbatim do %}
           def self.__lf_validate_entity : Nil
@@ -37,7 +38,10 @@ module LF
 
             {% persistent_ivars = entity.instance_vars.reject do |ivar|
                  column_ann = ivar.annotation(LF::Data::Column)
-                 column_ann && column_ann[:ignore]
+                 (column_ann && column_ann[:ignore]) ||
+                   ivar.annotation(LF::Data::BelongsTo) ||
+                   ivar.annotation(LF::Data::HasOne) ||
+                   ivar.annotation(LF::Data::HasMany)
                end %}
             {% ignored_ivars = entity.instance_vars.select do |ivar|
                  column_ann = ivar.annotation(LF::Data::Column)
@@ -81,6 +85,126 @@ module LF
               {% end %}
             {% elsif id_type.nilable? %}
               {% raise "#{entity} field #{id_ivar.name} assigned ID must not be nilable" %}
+            {% end %}
+
+            {% for relation_ivar in entity.instance_vars %}
+              {% belongs_to = relation_ivar.annotation(LF::Data::BelongsTo) %}
+              {% has_one = relation_ivar.annotation(LF::Data::HasOne) %}
+              {% has_many = relation_ivar.annotation(LF::Data::HasMany) %}
+              {% relationship_count = (belongs_to ? 1 : 0) +
+                                      (has_one ? 1 : 0) +
+                                      (has_many ? 1 : 0) %}
+              {% if relationship_count > 0 %}
+                {% if relationship_count > 1 %}
+                  {% raise "#{entity} field #{relation_ivar.name} must declare exactly one relationship annotation" %}
+                {% end %}
+                {% if relation_ivar.annotation(LF::Data::Column) %}
+                  {% raise "#{entity} relationship field #{relation_ivar.name} must not declare LF::Data::Column" %}
+                {% end %}
+                {% if relation_ivar.annotation(LF::Data::Id) || relation_ivar.annotation(LF::Data::Version) %}
+                  {% raise "#{entity} relationship field #{relation_ivar.name} cannot be an ID or version" %}
+                {% end %}
+
+                {% relationship = belongs_to || has_one || has_many %}
+                {% relationship_attributes = relationship.named_args.keys.map(&.stringify) %}
+                {% if relationship_attributes.includes?("orphan_removal") %}
+                  {% raise "#{entity} relationship #{relation_ivar.name} orphan removal is not supported" %}
+                {% end %}
+                {% supported_attributes = ["foreign_key", "cascade_persist", "cascade_remove"] %}
+                {% unsupported_attributes = relationship_attributes.reject do |attribute|
+                     supported_attributes.includes?(attribute)
+                   end %}
+                {% unless unsupported_attributes.empty? %}
+                  {% raise "#{entity} relationship #{relation_ivar.name} has unsupported attributes: #{unsupported_attributes.join(", ")}" %}
+                {% end %}
+                {% foreign_key = relationship[:foreign_key] %}
+                {% unless foreign_key && foreign_key.is_a?(StringLiteral) && !foreign_key.empty? %}
+                  {% raise "#{entity} relationship #{relation_ivar.name} requires a non-empty String foreign_key" %}
+                {% end %}
+                {% for cascade_attribute in ["cascade_persist", "cascade_remove"] %}
+                  {% if relationship_attributes.includes?(cascade_attribute) &&
+                          !relationship[cascade_attribute].is_a?(BoolLiteral) %}
+                    {% raise "#{entity} relationship #{relation_ivar.name} #{cascade_attribute.id} must be a Bool literal" %}
+                  {% end %}
+                {% end %}
+                {% if belongs_to && relationship[:cascade_remove] %}
+                  {% raise "#{entity} belongs_to #{relation_ivar.name} does not allow cascade_remove" %}
+                {% end %}
+
+                {% relationship_type = relation_ivar.type.resolve %}
+                {% if has_many %}
+                  {% unless relationship_type < Array && relationship_type.type_vars.size == 1 %}
+                    {% raise "#{entity} has_many #{relation_ivar.name} must be Array(Target), not #{relationship_type}" %}
+                  {% end %}
+                  {% target_type = relationship_type.type_vars.first %}
+                {% else %}
+                  {% target_types = relationship_type.union_types.reject { |type| type == Nil } %}
+                  {% unless relationship_type.nilable? && target_types.size == 1 %}
+                    {% kind = belongs_to ? "belongs_to" : "has_one" %}
+                    {% raise "#{entity} #{kind} #{relation_ivar.name} must be nilable Target?, not #{relationship_type}" %}
+                  {% end %}
+                  {% target_type = target_types.first %}
+                {% end %}
+                {% unless target_type < LF::Data::Entity %}
+                  {% raise "#{entity} relationship #{relation_ivar.name} target #{target_type} must include LF::Data::Entity" %}
+                {% end %}
+
+                {% if belongs_to %}
+                  {% foreign_key_owner = entity %}
+                  {% referenced_type = target_type %}
+                {% else %}
+                  {% foreign_key_owner = target_type %}
+                  {% referenced_type = entity %}
+                {% end %}
+                {% foreign_key_ivar = foreign_key_owner.instance_vars.find do |ivar|
+                     ivar.name.stringify == foreign_key
+                   end %}
+                {% unless foreign_key_ivar %}
+                  {% raise "#{entity} relationship #{relation_ivar.name} references missing foreign-key field #{foreign_key}" %}
+                {% end %}
+                {% foreign_key_column = foreign_key_ivar.annotation(LF::Data::Column) %}
+                {% if (foreign_key_column && foreign_key_column[:ignore]) ||
+                        foreign_key_ivar.annotation(LF::Data::BelongsTo) ||
+                        foreign_key_ivar.annotation(LF::Data::HasOne) ||
+                        foreign_key_ivar.annotation(LF::Data::HasMany) %}
+                  {% raise "#{entity} relationship #{relation_ivar.name} foreign-key field #{foreign_key} must be persistent" %}
+                {% end %}
+
+                {% referenced_id = referenced_type.instance_vars.find { |ivar| ivar.annotation(LF::Data::Id) } %}
+                {% referenced_id_annotation = referenced_id.annotation(LF::Data::Id) %}
+                {% referenced_id_type = referenced_id.type.resolve %}
+                {% if referenced_id_annotation[:generated] %}
+                  {% referenced_lookup_type = referenced_id_type.union_types.reject { |type| type == Nil }.first %}
+                {% else %}
+                  {% referenced_lookup_type = referenced_id_type %}
+                {% end %}
+                {% foreign_key_types = foreign_key_ivar.type.resolve.union_types.reject { |type| type == Nil } %}
+                {% unless foreign_key_types.size == 1 && foreign_key_types.first == referenced_lookup_type %}
+                  {% raise "#{entity} relationship #{relation_ivar.name} foreign-key field #{foreign_key} must use #{referenced_lookup_type} or #{referenced_lookup_type}?, not #{foreign_key_ivar.type.resolve}" %}
+                {% end %}
+                {% referenced_id_column = referenced_id.annotation(LF::Data::Column) %}
+                {% foreign_key_converter = foreign_key_column && foreign_key_column[:converter] %}
+                {% referenced_converter = referenced_id_column && referenced_id_column[:converter] %}
+                {% unless foreign_key_converter == referenced_converter %}
+                  {% raise "#{entity} relationship #{relation_ivar.name} foreign-key field #{foreign_key} must use the referenced ID converter" %}
+                {% end %}
+
+                {% unless belongs_to %}
+                  {% inverse = target_type.instance_vars.find do |candidate|
+                       inverse_annotation = candidate.annotation(LF::Data::BelongsTo)
+                       if inverse_annotation && inverse_annotation[:foreign_key] == foreign_key
+                         inverse_types = candidate.type.resolve.union_types.reject { |type| type == Nil }
+                         inverse_types.size == 1 && inverse_types.first == entity
+                       else
+                         false
+                       end
+                     end %}
+                  {% unless inverse %}
+                    {% kind = has_many ? "has_many" : "has_one" %}
+                    {% raise "#{entity} #{kind} #{relation_ivar.name} requires an inverse belongs_to on #{target_type} using #{foreign_key}" %}
+                  {% end %}
+                {% end %}
+              {% end %}
             {% end %}
 
             {% version_ivars = entity.instance_vars.select { |ivar| ivar.annotation(LF::Data::Version) } %}
@@ -179,7 +303,10 @@ module LF
               {% columns = [] of String %}
               {% for ivar in @type.instance_vars %}
                 {% column_annotation = ivar.annotation(LF::Data::Column) %}
-                {% unless column_annotation && column_annotation[:ignore] %}
+                {% relationship = ivar.annotation(LF::Data::BelongsTo) ||
+                                  ivar.annotation(LF::Data::HasOne) ||
+                                  ivar.annotation(LF::Data::HasMany) %}
+                {% unless (column_annotation && column_annotation[:ignore]) || relationship %}
                   {% columns << ((column_annotation && column_annotation[:name]) || ivar.name.stringify) %}
                 {% end %}
               {% end %}
@@ -257,7 +384,15 @@ module LF
           def __lf_load_persistent_state(result : DB::ResultSet) : self
             {% for ivar in @type.instance_vars %}
               {% column_annotation = ivar.annotation(LF::Data::Column) %}
-              {% if column_annotation && column_annotation[:ignore] %}
+              {% belongs_to = ivar.annotation(LF::Data::BelongsTo) %}
+              {% has_one = ivar.annotation(LF::Data::HasOne) %}
+              {% has_many = ivar.annotation(LF::Data::HasMany) %}
+              {% if belongs_to || has_one %}
+                @{{ivar.name}} = nil
+              {% elsif has_many %}
+                {% target_type = ivar.type.resolve.type_vars.first %}
+                @{{ivar.name}} = [] of {{target_type}}
+              {% elsif column_annotation && column_annotation[:ignore] %}
                 {% if ivar.has_default_value? %}
                   @{{ivar.name}} = {{ivar.default_value}}
                 {% else %}
@@ -296,7 +431,10 @@ module LF
               {% for ivar in @type.instance_vars %}
                 {% column_annotation = ivar.annotation(LF::Data::Column) %}
                 {% id_annotation = ivar.annotation(LF::Data::Id) %}
-                {% ignored = column_annotation && column_annotation[:ignore] %}
+                {% relationship = ivar.annotation(LF::Data::BelongsTo) ||
+                                  ivar.annotation(LF::Data::HasOne) ||
+                                  ivar.annotation(LF::Data::HasMany) %}
+                {% ignored = (column_annotation && column_annotation[:ignore]) || relationship %}
                 {% generated_id = id_annotation && id_annotation[:generated] %}
                 {% unless ignored || generated_id %}
                   {% if converter = column_annotation && column_annotation[:converter] %}
@@ -321,7 +459,10 @@ module LF
             Tuple.new(
               {% for ivar in @type.instance_vars %}
                 {% column_annotation = ivar.annotation(LF::Data::Column) %}
-                {% ignored = column_annotation && column_annotation[:ignore] %}
+                {% relationship = ivar.annotation(LF::Data::BelongsTo) ||
+                                  ivar.annotation(LF::Data::HasOne) ||
+                                  ivar.annotation(LF::Data::HasMany) %}
+                {% ignored = (column_annotation && column_annotation[:ignore]) || relationship %}
                 {% unless ignored || ivar.annotation(LF::Data::Id) || ivar.annotation(LF::Data::Version) %}
                   {% if converter = column_annotation && column_annotation[:converter] %}
                     {% if ivar.type.resolve.nilable? %}
@@ -409,6 +550,143 @@ module LF
               {% end %}
             )
             {% end %}
+          end
+
+          def __lf_relationship_id
+            {% begin %}
+              {% id_ivar = @type.instance_vars.find { |ivar| ivar.annotation(LF::Data::Id) } %}
+              @{{id_ivar.name}}
+            {% end %}
+          end
+
+          def __lf_parent_relationships : Array(LF::Data::Internal::RelationshipTarget)
+            relationships = [] of LF::Data::Internal::RelationshipTarget
+            {% for ivar in @type.instance_vars %}
+              {% if ivar.annotation(LF::Data::BelongsTo) %}
+                if relationship = @{{ivar.name}}
+                  relationships << LF::Data::Internal::TypedRelationshipTarget.new(relationship)
+                end
+              {% end %}
+            {% end %}
+            relationships
+          end
+
+          def __lf_child_relationships : Array(LF::Data::Internal::RelationshipTarget)
+            relationships = [] of LF::Data::Internal::RelationshipTarget
+            {% for ivar in @type.instance_vars %}
+              {% if ivar.annotation(LF::Data::HasOne) %}
+                if relationship = @{{ivar.name}}
+                  relationships << LF::Data::Internal::TypedRelationshipTarget.new(relationship)
+                end
+              {% elsif ivar.annotation(LF::Data::HasMany) %}
+                @{{ivar.name}}.each do |relationship|
+                  relationships << LF::Data::Internal::TypedRelationshipTarget.new(relationship)
+                end
+              {% end %}
+            {% end %}
+            relationships
+          end
+
+          def __lf_cascade_persist(
+            manager : LF::Data::EntityManager,
+            visited : Set(UInt64),
+          ) : Nil
+            {% for ivar in @type.instance_vars %}
+              {% relationship = ivar.annotation(LF::Data::BelongsTo) ||
+                                ivar.annotation(LF::Data::HasOne) ||
+                                ivar.annotation(LF::Data::HasMany) %}
+              {% if relationship && relationship[:cascade_persist] %}
+                {% if ivar.annotation(LF::Data::HasMany) %}
+                  @{{ivar.name}}.each do |target|
+                    manager.__lf_cascade_persist(
+                      target,
+                      visited,
+                      {{@type.name.stringify}},
+                      {{ivar.name.stringify}}
+                    )
+                  end
+                {% else %}
+                  if target = @{{ivar.name}}
+                    manager.__lf_cascade_persist(
+                      target,
+                      visited,
+                      {{@type.name.stringify}},
+                      {{ivar.name.stringify}}
+                    )
+                  end
+                {% end %}
+              {% end %}
+            {% end %}
+            nil
+          end
+
+          def __lf_cascade_remove(
+            manager : LF::Data::EntityManager,
+            visited : Set(UInt64),
+          ) : Nil
+            {% for ivar in @type.instance_vars %}
+              {% relationship = ivar.annotation(LF::Data::HasOne) ||
+                                ivar.annotation(LF::Data::HasMany) %}
+              {% if relationship && relationship[:cascade_remove] %}
+                {% if ivar.annotation(LF::Data::HasMany) %}
+                  @{{ivar.name}}.each do |target|
+                    manager.__lf_cascade_remove(
+                      target,
+                      visited,
+                      {{@type.name.stringify}},
+                      {{ivar.name.stringify}}
+                    )
+                  end
+                {% else %}
+                  if target = @{{ivar.name}}
+                    manager.__lf_cascade_remove(
+                      target,
+                      visited,
+                      {{@type.name.stringify}},
+                      {{ivar.name.stringify}}
+                    )
+                  end
+                {% end %}
+              {% end %}
+            {% end %}
+            nil
+          end
+
+          def __lf_sync_relationship_keys : Nil
+            {% for relation_ivar in @type.instance_vars %}
+              {% if relationship = relation_ivar.annotation(LF::Data::BelongsTo) %}
+                {% foreign_key = relationship[:foreign_key] %}
+                {% foreign_key_ivar = @type.instance_vars.find do |ivar|
+                     ivar.name.stringify == foreign_key
+                   end %}
+                {% target_type = relation_ivar.type.resolve.union_types.reject { |type| type == Nil }.first %}
+                if target = @{{relation_ivar.name}}
+                  target_id = target.__lf_relationship_id
+                  if target_id.nil?
+                    raise LF::Data::UnsavedRelationshipError.new(
+                      {{@type.name.stringify}},
+                      {{relation_ivar.name.stringify}},
+                      {{target_type.name.stringify}}
+                    )
+                  end
+
+                  current_id = @{{foreign_key_ivar.name}}
+                  if current_id.nil?
+                    @{{foreign_key_ivar.name}} = target_id
+                  elsif current_id != target_id
+                    raise LF::Data::RelationshipKeyMismatchError.new(
+                      {{@type.name.stringify}},
+                      {{relation_ivar.name.stringify}},
+                      {{target_type.name.stringify}},
+                      {{foreign_key}},
+                      current_id.inspect,
+                      target_id.inspect
+                    )
+                  end
+                end
+              {% end %}
+            {% end %}
+            nil
           end
 
           def __lf_write_generated_id(value : Int64) : Nil

@@ -65,7 +65,7 @@ module DataLayerExample
 
       def initialize(task : Task)
         @id = task.id.not_nil!
-        @project_id = task.project_id
+        @project_id = task.project_id.not_nil!
         @title = task.title
         @completed = task.completed
         @due_at = task.due_at.try(&.to_utc.to_rfc3339)

@@ -20,6 +20,23 @@ Lazy loading, proxy objects, and implicit relationship queries are permanent
 non-goals. This plan also does not add dirty checking, joins, or global
 relationship registries.
 
+## Contract
+
+- Navigation properties use `BelongsTo`, `HasMany`, or `HasOne` and explicitly
+  name their scalar `foreign_key` property.
+- Hydration sets singular relations to nil and collections to empty. Loading
+  and graph attachment are application/repository operations.
+- `cascade_persist` enrolls new in-memory targets. Already managed targets
+  require their own explicit `persist` to schedule an update.
+- `cascade_remove` is owner-side only for `has_many` and `has_one`, and applies
+  only to targets already loaded and managed by the same transaction.
+- `belongs_to` remove cascade and orphan removal are rejected. Collection
+  mutation alone never schedules persistence.
+- A relation descriptor may add an explicit schema-model foreign key;
+  `has_one` also adds uniqueness. No database `ON DELETE` action is inferred.
+- Flush topologically orders the queued in-memory graph and rejects dependency
+  cycles before executing its first queued statement.
+
 ## Tasks
 
 1. Define relationship declarations and compile-time validation.

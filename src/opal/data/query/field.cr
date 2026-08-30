@@ -17,7 +17,10 @@ module LF
                 {% checksum = (checksum * 137_i64 + character.ord) % 2_147_483_647_i64 %}
               {% end %}
               {% column_annotation = ivar.annotation(LF::Data::Column) %}
-              {% unless column_annotation && column_annotation[:ignore] %}
+              {% relationship = ivar.annotation(LF::Data::BelongsTo) ||
+                                ivar.annotation(LF::Data::HasOne) ||
+                                ivar.annotation(LF::Data::HasMany) %}
+              {% unless (column_annotation && column_annotation[:ignore]) || relationship %}
                 {% if field_key == Key && checksum == Checksum %}
                   {% matching_index = index %}
                   {% matching_count += 1 %}

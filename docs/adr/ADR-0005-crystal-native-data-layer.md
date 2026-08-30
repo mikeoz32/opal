@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-07-28
+- Amended: 2026-08-30 (explicit relationships and cascades)
 - Deciders: Opal maintainers
 - Extends: ADR-0002 and ADR-0003
 - Related: `DB::Database`, `DB::Transaction`, `LF::ApplicationExtension`
@@ -404,6 +405,37 @@ upgrade to a writer after another connection commits. That native
 `database is locked` failure happens before compare-and-set row counts are
 available and remains a driver error; Opal does not relabel it as an optimistic
 conflict.
+
+## Relationships And Cascades
+
+Entity navigation properties may declare compile-time `BelongsTo`, `HasMany`,
+or `HasOne` metadata. Every declaration explicitly names a scalar foreign-key
+property. Navigation properties are excluded from stored columns, hydration,
+CRUD SQL, and query field descriptors; the scalar key remains the persistence
+and query contract.
+
+Hydration assigns nil to `belongs_to`/`has_one` navigation properties and an
+empty array to `has_many`. Opal never loads a relation implicitly. Repositories
+query related entities explicitly and attach them to the in-memory graph when
+that graph is needed.
+
+`cascade_persist` enrolls new in-memory targets in the same manager. Managed
+targets are not implicitly scheduled for update. `cascade_remove` is supported
+only from `has_many` and `has_one` owners to targets that were explicitly loaded
+and are already managed by the same transaction. `belongs_to` remove cascade
+and orphan removal are rejected at compile time. Removing an object from a
+collection has no persistence effect.
+
+At flush, the manager derives a dependency graph from queued objects and their
+in-memory relationship references. Parent inserts precede dependent inserts;
+dependent deletes precede parent deletes. Independent operations preserve
+their first scheduling order. Cycles fail before queued SQL executes.
+
+Foreign-key DDL remains separate from EntityManager behavior. A typed
+`Relations` descriptor may be applied explicitly to a `Schema::TableBuilder`;
+it adds a normal foreign key, and `has_one` also adds uniqueness. It does not
+infer tables or columns, register entities globally, or generate database-level
+delete cascades.
 
 ## Typed Query Model
 
@@ -837,6 +869,11 @@ include:
 - `MappingError`;
 - `InvalidQueryError`;
 - `OptimisticLockError`;
+- `RelationshipError`;
+- `UnsavedRelationshipError`;
+- `UnmanagedRelationshipError`;
+- `RelationshipKeyMismatchError`;
+- `RelationshipCycleError`;
 - `MigrationError`;
 - `DuplicateMigrationVersionError`;
 - `MigrationHistoryMismatchError`;
@@ -849,6 +886,8 @@ subclasses. Autoconfiguration errors use
 ## Performance Constraints
 
 - Entity discovery and mapping metadata are compile-time only.
+- Relationship descriptors and target validation are compile-time only; no
+  runtime relationship registry exists.
 - Static CRUD/find SQL is specialized at compile time for each used
   entity/concrete-dialect combination, using the dialect's static policy.
 - Static query SQL is specialized at compile time for each used
@@ -880,8 +919,8 @@ repository methods when several repositories participate in one transaction.
 Updates require `persist`, and generated IDs needed mid-transaction require
 `flush`.
 
-The first release intentionally does not solve every ORM problem. Relations,
-cascades, joins, projections, composite IDs, entity inheritance, savepoints,
-second-level cache, generated repositories, `attach`, `merge`, and dirty
-checking require separate ADRs. Lazy loading, proxy objects, and implicit
-relationship queries remain rejected rather than deferred.
+The first release intentionally does not solve every ORM problem. Joins,
+projections, composite IDs, entity inheritance, savepoints, second-level cache,
+generated repositories, `attach`, `merge`, and dirty checking require separate
+ADRs. Lazy loading, proxy objects, and implicit relationship queries remain
+rejected rather than deferred.

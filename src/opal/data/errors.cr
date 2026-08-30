@@ -117,6 +117,85 @@ module LF
       end
     end
 
+    class RelationshipError < Error
+      getter entity_name : String
+      getter relationship : String
+      getter target_name : String
+
+      def initialize(
+        @entity_name : String,
+        @relationship : String,
+        @target_name : String,
+        message : String,
+      )
+        super(message)
+      end
+    end
+
+    class UnsavedRelationshipError < RelationshipError
+      def initialize(entity_name : String, relationship : String, target_name : String)
+        super(
+          entity_name,
+          relationship,
+          target_name,
+          "Relationship #{entity_name}.#{relationship} references unsaved " \
+          "#{target_name} without cascade_persist"
+        )
+      end
+    end
+
+    class UnmanagedRelationshipError < RelationshipError
+      getter operation : Symbol
+
+      def initialize(
+        @operation : Symbol,
+        entity_name : String,
+        relationship : String,
+        target_name : String,
+      )
+        super(
+          entity_name,
+          relationship,
+          target_name,
+          "Relationship #{entity_name}.#{relationship} cannot cascade " \
+          "#{operation} to unmanaged #{target_name}"
+        )
+      end
+    end
+
+    class RelationshipKeyMismatchError < RelationshipError
+      getter foreign_key : String
+      getter actual : String
+      getter expected : String
+
+      def initialize(
+        entity_name : String,
+        relationship : String,
+        target_name : String,
+        @foreign_key : String,
+        @actual : String,
+        @expected : String,
+      )
+        super(
+          entity_name,
+          relationship,
+          target_name,
+          "Relationship #{entity_name}.#{relationship} foreign key " \
+          "#{foreign_key} is #{actual}, expected #{expected}"
+        )
+      end
+    end
+
+    class RelationshipCycleError < Error
+      getter entities : Array(String)
+
+      def initialize(@entities : Array(String))
+        super(
+          "Relationship dependency cycle: #{entities.join(" -> ")}"
+        )
+      end
+    end
+
     class MigrationError < Error
       getter reason : Symbol
       getter version : Int64?

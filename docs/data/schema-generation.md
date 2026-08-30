@@ -62,6 +62,21 @@ developer choices.
 - Entity annotations are not schema authority. Applications opt in by supplying
   a `Schema::Model`; automatic entity-to-schema inference remains unsupported.
 
+Relationship descriptors can add a known foreign key to that explicit model
+without turning entities into schema authority:
+
+```crystal
+schema.table("tasks") do |table|
+  table.generated_id("id")
+  table.int64("project_id", null: false)
+  table.foreign_key(Task::Relations.project)
+end
+```
+
+The table and columns are still declared by the application. A `has_one`
+descriptor additionally adds a unique constraint to its foreign-key column.
+See [relationships and cascades](relationships.md) for ownership rules.
+
 Rename hints are applied before comparison:
 
 ```crystal
