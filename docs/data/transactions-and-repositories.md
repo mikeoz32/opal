@@ -40,6 +40,46 @@ without fiber-local or global state. Returned entities are detached from the
 closed manager and cannot be scheduled in another manager without loading the
 managed instance there first.
 
+For common reads, the same manager can create an optional typed facade:
+
+```crystal
+source.transaction do |manager|
+  todos = manager.repository(Todo)
+
+  todo = todos.find(42_i64)
+  first_open = todos.find_by(Todo::Fields.completed.eq(false))
+  open_count = todos.count(Todo::Fields.completed.eq(false))
+  any_open = todos.exists?(Todo::Fields.completed.eq(false))
+
+  page = todos.page(
+    2,
+    20,
+    where: Todo::Fields.completed.eq(false),
+    order_by: Todo::Fields.id.asc
+  )
+end
+```
+
+`manager.repository(Todo)` infers both the entity and its exact lookup ID type.
+For a generated `Int64?` entity ID, `find` accepts `Int64`, not `Int64?` or a
+different integer type. `find_by` returns the first matching row; use the
+facade's `query` or `dynamic_query` when ordering or runtime query composition
+is required.
+
+Pages are one-based and require positive page numbers and sizes. An explicit
+`order_by` is mandatory so repeated page requests have a caller-defined order.
+Each page performs one `count` and one existing typed SELECT, returns an empty
+`items` array when the requested page is outside the result, and reports zero
+`total_pages` for an empty result set.
+
+The facade is bound to the manager that created it. It cannot be constructed
+from a `DataSource`, open a transaction, or outlive the transaction block; a
+call after closure raises `ClosedEntityManagerError`. Its methods delegate to
+the existing find and query plans, do not flush pending writes, and preserve
+transaction and driver error types unchanged. Custom domain repositories may
+use this facade internally while continuing to accept the active manager, as
+in the service pattern above.
+
 `delete(Entity, id)` uses the entity's exact non-nil lookup ID type. It loads or
 reuses the managed entity, schedules `remove`, and returns `false` when no row
 exists. The DELETE still occurs at explicit or transaction-completion flush,

@@ -20,6 +20,20 @@ Do not generate repositories from entities in this plan. Generated repository
 implementations, joins, projections, and specification DSLs require separate
 decisions.
 
+## Contract
+
+- `EntityManager#repository(Entity)` constructs a manager-bound
+  `Repository(Entity, ID)` and infers the entity's exact non-nil lookup ID.
+- Repositories are not constructed from `DataSource`: they neither create nor
+  own transactions and become unusable when their manager closes.
+- `find`, `find_by`, `exists?`, and `count` delegate to existing manager/query
+  terminals. `query` and `dynamic_query` expose the existing builders.
+- Reads never flush pending writes. Existing identity-map, listener, SQL-plan,
+  and native error behavior is unchanged.
+- Pagination is one-based, requires positive page and size values, and requires
+  explicit ordering. It executes a count plus a limited/offset SELECT and
+  returns an empty page outside the result range.
+
 ## Tasks
 
 1. Define typed repository contracts and construction rules.

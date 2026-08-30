@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-07-28
-- Amended: 2026-08-30 (explicit relationships and cascades)
+- Amended: 2026-08-30 (relationships, cascades, and repository conveniences)
 - Deciders: Opal maintainers
 - Extends: ADR-0002 and ADR-0003
 - Related: `DB::Database`, `DB::Transaction`, `LF::ApplicationExtension`
@@ -559,6 +559,28 @@ identity map automatically. `clear(T)` detaches every managed entity of one type
 when that type has no pending entity operations; otherwise it raises
 `EntityStateError`. Application code must call `clear(T)` for affected types or
 abandon the manager before further managed operations.
+
+## Repository Convenience API
+
+`EntityManager#repository(Entity)` returns an optional manager-bound
+`Repository(Entity, ID)`. The entity macro supplies the exact application-side
+lookup ID type, including removal of `Nil` from generated `Int32?` and `Int64?`
+IDs. The repository provides `find`, `find_by`, `count`, `exists?`, and access
+to the existing static and dynamic query builders. It generates no new SQL
+plans and introduces no registry or persistence methods on entities.
+
+A repository is constructed only from an active transaction-local manager. It
+does not accept or own a `DataSource`, open a transaction, flush before reads,
+or remain usable after its manager closes. This keeps transaction ownership in
+the application service while allowing custom stateless repositories to use a
+small typed facade internally.
+
+Pagination is one-based and requires a positive page number, positive page
+size, and explicit typed ordering. It executes one existing count terminal and
+one ordered SELECT with limit and offset. An out-of-range page has no items but
+retains the matching total; an empty result has zero total pages. Predicate
+pagination uses the same predicate for both statements. Transaction failures
+and driver failures propagate with their existing types.
 
 ## Dialect Architecture
 

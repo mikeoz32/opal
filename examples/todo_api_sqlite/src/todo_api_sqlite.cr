@@ -70,11 +70,11 @@ end
 @[LF::DI::Service]
 class TodoRepository
   def all(manager : LF::Data::EntityManager) : Array(Todo)
-    manager.query(Todo).order_by(Todo::Fields.id.desc).to_a
+    manager.repository(Todo).query.order_by(Todo::Fields.id.desc).to_a
   end
 
   def find(manager : LF::Data::EntityManager, id : Int64) : Todo?
-    manager.find(Todo, id)
+    manager.repository(Todo).find(id)
   end
 
   def create(manager : LF::Data::EntityManager, title : String) : Todo
@@ -134,7 +134,7 @@ class TodoAuditRepository
     manager : LF::Data::EntityManager,
     todo_id : Int64,
   ) : Array(TodoAudit)
-    manager.query(TodoAudit)
+    manager.repository(TodoAudit).query
       .where(TodoAudit::Fields.todo_id.eq(todo_id))
       .order_by(TodoAudit::Fields.id.asc)
       .to_a
