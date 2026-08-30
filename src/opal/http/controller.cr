@@ -1,6 +1,7 @@
 require "json"
 require "./di_integration"
 require "./errors"
+require "./execution_pipeline"
 require "./parameter_decoder"
 require "./response"
 require "./router"
@@ -32,9 +33,84 @@ module LF::HTTP::Controller
 
   macro included
     {% verbatim do %}
-      macro setup_routes(router, scope_provider)
+      macro setup_routes(router, scope_provider, global_owner = nil)
         {% controller_type = @type %}
         {% controller_name = "__lf_http_controller__" + controller_type.name.stringify %}
+        {% global_guard_types = [] of ASTNode %}
+        {% global_pipe_types = [] of ASTNode %}
+        {% global_interceptor_types = [] of ASTNode %}
+        {% global_filter_types = [] of ASTNode %}
+        {% unless global_owner.is_a?(NilLiteral) %}
+          {% global_owner_type = global_owner.resolve %}
+          {% for policy_annotation in global_owner_type.annotations(LF::HTTP::UseGuards) %}
+            {% for policy in policy_annotation.args %}
+              {% unless policy.resolve.ancestors.includes?(LF::HTTP::Guard) %}
+                {% raise "Invalid guard #{policy} on #{global_owner_type}: expected LF::HTTP::Guard" %}
+              {% end %}
+              {% global_guard_types << policy %}
+            {% end %}
+          {% end %}
+          {% for policy_annotation in global_owner_type.annotations(LF::HTTP::UsePipes) %}
+            {% for policy in policy_annotation.args %}
+              {% unless policy.resolve.ancestors.includes?(LF::HTTP::Pipe) %}
+                {% raise "Invalid pipe #{policy} on #{global_owner_type}: expected LF::HTTP::Pipe" %}
+              {% end %}
+              {% global_pipe_types << policy %}
+            {% end %}
+          {% end %}
+          {% for policy_annotation in global_owner_type.annotations(LF::HTTP::UseInterceptors) %}
+            {% for policy in policy_annotation.args %}
+              {% unless policy.resolve.ancestors.includes?(LF::HTTP::Interceptor) %}
+                {% raise "Invalid interceptor #{policy} on #{global_owner_type}: expected LF::HTTP::Interceptor" %}
+              {% end %}
+              {% global_interceptor_types << policy %}
+            {% end %}
+          {% end %}
+          {% for policy_annotation in global_owner_type.annotations(LF::HTTP::UseFilters) %}
+            {% for policy in policy_annotation.args %}
+              {% unless policy.resolve.ancestors.includes?(LF::HTTP::Filter) %}
+                {% raise "Invalid filter #{policy} on #{global_owner_type}: expected LF::HTTP::Filter" %}
+              {% end %}
+              {% global_filter_types << policy %}
+            {% end %}
+          {% end %}
+        {% end %}
+        {% controller_guard_types = [] of ASTNode %}
+        {% controller_pipe_types = [] of ASTNode %}
+        {% controller_interceptor_types = [] of ASTNode %}
+        {% controller_filter_types = [] of ASTNode %}
+        {% for policy_annotation in controller_type.annotations(LF::HTTP::UseGuards) %}
+          {% for policy in policy_annotation.args %}
+            {% unless policy.resolve.ancestors.includes?(LF::HTTP::Guard) %}
+              {% raise "Invalid guard #{policy} on #{controller_type}: expected LF::HTTP::Guard" %}
+            {% end %}
+            {% controller_guard_types << policy %}
+          {% end %}
+        {% end %}
+        {% for policy_annotation in controller_type.annotations(LF::HTTP::UsePipes) %}
+          {% for policy in policy_annotation.args %}
+            {% unless policy.resolve.ancestors.includes?(LF::HTTP::Pipe) %}
+              {% raise "Invalid pipe #{policy} on #{controller_type}: expected LF::HTTP::Pipe" %}
+            {% end %}
+            {% controller_pipe_types << policy %}
+          {% end %}
+        {% end %}
+        {% for policy_annotation in controller_type.annotations(LF::HTTP::UseInterceptors) %}
+          {% for policy in policy_annotation.args %}
+            {% unless policy.resolve.ancestors.includes?(LF::HTTP::Interceptor) %}
+              {% raise "Invalid interceptor #{policy} on #{controller_type}: expected LF::HTTP::Interceptor" %}
+            {% end %}
+            {% controller_interceptor_types << policy %}
+          {% end %}
+        {% end %}
+        {% for policy_annotation in controller_type.annotations(LF::HTTP::UseFilters) %}
+          {% for policy in policy_annotation.args %}
+            {% unless policy.resolve.ancestors.includes?(LF::HTTP::Filter) %}
+              {% raise "Invalid filter #{policy} on #{controller_type}: expected LF::HTTP::Filter" %}
+            {% end %}
+            {% controller_filter_types << policy %}
+          {% end %}
+        {% end %}
         {% initializer = controller_type.methods.find { |method| method.name.stringify == "initialize" } %}
         {% unless initializer %}
           {% for ancestor in controller_type.ancestors %}
@@ -66,7 +142,44 @@ module LF::HTTP::Controller
             {% router_method = "add".id if router_method == "route" %}
             {% for ann in method.annotations(route_method) %}
               {% path = ann[0] || ann[:path] || raise "Missing path in #{controller_type}##{method.name}" %}
+              {% action_guard_types = [] of ASTNode %}
+              {% action_pipe_types = [] of ASTNode %}
+              {% action_interceptor_types = [] of ASTNode %}
+              {% action_filter_types = [] of ASTNode %}
+              {% for policy_annotation in method.annotations(LF::HTTP::UseGuards) %}
+                {% for policy in policy_annotation.args %}
+                  {% unless policy.resolve.ancestors.includes?(LF::HTTP::Guard) %}
+                    {% raise "Invalid guard #{policy} on #{controller_type}##{method.name}: expected LF::HTTP::Guard" %}
+                  {% end %}
+                  {% action_guard_types << policy %}
+                {% end %}
+              {% end %}
+              {% for policy_annotation in method.annotations(LF::HTTP::UsePipes) %}
+                {% for policy in policy_annotation.args %}
+                  {% unless policy.resolve.ancestors.includes?(LF::HTTP::Pipe) %}
+                    {% raise "Invalid pipe #{policy} on #{controller_type}##{method.name}: expected LF::HTTP::Pipe" %}
+                  {% end %}
+                  {% action_pipe_types << policy %}
+                {% end %}
+              {% end %}
+              {% for policy_annotation in method.annotations(LF::HTTP::UseInterceptors) %}
+                {% for policy in policy_annotation.args %}
+                  {% unless policy.resolve.ancestors.includes?(LF::HTTP::Interceptor) %}
+                    {% raise "Invalid interceptor #{policy} on #{controller_type}##{method.name}: expected LF::HTTP::Interceptor" %}
+                  {% end %}
+                  {% action_interceptor_types << policy %}
+                {% end %}
+              {% end %}
+              {% for policy_annotation in method.annotations(LF::HTTP::UseFilters) %}
+                {% for policy in policy_annotation.args %}
+                  {% unless policy.resolve.ancestors.includes?(LF::HTTP::Filter) %}
+                    {% raise "Invalid filter #{policy} on #{controller_type}##{method.name}: expected LF::HTTP::Filter" %}
+                  {% end %}
+                  {% action_filter_types << policy %}
+                {% end %}
+              {% end %}
 
+              {% json_arguments = [] of ASTNode %}
               {% for argument in method.args %}
                 {% restriction = argument.restriction %}
                 {% request_argument = argument.name.stringify == "request" && restriction.stringify == "HTTP::Request" %}
@@ -75,53 +188,186 @@ module LF::HTTP::Controller
                 {% unless request_argument || scalar_argument || json_argument %}
                   {% raise "Invalid route argument '#{argument.name}' in #{controller_type}##{method.name}: inject services through the controller constructor" %}
                 {% end %}
-              {% end %}
-
-              {{ router }}.{{ router_method }}({{ path }}) do |ctx, route_params|
-                begin
-                  scope = ctx.dependency_scope
-                  raise LF::HTTP::InternalServerError.new("DI context not initialized") if scope.nil?
-
-                  {% for argument in method.args %}
-                    {% if argument.name.stringify == "request" && argument.restriction.stringify == "HTTP::Request" %}
-                      {{ argument.name }} = ctx.request
-                    {% elsif {"Int32", "Int64", "Float32", "Float64", "Bool", "UUID", "String"}.includes?(argument.restriction.stringify) %}
-                      if route_params.has_key?({{ argument.name.stringify }})
-                        {{ argument.name }} = LF::HTTP::ParameterDecoder.decode(route_params, {{ argument.name.stringify }}, {{ argument.restriction }})
-                      elsif ctx.request.query_params.has_key?({{ argument.name.stringify }})
-                        {{ argument.name }} = LF::HTTP::ParameterDecoder.decode(ctx.request.query_params, {{ argument.name.stringify }}, {{ argument.restriction }})
-                      else
-                        raise LF::HTTP::BadRequest.new({{ "Missing required parameter '#{argument.name}'" }})
-                      end
-                    {% else %}
-                      raise LF::HTTP::BadRequest.new("Missing request body") if ctx.request.body.nil?
-                      begin
-                        {{ argument.name }} = {{ argument.restriction }}.from_json(ctx.request.body.as(IO))
-                      rescue error : JSON::SerializableError | JSON::ParseException
-                        raise LF::HTTP::BadRequest.new(error.message || "Invalid JSON request body")
-                      end
+                {% json_arguments << argument if json_argument %}
+                {% if pipe_annotation = argument.annotation(LF::HTTP::UsePipes) %}
+                  {% if request_argument %}
+                    {% raise "Invalid pipes on HTTP::Request argument '#{argument.name}' in #{controller_type}##{method.name}" %}
+                  {% end %}
+                  {% for policy in pipe_annotation.args %}
+                    {% unless policy.resolve.ancestors.includes?(LF::HTTP::Pipe) %}
+                      {% raise "Invalid pipe #{policy} on argument '#{argument.name}' in #{controller_type}##{method.name}: expected LF::HTTP::Pipe" %}
                     {% end %}
                   {% end %}
+                {% end %}
+              {% end %}
+              {% if json_arguments.size > 1 %}
+                {% raise "Invalid route #{controller_type}##{method.name}: expected at most one JSON body argument" %}
+              {% end %}
+              {% has_base_pipes = global_pipe_types.size > 0 || controller_pipe_types.size > 0 || action_pipe_types.size > 0 %}
+              {% has_parameter_pipes = method.args.any? { |argument| !argument.annotation(LF::HTTP::UsePipes).nil? } %}
+              {% has_any_pipes = has_base_pipes || has_parameter_pipes %}
 
-                  controller = scope.as(LF::DI::Container).resolve({{ controller_name }}, {{ controller_type }})
-                  result = controller.{{ method.name }}(
-                    {% for argument in method.args %}
-                      {{ argument.name }},
+              {{ router }}.{{ router_method }}({{ path }}) do |ctx, route_params|
+                execution_context = LF::HTTP::ExecutionContext.new(
+                  ctx,
+                  route_params,
+                  {{ controller_type.name.stringify }},
+                  {{ method.name.stringify }}
+                )
+                scope = execution_context.dependency_scope
+                filters = [] of LF::HTTP::Filter
+                begin
+                  {% for policy in action_filter_types %}
+                    filters << scope.resolve({{ policy }}).as(LF::HTTP::Filter)
+                  {% end %}
+                  {% for policy in controller_filter_types %}
+                    filters << scope.resolve({{ policy }}).as(LF::HTTP::Filter)
+                  {% end %}
+                  {% for policy in global_filter_types %}
+                    filters << scope.resolve({{ policy }}).as(LF::HTTP::Filter)
+                  {% end %}
+
+                  {% for policy in global_guard_types %}
+                    unless scope.resolve({{ policy }}).can_activate(execution_context)
+                      raise LF::HTTP::Forbidden.new
+                    end
+                  {% end %}
+                  {% for policy in controller_guard_types %}
+                    unless scope.resolve({{ policy }}).can_activate(execution_context)
+                      raise LF::HTTP::Forbidden.new
+                    end
+                  {% end %}
+                  {% for policy in action_guard_types %}
+                    unless scope.resolve({{ policy }}).can_activate(execution_context)
+                      raise LF::HTTP::Forbidden.new
+                    end
+                  {% end %}
+
+                  interceptors = [] of LF::HTTP::Interceptor
+                  {% for policy in global_interceptor_types %}
+                    interceptors << scope.resolve({{ policy }}).as(LF::HTTP::Interceptor)
+                  {% end %}
+                  {% for policy in controller_interceptor_types %}
+                    interceptors << scope.resolve({{ policy }}).as(LF::HTTP::Interceptor)
+                  {% end %}
+                  {% for policy in action_interceptor_types %}
+                    interceptors << scope.resolve({{ policy }}).as(LF::HTTP::Interceptor)
+                  {% end %}
+
+                  response = LF::HTTP::ExecutionPipeline.intercept(execution_context, interceptors) do
+                    {% if has_any_pipes %}
+                      pipes = [] of LF::HTTP::Pipe
+                      {% for policy in global_pipe_types %}
+                        pipes << scope.resolve({{ policy }}).as(LF::HTTP::Pipe)
+                      {% end %}
+                      {% for policy in controller_pipe_types %}
+                        pipes << scope.resolve({{ policy }}).as(LF::HTTP::Pipe)
+                      {% end %}
+                      {% for policy in action_pipe_types %}
+                        pipes << scope.resolve({{ policy }}).as(LF::HTTP::Pipe)
+                      {% end %}
                     {% end %}
-                  )
-                  if result.is_a?(LF::HTTP::Response)
-                    result.as(LF::HTTP::Response).write_to(ctx)
-                  elsif result.is_a?(JSON::Serializable)
-                    ctx.response.content_type = "application/json"
-                    result.to_json(ctx.response)
-                  else
-                    ctx.response.content_type = "text/plain"
-                    ctx.response.print result
+
+                    {% for argument in method.args %}
+                      {% argument_name = argument.name.stringify %}
+                      {% argument_pipe_annotation = argument.annotation(LF::HTTP::UsePipes) %}
+                      {% has_argument_pipes = has_base_pipes || !argument_pipe_annotation.nil? %}
+                      {% if argument_name == "request" && argument.restriction.stringify == "HTTP::Request" %}
+                        {{ argument.name }} = ctx.request
+                      {% elsif {"Int32", "Int64", "Float32", "Float64", "Bool", "UUID", "String"}.includes?(argument.restriction.stringify) %}
+                        {% if has_argument_pipes %}
+                          if route_params.has_key?({{ argument_name }})
+                            raw_value = route_params[{{ argument_name }}]
+                            argument_source = LF::HTTP::ArgumentSource::Path
+                          elsif ctx.request.query_params.has_key?({{ argument_name }})
+                            raw_value = ctx.request.query_params[{{ argument_name }}]
+                            argument_source = LF::HTTP::ArgumentSource::Query
+                          else
+                            raise LF::HTTP::BadRequest.new({{ "Missing required parameter '#{argument.name}'" }})
+                          end
+                          argument_pipes = pipes.dup
+                          {% if argument_pipe_annotation %}
+                            {% for policy in argument_pipe_annotation.args %}
+                              argument_pipes << scope.resolve({{ policy }}).as(LF::HTTP::Pipe)
+                            {% end %}
+                          {% end %}
+                          piped_value = LF::HTTP::ExecutionPipeline.apply_pipes(
+                            raw_value,
+                            LF::HTTP::ArgumentMetadata.new({{ argument_name }}, {{ argument.restriction.stringify }}, argument_source),
+                            execution_context,
+                            argument_pipes
+                          )
+                          unless piped_value.is_a?(String)
+                            raise LF::HTTP::InternalServerError.new({{ "Pipe returned an invalid value for parameter '#{argument.name}': expected String" }})
+                          end
+                          {{ argument.name }} = LF::HTTP::ParameterDecoder.decode(
+                            piped_value.as(String),
+                            {{ argument_name }},
+                            {{ argument.restriction }}
+                          )
+                        {% else %}
+                          if route_params.has_key?({{ argument_name }})
+                            {{ argument.name }} = LF::HTTP::ParameterDecoder.decode(route_params, {{ argument_name }}, {{ argument.restriction }})
+                          elsif ctx.request.query_params.has_key?({{ argument_name }})
+                            {{ argument.name }} = LF::HTTP::ParameterDecoder.decode(ctx.request.query_params, {{ argument_name }}, {{ argument.restriction }})
+                          else
+                            raise LF::HTTP::BadRequest.new({{ "Missing required parameter '#{argument.name}'" }})
+                          end
+                        {% end %}
+                      {% else %}
+                        body = ctx.request.body
+                        raise LF::HTTP::BadRequest.new("Missing request body") if body.nil?
+                        begin
+                          {% if has_argument_pipes %}
+                            raw_value = JSON.parse(body.as(IO))
+                            argument_pipes = pipes.dup
+                            {% if argument_pipe_annotation %}
+                              {% for policy in argument_pipe_annotation.args %}
+                                argument_pipes << scope.resolve({{ policy }}).as(LF::HTTP::Pipe)
+                              {% end %}
+                            {% end %}
+                            piped_value = LF::HTTP::ExecutionPipeline.apply_pipes(
+                              raw_value,
+                              LF::HTTP::ArgumentMetadata.new({{ argument_name }}, {{ argument.restriction.stringify }}, LF::HTTP::ArgumentSource::Body),
+                              execution_context,
+                              argument_pipes
+                            )
+                            unless piped_value.is_a?(JSON::Any)
+                              raise LF::HTTP::InternalServerError.new({{ "Pipe returned an invalid value for parameter '#{argument.name}': expected JSON::Any" }})
+                            end
+                            {{ argument.name }} = {{ argument.restriction }}.from_json(piped_value.as(JSON::Any).to_json)
+                          {% else %}
+                            {{ argument.name }} = {{ argument.restriction }}.from_json(body.as(IO))
+                          {% end %}
+                        rescue error : JSON::SerializableError | JSON::ParseException
+                          raise LF::HTTP::BadRequest.new(error.message || "Invalid JSON request body")
+                        end
+                      {% end %}
+                    {% end %}
+
+                    controller = scope.resolve({{ controller_name }}, {{ controller_type }})
+                    action_result = controller.{{ method.name }}(
+                      {% for argument in method.args %}
+                        {{ argument.name }},
+                      {% end %}
+                    )
+                    if action_result.is_a?(LF::HTTP::Response)
+                      action_result.as(LF::HTTP::Response)
+                    elsif action_result.is_a?(JSON::Serializable)
+                      LF::HTTP::JSONResponse.create(action_result)
+                    else
+                      LF::HTTP::TextResponse.create(action_result.to_s)
+                    end
                   end
-                rescue error : LF::HTTP::Error
-                  raise error
+                  response.write_to(ctx)
                 rescue error : Exception
-                  raise LF::HTTP::InternalServerError.new("Error processing request: #{error.message}")
+                  if filtered_response = LF::HTTP::ExecutionPipeline.catch(error, execution_context, filters)
+                    filtered_response.write_to(ctx)
+                  elsif error.is_a?(LF::HTTP::Error)
+                    raise error.as(LF::HTTP::Error)
+                  else
+                    raise LF::HTTP::InternalServerError.new("Error processing request: #{error.message}")
+                  end
                 end
               end
             {% end %}

@@ -272,6 +272,36 @@ describe "application compiler fixtures" do
     result[:error].should contain("undefined method 'setup_routes' for LegacySetupController")
   end
 
+  it "rejects a controller guard that does not implement the guard contract" do
+    fixture = File.expand_path("fixtures/http/controller_invalid_guard.cr", __DIR__)
+    result = compile_fixture(fixture)
+
+    result[:status].success?.should be_false
+    result[:error].should contain(
+      "Invalid guard NotAGuard on InvalidGuardController: expected LF::HTTP::Guard"
+    )
+  end
+
+  it "rejects pipes attached to the raw HTTP request argument" do
+    fixture = File.expand_path("fixtures/http/controller_request_pipe.cr", __DIR__)
+    result = compile_fixture(fixture)
+
+    result[:status].success?.should be_false
+    result[:error].should contain(
+      "Invalid pipes on HTTP::Request argument 'request' in RequestPipeController#show"
+    )
+  end
+
+  it "rejects routes with more than one JSON body argument" do
+    fixture = File.expand_path("fixtures/http/controller_multiple_bodies.cr", __DIR__)
+    result = compile_fixture(fixture)
+
+    result[:status].success?.should be_false
+    result[:error].should contain(
+      "Invalid route MultipleBodyController#create: expected at most one JSON body argument"
+    )
+  end
+
   it "supports constructor DI inherited from a controller base class" do
     fixture = File.expand_path("fixtures/http/inherited_controller_initializer.cr", __DIR__)
     result = compile_fixture(fixture)

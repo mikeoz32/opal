@@ -439,13 +439,13 @@ module LF::HTTP::AutoConfig
     end
   end
 
-  macro install(runtime)
+  macro install(runtime, global_owner = nil)
     {{ runtime }}.install(
       LF::HTTP::AutoConfig::Extension.new do |application_context|
         LF::HTTP::App.new do |router|
           {% controllers = LF::HTTP::Controller.includers.sort_by { |controller| controller.name.stringify } %}
           {% for controller in controllers %}
-            {{ controller }}.setup_routes(router, application_context)
+            {{ controller }}.setup_routes(router, application_context, {{ global_owner }})
           {% end %}
         end
       end
@@ -465,7 +465,7 @@ macro finished
           runtime = bootstrap
 
           begin
-            extension = LF::HTTP::AutoConfig.install(runtime)
+            extension = LF::HTTP::AutoConfig.install(runtime, {{ klass }})
             Process.on_terminate do |_reason|
               extension.stop
             end
