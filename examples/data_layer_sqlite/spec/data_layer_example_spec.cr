@@ -1,5 +1,17 @@
 require "./spec_helper"
 
+private def relationship_showcase_graph
+  project = DataLayerExample::Project.new("relationships")
+  profile = DataLayerExample::ProjectProfile.new(project, "primary")
+  first = DataLayerExample::Task.new(project, "first")
+  second = DataLayerExample::Task.new(project, "second")
+  event = DataLayerExample::TaskEvent.new(second, "created")
+  project.profile = profile
+  project.tasks << first << second
+  second.events << event
+  {project, profile, first, second, event}
+end
+
 describe "the data layer showcase" do
   it "runs ordered migrations and enables SQLite foreign keys" do
     DataLayerExampleSpecSupport.with_store(allow_sqlite_cleanup_error: true) do |store|
@@ -7,7 +19,7 @@ describe "the data layer showcase" do
         manager.connection.scalar("PRAGMA foreign_keys").should eq(1_i64)
         manager.connection.scalar(
           "SELECT count(*) FROM _lf_migrations"
-        ).should eq(3_i64)
+        ).should eq(4_i64)
       end
 
       error = expect_raises(SQLite3::Exception) do
@@ -46,6 +58,109 @@ describe "the data layer showcase" do
         loaded.created_at.should eq(Time.utc(2026, 8, 25))
         loaded.due_at.should be_nil
         loaded.display_label.should eq("hydrated")
+      end
+    end
+  end
+
+  it "persists a relationship graph and propagates generated foreign keys" do
+    DataLayerExampleSpecSupport.with_store do |store|
+      project, profile, first, second, event = relationship_showcase_graph
+
+      store.source.transaction do |manager|
+        manager.persist(project)
+        manager.flush
+      end
+
+      project.id.should_not be_nil
+      profile.project_id.should eq(project.id)
+      first.project_id.should eq(project.id)
+      second.project_id.should eq(project.id)
+      event.task_id.should eq(second.id)
+
+      store.source.transaction do |manager|
+        manager.query(DataLayerExample::Project).count.should eq(1_i64)
+        manager.query(DataLayerExample::ProjectProfile).count.should eq(1_i64)
+        manager.query(DataLayerExample::Task).count.should eq(2_i64)
+        manager.query(DataLayerExample::TaskEvent).count.should eq(1_i64)
+      end
+    end
+  end
+
+  it "loads relationships explicitly before cascading owner-side removal" do
+    DataLayerExampleSpecSupport.with_store do |store|
+      project, _, _, _, _ = relationship_showcase_graph
+      store.source.transaction { |manager| manager.persist(project) }
+
+      store.source.transaction do |manager|
+        loaded = manager.find(
+          DataLayerExample::Project,
+          project.id.not_nil!
+        ).not_nil!
+
+        loaded.tasks.should be_empty
+        loaded.profile.should be_nil
+
+        loaded.tasks.concat(
+          manager.query(DataLayerExample::Task)
+            .where(
+              DataLayerExample::Task::Fields.project_id.eq(
+                project.id.not_nil!
+              )
+            )
+            .to_a
+        )
+        loaded.profile = manager.query(DataLayerExample::ProjectProfile)
+          .where(
+            DataLayerExample::ProjectProfile::Fields.project_id.eq(
+              project.id.not_nil!
+            )
+          )
+          .first?
+        loaded.tasks.each do |task|
+          task.events.concat(
+            manager.query(DataLayerExample::TaskEvent)
+              .where(DataLayerExample::TaskEvent::Fields.task_id.eq(task.id.not_nil!))
+              .to_a
+          )
+        end
+
+        manager.remove(loaded)
+      end
+
+      store.source.transaction do |manager|
+        manager.query(DataLayerExample::TaskEvent).count.should eq(0_i64)
+        manager.query(DataLayerExample::Task).count.should eq(0_i64)
+        manager.query(DataLayerExample::ProjectProfile).count.should eq(0_i64)
+        manager.query(DataLayerExample::Project).count.should eq(0_i64)
+      end
+    end
+  end
+
+  it "does not turn collection mutation into orphan removal" do
+    DataLayerExampleSpecSupport.with_store do |store|
+      project, _, _, _, _ = relationship_showcase_graph
+      store.source.transaction { |manager| manager.persist(project) }
+
+      store.source.transaction do |manager|
+        loaded = manager.find(
+          DataLayerExample::Project,
+          project.id.not_nil!
+        ).not_nil!
+        loaded.tasks.concat(
+          manager.query(DataLayerExample::Task)
+            .where(
+              DataLayerExample::Task::Fields.project_id.eq(
+                project.id.not_nil!
+              )
+            )
+            .to_a
+        )
+        loaded.tasks.pop
+        manager.persist(loaded)
+      end
+
+      store.source.transaction do |manager|
+        manager.query(DataLayerExample::Task).count.should eq(2_i64)
       end
     end
   end

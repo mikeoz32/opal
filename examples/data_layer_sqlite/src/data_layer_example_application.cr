@@ -75,9 +75,10 @@ module DataLayerExample
     @[LF::HTTP::Controller::Post("/projects/:project_id/tasks")]
     def create_task(project_id : Int64, payload : Web::CreateTaskRequest)
       task = @data_source.transaction do |manager|
-        raise LF::HTTP::NotFound.new("Project not found") unless manager.find(Project, project_id)
+        project = manager.find(Project, project_id)
+        raise LF::HTTP::NotFound.new("Project not found") unless project
 
-        created_task = Task.new(project_id, payload.title)
+        created_task = Task.new(project, payload.title)
         manager.persist(created_task)
         manager.flush
         created_task
@@ -113,9 +114,11 @@ module DataLayerExample
         found_task = manager.find(Task, task_id)
         raise LF::HTTP::NotFound.new("Task not found") unless found_task
 
-        manager.query(TaskEvent)
-          .where(TaskEvent::Fields.task_id.eq(task_id))
-          .to_a.each { |event| manager.remove(event) }
+        found_task.events.concat(
+          manager.query(TaskEvent)
+            .where(TaskEvent::Fields.task_id.eq(task_id))
+            .to_a
+        )
         manager.remove(found_task)
       end
       "deleted"
