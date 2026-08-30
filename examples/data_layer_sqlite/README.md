@@ -1,10 +1,9 @@
 # Data Layer + SQLite Example
 
-This standalone Crystal application exercises the data layer without
-Application, DI, or autoconfiguration. It is intentionally explicit about
-ownership and transaction boundaries. It includes both a CLI showcase and an
-HTTP API backed by the same data-layer store, plus an Application-integrated
-variant using DI and controller discovery.
+This standalone Crystal application exercises the data layer with both
+explicit ownership and Application autoconfiguration. It includes a CLI
+showcase and an HTTP API backed by the same data-layer store, plus an
+Application-integrated variant using Data and HTTP autoconfiguration.
 
 It demonstrates:
 
@@ -20,8 +19,8 @@ It demonstrates:
 - rollback and listener/statement observability in the example specs.
 - an HTTP API using `LF::HTTP::App` and `LF::HTTP::Router`, with project/task
   CRUD backed by transaction-local entity managers.
-- an Application + DI + controller-discovery HTTP executable where a
-  DI-owned Store service closes the data source through lifecycle callbacks.
+- an Application + DI + controller-discovery HTTP executable where Data
+  autoconfiguration owns the data source and startup migrations.
 
 Run the executable:
 
@@ -65,19 +64,19 @@ http:
   port: 8085
 database:
   url: sqlite3://./data-example-application.db
+  migrations:
+    run_on_startup: true
 YAML
 
 OPAL_CONFIG=/tmp/opal-data-example.yml \
   crystal run src/data_layer_example_application_cli.cr
 ```
 
-This target uses `@[LF::Application]`, `@[LF::AutoConfig::HTTP]`, an
-`@[LF::DI::Service]` bean, DI lifecycle callbacks, and
-`LF::HTTP::Controller` discovery. The `Store` is resolved before the server
-binds, so migrations fail during startup rather than on the first request.
-It intentionally uses the lower-level `Application.run` path instead of the
-generated `run_http` convenience method so the Store can be eagerly resolved
-before the HTTP extension binds.
+This target uses `@[LF::Application]`, `@[LF::AutoConfig::Data]`,
+`@[LF::AutoConfig::HTTP]`, a `MigrationSet` bean, and
+`LF::HTTP::Controller` discovery. Data autoconfiguration opens and registers
+one `DataSource`, applies migrations before HTTP binds, and closes the source
+after HTTP stops.
 
 Run the example integration specs:
 
@@ -85,8 +84,7 @@ Run the example integration specs:
 crystal spec --no-color
 ```
 
-The applications wire `LF::Data::DataSource` and
-`LF::Data::MigrationRunner` directly. Data autoconfiguration belongs to the
-later Application integration plan and is deliberately not used by the
-standalone data target. The HTTP layers are example-level adapters and do not
-add HTTP or Application dependencies to the data core.
+The standalone CLI and router examples wire `LF::Data::DataSource` and
+`LF::Data::MigrationRunner` directly. The Application target demonstrates the
+autoconfigured path. These HTTP and Application adapters do not add either
+dependency to the data core.

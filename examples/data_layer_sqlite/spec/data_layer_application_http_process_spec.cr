@@ -25,7 +25,7 @@ describe "data layer Application HTTP executable" do
     cache_dir = ENV.fetch("CRYSTAL_CACHE_DIR", "/tmp/opal-crystal-cache")
     File.write(
       config,
-      "http:\n  host: 127.0.0.1\n  port: #{port}\ndatabase:\n  url: sqlite3://#{database}\n"
+      "http:\n  host: 127.0.0.1\n  port: #{port}\ndatabase:\n  url: sqlite3://#{database}\n  migrations:\n    run_on_startup: true\n"
     )
 
     compile_output = IO::Memory.new

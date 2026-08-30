@@ -123,7 +123,6 @@ module LF
               end
             end
           end
-
         ensure
           completion.try &.call(finalization)
           if started_at

@@ -230,7 +230,6 @@ describe "the data layer showcase" do
         end
       end
     end
-
   ensure
     first_database.try &.close
     second_database.try &.close
