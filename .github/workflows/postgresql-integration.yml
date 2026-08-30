@@ -48,4 +48,8 @@ jobs:
         run: shards check
 
       - name: Run PostgreSQL integration specs
-        run: crystal spec integration/postgresql_spec.cr --no-color
+        run: >-
+          crystal spec
+          integration/postgresql_spec.cr
+          integration/postgresql_schema_generation_spec.cr
+          --no-color
