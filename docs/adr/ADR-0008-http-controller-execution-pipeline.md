@@ -88,9 +88,16 @@ and removes the previous accidental second-read behavior.
 
 ### Global policies
 
+Controller and action annotations require no separate policy owner. Standalone
+applications using only those scopes call the normal two-argument setup macro:
+
+```crystal
+UsersController.setup_routes(router, root)
+```
+
 For application autoconfiguration, the `@[LF::Application]` class is the global
 annotation owner. Standalone assembly passes an explicit owner type as the third
-argument to `Controller.setup_routes`:
+argument to `Controller.setup_routes` only when global policies are needed:
 
 ```crystal
 UsersController.setup_routes(router, root, HttpPolicies)

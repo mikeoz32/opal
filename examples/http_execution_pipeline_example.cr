@@ -52,9 +52,6 @@ end
 @[LF::HTTP::UsePipes(TrimPipe)]
 @[LF::HTTP::UseInterceptors(TimingInterceptor)]
 @[LF::HTTP::UseFilters(GreetingErrorFilter)]
-class HttpPolicies
-end
-
 class GreetingController
   include LF::HTTP::Controller
 
@@ -69,7 +66,8 @@ root = LF::DI::DefaultContainer.new
 root.register(LF::DI::ServiceConfiguration.new)
 
 app = LF::HTTP::App.new do |router|
-  GreetingController.setup_routes(router, root, HttpPolicies)
+  # Controller annotations need no separate policy holder.
+  GreetingController.setup_routes(router, root)
 end
 
 server = HTTP::Server.new([
