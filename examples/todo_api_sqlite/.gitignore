@@ -1,0 +1,6 @@
+/bin/
+/lib/
+/todo.db
+/todo.db-shm
+/todo.db-wal
+/todo_api_sqlite_example
