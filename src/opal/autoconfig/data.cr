@@ -1,5 +1,6 @@
 require "../../opal"
 require "../data"
+require "../data/dialects/postgresql"
 require "../data/dialects/sqlite"
 require "./data/configuration"
 

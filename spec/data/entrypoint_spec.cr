@@ -9,6 +9,17 @@ describe "Data entrypoints" do
     result[:error].should eq("")
   end
 
+  it "compiles the PostgreSQL dialect entrypoint without loading its driver" do
+    fixture = File.expand_path(
+      "../fixtures/data/postgresql_dialect_without_driver.cr",
+      __DIR__
+    )
+    result = LF::DataSpecSupport.compile_fixture(fixture)
+
+    result[:status].success?.should be_true
+    result[:error].should eq("")
+  end
+
   it "does not expose Data through the root entrypoint" do
     fixture = File.expand_path("../fixtures/data/opal_without_data.cr", __DIR__)
     result = LF::DataSpecSupport.compile_fixture(fixture)
