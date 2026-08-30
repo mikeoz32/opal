@@ -13,7 +13,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -52,6 +52,12 @@ jobs:
       - name: Run complete root specs
         run: crystal spec --no-color
 
+      - name: Build release target
+        run: shards build --release
+
+      - name: Build API documentation
+        run: crystal docs
+
       - name: Install Data example dependencies
         working-directory: examples/data_layer_sqlite
         run: shards install
@@ -63,3 +69,23 @@ jobs:
       - name: Run Data example specs
         working-directory: examples/data_layer_sqlite
         run: crystal spec --no-color
+
+      - name: Build Data example release targets
+        working-directory: examples/data_layer_sqlite
+        run: shards build --release
+
+      - name: Install Todo example dependencies
+        working-directory: examples/todo_api_sqlite
+        run: shards install
+
+      - name: Check Todo example dependency resolution
+        working-directory: examples/todo_api_sqlite
+        run: shards check
+
+      - name: Run Todo example specs
+        working-directory: examples/todo_api_sqlite
+        run: crystal spec --no-color
+
+      - name: Build Todo example release target
+        working-directory: examples/todo_api_sqlite
+        run: shards build --release
