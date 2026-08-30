@@ -37,7 +37,7 @@ describe "data layer HTTP executable" do
       binary,
       env: {
         "OPAL_DATA_EXAMPLE_URL" => "sqlite3://#{database}",
-        "OPAL_DATA_HTTP_PORT" => port.to_s,
+        "OPAL_DATA_HTTP_PORT"   => port.to_s,
       },
       output: Process::Redirect::Close,
       error: Process::Redirect::Close

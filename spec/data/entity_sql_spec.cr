@@ -104,5 +104,4 @@ describe LF::Data::Entity do
     source.should_not contain("Array(DB::Any)")
     source.should_not contain("BindSlot")
   end
-
 end

@@ -6,7 +6,6 @@ module DataLayerExample
 
     def run : Nil
       DataLayerApplication.run do |runtime|
-        runtime.resolve(DataLayerExample::DataStoreService)
         extension = LF::HTTP::AutoConfig.install(runtime)
         Process.on_terminate { extension.stop }
 
@@ -20,6 +19,7 @@ module DataLayerExample
 end
 
 @[LF::Application]
+@[LF::AutoConfig::Data]
 @[LF::AutoConfig::HTTP]
 class DataLayerApplication
 end

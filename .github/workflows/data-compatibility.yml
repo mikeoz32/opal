@@ -26,6 +26,15 @@ jobs:
       - name: Install dependencies
         run: shards install
 
+      - name: Check dependency resolution
+        run: shards check
+
+      - name: Check formatting
+        run: git ls-files -z '*.cr' | xargs -0 crystal tool format --check
+
+      - name: Check whitespace
+        run: git diff --check HEAD^ HEAD
+
       - name: Compile generic dialect dispatch
         run: crystal build --no-codegen spec/fixtures/data/dialect_virtual_generic_dispatch.cr
 
@@ -38,5 +47,17 @@ jobs:
           spec/data/dialects/specialization_spec.cr
           --no-color
 
-      - name: Run complete data specs
-        run: crystal spec spec/data --no-color
+      - name: Run complete root specs
+        run: crystal spec --no-color
+
+      - name: Install Data example dependencies
+        working-directory: examples/data_layer_sqlite
+        run: shards install
+
+      - name: Check Data example dependency resolution
+        working-directory: examples/data_layer_sqlite
+        run: shards check
+
+      - name: Run Data example specs
+        working-directory: examples/data_layer_sqlite
+        run: crystal spec --no-color

@@ -206,6 +206,5 @@ module DataLayerExample
     def close : Nil
       @source.close
     end
-
   end
 end

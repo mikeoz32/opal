@@ -193,11 +193,11 @@ describe "concurrent migration runners" do
     release.send(nil)
 
     result = select
-             when value = done.receive
-               value
-             when timeout(5.seconds)
-               raise "Concurrent migration failure runner did not finish"
-             end
+    when value = done.receive
+      value
+    when timeout(5.seconds)
+      raise "Concurrent migration failure runner did not finish"
+    end
 
     result.should be(failure)
     DB.open(url) do |verification_database|

@@ -1,31 +1,16 @@
 require "json"
 require "opal"
+require "opal/autoconfig/data"
 require "opal/autoconfig/http"
 require "sqlite3"
 require "./data_layer_example_transport"
 
 module DataLayerExample
-  @[LF::DI::Service]
-  class DataStoreService
-    include LF::DI::Initializable
-    include LF::DI::Disposable
-
-    getter store : Store
-
-    def initialize(config_service : LF::ConfigService)
-      url = config_service.get(
-        "database.url",
-        ENV.fetch("OPAL_DATA_EXAMPLE_URL", "sqlite3://./data-example-application.db")
-      )
-      @store = Store.open(url)
-    end
-
-    def after_properties_set : Nil
-      @store.migrate
-    end
-
-    def destroy : Nil
-      @store.close
+  @[LF::ApplicationConfiguration]
+  class DataConfiguration
+    @[LF::DI::Bean]
+    def migration_set : LF::Data::MigrationSet
+      Migrations.build
     end
   end
 
@@ -41,7 +26,7 @@ module DataLayerExample
   class ApplicationAPI
     include LF::HTTP::Controller
 
-    def initialize(@data_store : DataLayerExample::DataStoreService)
+    def initialize(@data_source : LF::Data::DataSource)
     end
 
     @[LF::HTTP::Controller::Get("/health")]
@@ -51,7 +36,7 @@ module DataLayerExample
 
     @[LF::HTTP::Controller::Get("/projects")]
     def projects
-      @data_store.store.source.read do |manager|
+      @data_source.read do |manager|
         projects = manager.query(Project).order_by(Project::Fields.name.asc).to_a
         Web::ProjectListResponse.new(projects.map { |project| Web::ProjectResponse.new(project) })
       end
@@ -60,7 +45,7 @@ module DataLayerExample
     @[LF::HTTP::Controller::Post("/projects")]
     def create_project(payload : Web::CreateProjectRequest)
       project = with_conflict_handling do
-        @data_store.store.source.transaction do |manager|
+        @data_source.transaction do |manager|
           if manager.query(Project).where(Project::Fields.name.eq(payload.name)).first?
             raise Web::Conflict.new("A project with that name already exists")
           end
@@ -76,7 +61,7 @@ module DataLayerExample
 
     @[LF::HTTP::Controller::Get("/projects/:project_id/tasks")]
     def tasks(project_id : Int64)
-      @data_store.store.source.read do |manager|
+      @data_source.read do |manager|
         raise LF::HTTP::NotFound.new("Project not found") unless manager.find(Project, project_id)
 
         tasks = manager.query(Task)
@@ -89,7 +74,7 @@ module DataLayerExample
 
     @[LF::HTTP::Controller::Post("/projects/:project_id/tasks")]
     def create_task(project_id : Int64, payload : Web::CreateTaskRequest)
-      task = @data_store.store.source.transaction do |manager|
+      task = @data_source.transaction do |manager|
         raise LF::HTTP::NotFound.new("Project not found") unless manager.find(Project, project_id)
 
         created_task = Task.new(project_id, payload.title)
@@ -107,7 +92,7 @@ module DataLayerExample
       end
 
       task = with_conflict_handling do
-        @data_store.store.source.transaction do |manager|
+        @data_source.transaction do |manager|
           found_task = manager.find(Task, task_id)
           raise LF::HTTP::NotFound.new("Task not found") unless found_task
 
@@ -124,7 +109,7 @@ module DataLayerExample
 
     @[LF::HTTP::Controller::Delete("/tasks/:task_id")]
     def delete_task(task_id : Int64) : String
-      @data_store.store.source.transaction do |manager|
+      @data_source.transaction do |manager|
         found_task = manager.find(Task, task_id)
         raise LF::HTTP::NotFound.new("Task not found") unless found_task
 

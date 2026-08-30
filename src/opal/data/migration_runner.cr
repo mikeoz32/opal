@@ -46,7 +46,7 @@ module LF
               end
             end
           rescue error
-              if history_record_failed &&
+            if history_record_failed &&
                finalization == TransactionFinalization::RolledBack &&
                __lf_history_record_conflict?(error) &&
                @source.__lf_migration_applied?(planned.version, planned.name)

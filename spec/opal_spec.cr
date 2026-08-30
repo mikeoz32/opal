@@ -1300,7 +1300,7 @@ describe "LF::DI::ServiceConfiguration" do
       end
     CRYSTAL
 
-    path = "/home/mike/opal/spec/tmp_autowired_collision_#{UUID.random}.cr"
+    path = File.join(__DIR__, "tmp_autowired_collision_#{UUID.random}.cr")
     File.write(path, source)
     output = IO::Memory.new
     status = Process.run("crystal", ["run", path], output: output, error: output)

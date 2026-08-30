@@ -13,7 +13,8 @@ It is built on top of Crystal's standard `HTTP::Handler` stack and focuses on:
 
 ## Status
 
-The routing, HTTP binding, DI lifecycle, and Application compiler contracts are covered by specs in this repository.
+The routing, HTTP binding, DI lifecycle, Application compiler, and Data
+persistence/migration contracts are covered by specs in this repository.
 
 ## Installation
 
@@ -33,7 +34,7 @@ shards install
 
 ## Core API
 
-Opal exposes four independent layers:
+Opal exposes six independent layers:
 
 1. `LF::HTTP::Router`
    Low-level router with explicit handlers.
@@ -49,6 +50,9 @@ Opal exposes four independent layers:
 
 5. `require "opal/autoconfig/http"`
    Optional HTTP controller discovery, server assembly, and lifecycle integration.
+
+6. `require "opal/data"` and `require "opal/autoconfig/data"`
+   Explicit persistence APIs with optional Application-owned DataSource setup.
 
 ## Basic Router
 
@@ -327,6 +331,44 @@ config.get("http.port", 8080) # Int32
 config.section("http")        # YAML::Any mapping
 ```
 
+## Data Autoconfiguration
+
+Data autoconfiguration is opt-in. The adapter owns one exact
+`LF::Data::DataSource` singleton and can apply one DI-provided migration set
+during Application startup:
+
+```crystal
+require "opal"
+require "opal/autoconfig/data"
+require "sqlite3"
+
+@[LF::ApplicationConfiguration]
+class DataConfiguration
+  @[LF::DI::Bean]
+  def migration_set : LF::Data::MigrationSet
+    LF::Data::MigrationSet.new(CreateProjects.new)
+  end
+end
+
+@[LF::Application]
+@[LF::AutoConfig::Data]
+class TodoApplication
+end
+```
+
+```yaml
+database:
+  url: sqlite3://./todo.db
+  migrations:
+    run_on_startup: true
+```
+
+`database.url` is required and currently supports the `sqlite3` scheme.
+Startup migrations default to `false`; when enabled, exactly one
+`LF::Data::MigrationSet` bean must exist. If HTTP autoconfiguration is also
+enabled, HTTP stops first, then the DataSource closes, then DI disposes its
+remaining singletons.
+
 ## HTTP Autoconfiguration
 
 HTTP autoconfiguration is an explicit optional require:
@@ -476,6 +518,7 @@ plain text; collections are not auto-serialized.
 - `LF::ConfigService::MissingKeyError`
 - `LF::ApplicationRuntime::ClosedError`
 - `LF::ApplicationRuntime::ShutdownError`
+- `LF::Data::AutoConfig::ConfigurationError`
 - `LF::HTTP::AutoConfig::ConfigurationError`
 
 ## Testing
