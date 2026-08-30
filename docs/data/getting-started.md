@@ -58,15 +58,16 @@ the `DataSource#transaction` block. See
 composition pattern and [autoconfiguration](autoconfiguration.md) when an
 `LF::Application` should own the source.
 
-## Deliberate v1 boundaries
+## Deliberate boundaries
 
-V1 does not provide relationship mapping, joins, projections, composite IDs,
-inheritance mapping, generated repositories, automatic timestamps, dirty
-checking, `attach`/`merge`, savepoints, transparent retries, schema
-synchronization, migration rollback, or a second-level cache.
+Opal does not provide joins, projections, composite IDs, inheritance mapping,
+generated repositories, automatic timestamps, dirty checking, `attach`/`merge`,
+savepoints, transparent retries, schema synchronization, migration rollback,
+or a second-level cache.
 Additional dialects beyond SQLite and PostgreSQL are post-v1 packages. These
 features must be added through explicit contracts rather than partially
 inferred behavior.
 
 Lazy loading, proxy objects, and implicit relationship queries are permanent
-non-goals. Relationship APIs must keep database access explicit.
+non-goals. The supported relationship API keeps loading explicit; see
+[relationships and cascades](relationships.md).

@@ -11,5 +11,14 @@ module LF
 
     annotation Version
     end
+
+    annotation BelongsTo
+    end
+
+    annotation HasOne
+    end
+
+    annotation HasMany
+    end
   end
 end

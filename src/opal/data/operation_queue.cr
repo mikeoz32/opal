@@ -4,6 +4,7 @@ module LF
       class OperationQueue
         def initialize
           @entries = [] of TrackedEntity?
+          @positions = {} of UInt64 => Int32
           @head = 0
         end
 
@@ -15,6 +16,7 @@ module LF
           unless entry.operation
             entry.sequence = sequence
             @entries << entry
+            @positions[entry.reference.object_id] = @entries.size - 1
           end
           entry.operation = operation
         end
@@ -23,15 +25,8 @@ module LF
           return unless entry.operation
 
           entry.operation = nil
-          index = @head
-          while index < @entries.size
-            if queued = @entries[index]
-              if queued.same?(entry)
-                @entries[index] = nil
-                break
-              end
-            end
-            index += 1
+          if index = @positions.delete(entry.reference.object_id)
+            @entries[index] = nil
           end
           advance_head
         end
@@ -44,6 +39,7 @@ module LF
             end
           end
           @entries.clear
+          @positions.clear
           @head = 0
         end
 
@@ -62,6 +58,12 @@ module LF
           @entries[@head]?
         end
 
+        def to_a : Array(TrackedEntity)
+          entries = [] of TrackedEntity
+          each { |entry| entries << entry }
+          entries
+        end
+
         def pending_for?(entity_name : String) : Bool
           each do |entry|
             return true if entry.entity_name == entity_name
@@ -72,8 +74,9 @@ module LF
         def complete(entry : TrackedEntity) : Nil
           entry.operation = nil
           entry.sequence = nil
-          @entries[@head] = nil
-          @head += 1
+          if index = @positions.delete(entry.reference.object_id)
+            @entries[index] = nil
+          end
           advance_head
         end
 

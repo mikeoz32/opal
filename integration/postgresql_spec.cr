@@ -19,6 +19,13 @@ private class PostgreSQLIntegrationProject
   getter created_at : Time
   getter payload : Bytes
 
+  @[LF::Data::HasMany(
+    foreign_key: "project_id",
+    cascade_persist: true,
+    cascade_remove: true,
+  )]
+  getter tasks : Array(PostgreSQLIntegrationTask) = [] of PostgreSQLIntegrationTask
+
   @[LF::Data::Version]
   getter version : Int64 = 0_i64
 
@@ -29,6 +36,31 @@ private class PostgreSQLIntegrationProject
     @payload : Bytes,
   )
     @id = nil
+  end
+end
+
+@[LF::Data::Table("opal_pg_tasks")]
+private class PostgreSQLIntegrationTask
+  include LF::Data::Entity
+
+  @[LF::Data::Id(generated: true)]
+  getter id : Int64?
+
+  getter project_id : Int64?
+  getter title : String
+
+  @[LF::Data::BelongsTo(
+    foreign_key: "project_id",
+    cascade_persist: true,
+  )]
+  property project : PostgreSQLIntegrationProject?
+
+  def initialize(
+    @title : String,
+    @project : PostgreSQLIntegrationProject? = nil,
+  )
+    @id = nil
+    @project_id = nil
   end
 end
 
@@ -50,6 +82,12 @@ private class CreatePostgreSQLProjects < LF::Data::Migration
       table.bytes("payload", null: false)
       table.int64("version", null: false, default: 0_i64)
       table.index("idx_opal_pg_projects_active", "active")
+    end
+    schema.create_table("opal_pg_tasks") do |table|
+      table.generated_id("id")
+      table.int64("project_id", null: false)
+      table.string("title", null: false)
+      table.foreign_key(PostgreSQLIntegrationTask::Relations.project)
     end
   end
 end
@@ -133,6 +171,7 @@ end
 
 private def reset_postgresql_integration : Nil
   DB.open(POSTGRESQL_URL) do |database|
+    database.exec("DROP TABLE IF EXISTS opal_pg_tasks CASCADE")
     database.exec("DROP TABLE IF EXISTS opal_pg_projects CASCADE")
     database.exec("DROP TABLE IF EXISTS opal_pg_lock_effects CASCADE")
     database.exec("DROP TABLE IF EXISTS _lf_migrations CASCADE")
@@ -225,6 +264,58 @@ describe "PostgreSQL Data integration" do
         PostgreSQLIntegrationProject,
         project.id.not_nil!
       ).should be_false
+    end
+  ensure
+    source.try &.close
+  end
+
+  it "orders relationship cascades around PostgreSQL RETURNING IDs" do
+    source = nil.as(LF::Data::DataSource?)
+    source = postgresql_source
+    LF::Data::MigrationRunner.new(
+      source,
+      lock_namespace: "opal-integration-relationships",
+      lock_timeout: 2.seconds
+    ).run(LF::Data::MigrationSet.new(CreatePostgreSQLProjects.new))
+
+    created_at = Time.utc(2026, 8, 30, 13, 0, 0)
+    project = PostgreSQLIntegrationProject.new(
+      "relationships",
+      true,
+      created_at,
+      Bytes[0x10]
+    )
+    task = PostgreSQLIntegrationTask.new("ordered", project)
+    project.tasks << task
+
+    source.transaction { |manager| manager.persist(project) }
+
+    project.id.should_not be_nil
+    task.id.should_not be_nil
+    task.project_id.should eq(project.id)
+
+    source.transaction do |manager|
+      loaded = manager.find(
+        PostgreSQLIntegrationProject,
+        project.id.not_nil!
+      ).not_nil!
+      loaded.tasks.concat(
+        manager.query(PostgreSQLIntegrationTask)
+          .where(
+            PostgreSQLIntegrationTask::Fields.project_id.eq(
+              project.id.not_nil!
+            )
+          )
+          .to_a
+      )
+      manager.remove(loaded)
+    end
+
+    source.transaction do |manager|
+      manager.connection.scalar("SELECT count(*) FROM opal_pg_tasks")
+        .should eq(0_i64)
+      manager.connection.scalar("SELECT count(*) FROM opal_pg_projects")
+        .should eq(0_i64)
     end
   ensure
     source.try &.close

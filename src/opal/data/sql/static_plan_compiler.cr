@@ -151,7 +151,11 @@ module LF
                 {% selected_columns = [] of String %}
                 {% id_column = nil %}
                 {% for ivar in T.instance_vars %}
-                  {% if column_annotation = ivar.annotation(LF::Data::Column) %}
+                  {% relationship = ivar.annotation(LF::Data::BelongsTo) ||
+                                    ivar.annotation(LF::Data::HasOne) ||
+                                    ivar.annotation(LF::Data::HasMany) %}
+                  {% if relationship %}
+                  {% elsif column_annotation = ivar.annotation(LF::Data::Column) %}
                     {% unless column_annotation[:ignore] %}
                       {% column_name = column_annotation[:name] || ivar.id.stringify %}
                       {% selected_columns << column_name %}
@@ -231,7 +235,11 @@ module LF
                 {% id_column = nil %}
                 {% generated_id = false %}
                 {% for ivar in T.instance_vars %}
-                  {% if column_annotation = ivar.annotation(LF::Data::Column) %}
+                  {% relationship = ivar.annotation(LF::Data::BelongsTo) ||
+                                    ivar.annotation(LF::Data::HasOne) ||
+                                    ivar.annotation(LF::Data::HasMany) %}
+                  {% if relationship %}
+                  {% elsif column_annotation = ivar.annotation(LF::Data::Column) %}
                     {% unless column_annotation[:ignore] %}
                       {% column_name = column_annotation[:name] || ivar.id.stringify %}
                       {% if id_annotation = ivar.annotation(LF::Data::Id) %}
@@ -362,7 +370,11 @@ module LF
                 {% id_column = nil %}
                 {% version_column = nil %}
                 {% for ivar in T.instance_vars %}
-                  {% if column_annotation = ivar.annotation(LF::Data::Column) %}
+                  {% relationship = ivar.annotation(LF::Data::BelongsTo) ||
+                                    ivar.annotation(LF::Data::HasOne) ||
+                                    ivar.annotation(LF::Data::HasMany) %}
+                  {% if relationship %}
+                  {% elsif column_annotation = ivar.annotation(LF::Data::Column) %}
                     {% unless column_annotation[:ignore] %}
                       {% column_name = column_annotation[:name] || ivar.id.stringify %}
                       {% if ivar.annotation(LF::Data::Id) %}
@@ -486,7 +498,11 @@ module LF
                 {% id_column = nil %}
                 {% version_column = nil %}
                 {% for ivar in T.instance_vars %}
-                  {% if column_annotation = ivar.annotation(LF::Data::Column) %}
+                  {% relationship = ivar.annotation(LF::Data::BelongsTo) ||
+                                    ivar.annotation(LF::Data::HasOne) ||
+                                    ivar.annotation(LF::Data::HasMany) %}
+                  {% if relationship %}
+                  {% elsif column_annotation = ivar.annotation(LF::Data::Column) %}
                     {% unless column_annotation[:ignore] %}
                       {% column_name = column_annotation[:name] || ivar.id.stringify %}
                       {% id_column = column_name if ivar.annotation(LF::Data::Id) %}
@@ -573,7 +589,10 @@ module LF
                 {% selected_columns = [] of String %}
                 {% for ivar in T.instance_vars %}
                   {% column_annotation = ivar.annotation(LF::Data::Column) %}
-                  {% unless column_annotation && column_annotation[:ignore] %}
+                  {% relationship = ivar.annotation(LF::Data::BelongsTo) ||
+                                    ivar.annotation(LF::Data::HasOne) ||
+                                    ivar.annotation(LF::Data::HasMany) %}
+                  {% unless (column_annotation && column_annotation[:ignore]) || relationship %}
                     {% column_name = (column_annotation && column_annotation[:name]) || ivar.name.stringify %}
                     {% selected_columns << identifier_open + column_name.split(identifier_escape_from).join(identifier_escape_to) + identifier_close %}
                   {% end %}
@@ -786,7 +805,11 @@ module LF
                   {% assignments = [] of String %}
                   {% version_column = nil %}
                   {% for ivar in T.instance_vars %}
-                    {% if column_annotation = ivar.annotation(LF::Data::Column) %}
+                    {% relationship = ivar.annotation(LF::Data::BelongsTo) ||
+                                      ivar.annotation(LF::Data::HasOne) ||
+                                      ivar.annotation(LF::Data::HasMany) %}
+                    {% if relationship %}
+                    {% elsif column_annotation = ivar.annotation(LF::Data::Column) %}
                       {% unless column_annotation[:ignore] %}
                         {% if ivar.annotation(LF::Data::Version) %}
                           {% version_column = column_annotation[:name] || ivar.name.stringify %}

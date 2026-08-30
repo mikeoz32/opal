@@ -19,12 +19,35 @@ module LF
       def persist(entity : T) : Nil forall T
         ensure_available(:persist)
 
+        persist_graph(entity, Set(UInt64).new, cascade: false)
+      end
+
+      # Framework internal: invoked by generated relationship cascade code.
+      def __lf_cascade_persist(
+        entity : T,
+        visited : Set(UInt64),
+        owner_name : String,
+        relationship : String,
+      ) : Nil forall T
+        ensure_available(:cascade_persist)
+
+        persist_graph(entity, visited, cascade: true)
+      end
+
+      private def persist_graph(
+        entity : T,
+        visited : Set(UInt64),
+        *,
+        cascade : Bool,
+      ) : Nil forall T
+        return unless visited.add?(entity.object_id)
+
         if entry = @entries_by_object[entity.object_id]?
           case entry.state
           when EntityState::New
             schedule(entry, Internal::EntityOperation::Insert)
           when EntityState::Managed
-            schedule(entry, Internal::EntityOperation::Update)
+            schedule(entry, Internal::EntityOperation::Update) unless cascade
           when EntityState::Removed
             raise EntityStateError.new(:persist, entry.entity_name, entry.state)
           when EntityState::Detached
@@ -35,10 +58,39 @@ module LF
           @entries_by_object[entity.object_id] = entry
           schedule(entry, Internal::EntityOperation::Insert)
         end
+
+        entity.__lf_cascade_persist(self, visited)
       end
 
       def remove(entity : T) : Nil forall T
         ensure_available(:remove)
+
+        remove_graph(entity, Set(UInt64).new)
+      end
+
+      # Framework internal: invoked by generated relationship cascade code.
+      def __lf_cascade_remove(
+        entity : T,
+        visited : Set(UInt64),
+        owner_name : String,
+        relationship : String,
+      ) : Nil forall T
+        ensure_available(:cascade_remove)
+
+        unless @entries_by_object.has_key?(entity.object_id)
+          raise UnmanagedRelationshipError.new(
+            :remove,
+            owner_name,
+            relationship,
+            T.name
+          )
+        end
+
+        remove_graph(entity, visited)
+      end
+
+      private def remove_graph(entity : T, visited : Set(UInt64)) : Nil forall T
+        return unless visited.add?(entity.object_id)
 
         entry = @entries_by_object[entity.object_id]?
         unless entry
@@ -57,6 +109,8 @@ module LF
         when EntityState::Detached
           raise DetachedEntityError.new(:remove, entry.entity_name)
         end
+
+        entity.__lf_cascade_remove(self, visited)
       end
 
       def find(entity : T.class, id) : T? forall T
@@ -457,8 +511,11 @@ module LF
       end
 
       protected def do_flush : Nil
-        while entry = @operation_queue.first?
+        ordered_relationship_operations.each do |entry|
           operation = entry.operation.not_nil!
+          if operation.insert? || operation.update?
+            entry.sync_relationship_keys
+          end
           entry.execute(self, operation)
           @operation_queue.complete(entry)
         end
@@ -478,6 +535,129 @@ module LF
           @next_sequence += 1
           @operation_queue.schedule(entry, operation, sequence)
         end
+      end
+
+      private def ordered_relationship_operations : Array(Internal::TrackedEntity)
+        entries = @operation_queue.to_a
+        return entries if entries.size < 2
+
+        by_object = {} of UInt64 => Internal::TrackedEntity
+        dependencies = {} of UInt64 => Set(UInt64)
+        dependents = {} of UInt64 => Array(UInt64)
+        entries.each do |entry|
+          object_id = entry.reference.object_id
+          by_object[object_id] = entry
+          dependencies[object_id] = Set(UInt64).new
+          dependents[object_id] = [] of UInt64
+        end
+
+        entries.each do |entry|
+          object_id = entry.reference.object_id
+          operation = entry.operation.not_nil!
+
+          if operation.insert? || operation.update?
+            entry.parent_relationships.each do |parent|
+              parent_reference = parent.reference
+              if parent_entry = by_object[parent_reference.object_id]?
+                if parent_entry.operation.try(&.insert?)
+                  add_relationship_dependency(
+                    dependencies,
+                    dependents,
+                    object_id,
+                    parent_reference.object_id
+                  )
+                end
+              end
+            end
+
+            if operation.insert?
+              entry.child_relationships.each do |child|
+                child_reference = child.reference
+                if child_entry = by_object[child_reference.object_id]?
+                  child_operation = child_entry.operation
+                  if child_operation.try(&.insert?) || child_operation.try(&.update?)
+                    add_relationship_dependency(
+                      dependencies,
+                      dependents,
+                      child_reference.object_id,
+                      object_id
+                    )
+                  end
+                end
+              end
+            end
+          elsif operation.delete?
+            entry.parent_relationships.each do |parent|
+              parent_reference = parent.reference
+              if parent_entry = by_object[parent_reference.object_id]?
+                if parent_entry.operation.try(&.delete?)
+                  add_relationship_dependency(
+                    dependencies,
+                    dependents,
+                    parent_reference.object_id,
+                    object_id
+                  )
+                end
+              end
+            end
+
+            entry.child_relationships.each do |child|
+              child_reference = child.reference
+              if child_entry = by_object[child_reference.object_id]?
+                if child_entry.operation.try(&.delete?)
+                  add_relationship_dependency(
+                    dependencies,
+                    dependents,
+                    object_id,
+                    child_reference.object_id
+                  )
+                end
+              end
+            end
+          end
+        end
+
+        ready = entries.select do |entry|
+          dependencies[entry.reference.object_id].empty?
+        end
+        ordered = [] of Internal::TrackedEntity
+        ready_head = 0
+        while ready_head < ready.size
+          entry = ready[ready_head]
+          ready_head += 1
+          ordered << entry
+
+          dependents[entry.reference.object_id].each do |dependent_id|
+            dependent_dependencies = dependencies[dependent_id]
+            dependent_dependencies.delete(entry.reference.object_id)
+            if dependent_dependencies.empty?
+              ready << by_object[dependent_id]
+            end
+          end
+        end
+
+        if ordered.size != entries.size
+          cycle = entries.select do |entry|
+            !dependencies[entry.reference.object_id].empty?
+          end
+          cycle_entities = [] of String
+          cycle.each { |entry| cycle_entities << entry.entity_name }
+          raise RelationshipCycleError.new(cycle_entities)
+        end
+
+        ordered
+      end
+
+      private def add_relationship_dependency(
+        dependencies : Hash(UInt64, Set(UInt64)),
+        dependents : Hash(UInt64, Array(UInt64)),
+        dependent_id : UInt64,
+        dependency_id : UInt64,
+      ) : Nil
+        return if dependent_id == dependency_id
+        return unless dependencies[dependent_id].add?(dependency_id)
+
+        dependents[dependency_id] << dependent_id
       end
 
       private def ensure_no_pending(entity_name : String, operation : Symbol) : Nil

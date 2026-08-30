@@ -40,3 +40,7 @@ the write predicate and raise `OptimisticLockError` when no row matches.
 Persistence annotations do not define HTTP serialization. Prefer dedicated
 request and response models when nilable generated IDs or stored converter
 types would weaken the external contract.
+
+Navigation properties use separate compile-time relationship annotations and
+are never stored as columns. See [relationships and cascades](relationships.md)
+for explicit loading, foreign-key metadata, flush ordering, and cascade rules.
