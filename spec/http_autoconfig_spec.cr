@@ -83,10 +83,10 @@ class HTTPAutoConfigUpgradeBlocker
     context.response.headers["Connection"] = "Upgrade"
     context.response.headers["Upgrade"] = "opal-test"
     context.response.upgrade do |_io|
-      raise "request scope destroyed before upgrade work" if probe.destroyed?
+      raise "request scope retained after HTTP upgrade" unless probe.destroyed?
       @upgraded.send(nil)
       @release.receive
-      raise "request scope destroyed during upgrade work" if probe.destroyed?
+      raise "request scope was unexpectedly recreated" unless probe.destroyed?
     end
   end
 end
@@ -150,9 +150,11 @@ end
 
 class HTTPAutoConfigWebSocketController
   @@connected = Channel(Nil).new
+  @@destroyed = Channel(Nil).new(1)
 
   def self.reset : Nil
     @@connected = Channel(Nil).new
+    @@destroyed = Channel(Nil).new(1)
   end
 
   def self.wait_until_connected : Nil
@@ -163,11 +165,65 @@ class HTTPAutoConfigWebSocketController
     end
   end
 
+  def self.wait_until_destroyed : Nil
+    select
+    when @@destroyed.receive
+    when timeout(5.seconds)
+      fail "websocket controller was not destroyed"
+    end
+  end
+
   include LF::HTTP::Controller
+  include LF::DI::Disposable
 
   @[LF::HTTP::Controller::WebSocket("/autoconfig/ws")]
   def connect(ws : HTTP::WebSocket) : Nil
     @@connected.send(nil)
+  end
+
+  def destroy : Nil
+    @@destroyed.send(nil)
+  end
+end
+
+class HTTPAutoConfigBlockingWebSocketController
+  @@connected = Channel(Nil).new
+  @@release = Channel(Nil).new
+  @@destroyed = Channel(Nil).new(1)
+
+  def self.reset : Nil
+    @@connected = Channel(Nil).new
+    @@release = Channel(Nil).new
+    @@destroyed = Channel(Nil).new(1)
+  end
+
+  def self.wait_until_connected : Nil
+    @@connected.receive
+  end
+
+  def self.release : Nil
+    @@release.send(nil)
+  end
+
+  def self.wait_until_destroyed : Nil
+    select
+    when @@destroyed.receive
+    when timeout(5.seconds)
+      fail "blocking websocket controller was not destroyed"
+    end
+  end
+
+  include LF::HTTP::Controller
+  include LF::DI::Disposable
+
+  @[LF::HTTP::Controller::WebSocket("/autoconfig/ws-blocking")]
+  def connect(ws : HTTP::WebSocket) : Nil
+    @@connected.send(nil)
+    @@release.receive
+  end
+
+  def destroy : Nil
+    @@destroyed.send(nil)
   end
 end
 
@@ -273,9 +329,46 @@ describe LF::HTTP::AutoConfig do
       when timeout(2.seconds)
         fail "websocket was not closed during extension stop"
       end
+      HTTPAutoConfigWebSocketController.wait_until_destroyed
       runtime.shutdown
     ensure
-      websocket.try(&.close)
+      begin
+        websocket.try(&.close)
+      rescue IO::Error
+      end
+    end
+  end
+
+  it "keeps root DI alive when user websocket work outlives the drain deadline" do
+    HTTPAutoConfigBlockingWebSocketController.reset
+
+    with_http_config("http:\n  host: 127.0.0.1\n  port: 0\n  drain_timeout_ms: 20\n  websocket:\n    shutdown_timeout_ms: 0\n") do |path|
+      runtime = build_http_runtime(path)
+      extension = LF::HTTP::AutoConfig.install(runtime)
+      address = extension.bind
+      spawn { extension.listen }
+      websocket = HTTP::WebSocket.new(
+        "127.0.0.1",
+        "/autoconfig/ws-blocking",
+        port: address.port
+      )
+      HTTPAutoConfigBlockingWebSocketController.wait_until_connected
+
+      error = expect_raises(LF::ApplicationRuntime::ShutdownError) { runtime.shutdown }
+      drain_error = error.extension_errors.first.as(LF::HTTP::AutoConfig::DrainTimeoutError)
+      drain_error.active_requests.should eq(1)
+      runtime.shutdown_pending?.should be_true
+      runtime.closed?.should be_false
+
+      HTTPAutoConfigBlockingWebSocketController.release
+      HTTPAutoConfigBlockingWebSocketController.wait_until_destroyed
+      runtime.shutdown
+      runtime.closed?.should be_true
+    ensure
+      begin
+        websocket.try(&.close)
+      rescue IO::Error
+      end
     end
   end
 
@@ -379,7 +472,7 @@ describe LF::HTTP::AutoConfig do
     end
   end
 
-  it "waits for upgraded connection work after the route handler returns" do
+  it "releases the request scope before upgraded connection work and still drains it" do
     with_http_config("http:\n  host: 127.0.0.1\n  port: 0\n  drain_timeout_ms: 2000\n") do |path|
       runtime = build_http_runtime(path, request_probe: true)
       blocker = HTTPAutoConfigUpgradeBlocker.new

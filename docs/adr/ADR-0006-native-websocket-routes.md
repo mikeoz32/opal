@@ -1,4 +1,4 @@
-# ADR-0005: Native WebSocket Routes
+# ADR-0006: Native WebSocket Routes
 
 - Status: Accepted
 - Date: 2026-08-05
@@ -69,8 +69,10 @@ so a controller class may safely contain both HTTP and WebSocket actions. The
 connection scope and everything it owns exit on disconnect, connection setup
 failure, or server shutdown.
 
-The HTTP integration places `LF::HTTP::DI::WebSocketScopeHandler` before
-`RequestScopeHandler`. After the router installs Crystal's
+The standalone HTTP integration places `LF::HTTP::DI::WebSocketScopeHandler`
+before `RequestScopeHandler`. Autoconfiguration places it inside the
+connection-drain handler, which owns the ordinary request scope. After the
+router installs Crystal's
 `HTTP::Server::Response#upgrade_handler`, it wraps that handler. The wrapper
 creates the connection scope only after a successful upgrade, stores it on the
 HTTP context, and keeps it alive around the stdlib handler's full `ws.run`
@@ -103,11 +105,11 @@ WebSocket action is for connection logic after upgrade, not handshake rejection.
 This feature is additive: existing HTTP routes, request scopes, controller
 semantics, and standalone server assembly remain unchanged.
 
-The first release does not implement Phoenix channels, the Phoenix LiveView
-protocol, DOM diffs, template rendering, reconnect state, presence, heartbeat
-policy, or a replacement for Crystal's callback API. A later LiveView layer
-may reuse Phoenix's JavaScript client by implementing its wire protocol above
-these native routes; it must not require a change to the native socket API.
+This native route layer does not implement channels, DOM rendering, reconnect
+state, presence, heartbeat policy, or a replacement for Crystal's callback
+API. ADR-0007 defines Opal LiveView as an independent layer above it. Opal
+LiveView deliberately does not implement the Phoenix wire protocol or depend
+on Phoenix's JavaScript client.
 
 ## Consequences
 

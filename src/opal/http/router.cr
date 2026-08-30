@@ -4,6 +4,7 @@ require "set"
 require "../trie"
 require "./di_integration"
 require "./errors"
+require "./websocket_request"
 
 module LF::HTTP
   class Router
@@ -14,6 +15,7 @@ module LF::HTTP
     @root : LF::Routing::Trie::Node
     @error_mapper : ErrorMapper
     @http_paths = Set(String).new
+    @http_methods = {} of String => Set(String)
     @websocket_paths = Set(String).new
 
     def initialize(error_mapper : ErrorMapper? = nil)
@@ -24,13 +26,18 @@ module LF::HTTP
     end
 
     def add(path : String, methods : Set(String) = Set{"GET"}, &handler : ::HTTP::Server::Context, Hash(String, String) -> Nil)
-      register_http_path(path)
+      register_http_path(path, methods)
       @root.add_route(path, handler, methods)
     end
 
     def add(path : String, handler : LF::Routing::Trie::Handler, methods : Set(String) = Set{"GET"})
-      register_http_path(path)
+      register_http_path(path, methods)
       @root.add_route(path, handler, methods)
+    end
+
+    # :nodoc:
+    def http_route?(path : String, method : String) : Bool
+      @http_methods[normalize_route_path(path)]?.try(&.includes?(method.upcase)) || false
     end
 
     def ws(path : String, protocols : Array(String)? = nil, &handler : ::HTTP::WebSocket, Hash(String, String) -> Nil) : Nil
@@ -43,11 +50,21 @@ module LF::HTTP
     # The controller macro needs the request context for DI and request binding.
     # Crystal cannot overload these callbacks by block arity, so keep this bridge
     # separate from the public two-argument `ws` contract.
-    def ws_with_context(path : String, protocols : Array(String)? = nil, &handler : ::HTTP::WebSocket, Hash(String, String), ::HTTP::Server::Context -> Nil) : Nil
-      add_websocket_route(path, protocols, &handler)
+    def ws_with_context(
+      path : String,
+      protocols : Array(String)? = nil,
+      before_upgrade : Proc(::HTTP::Server::Context, Hash(String, String), Nil)? = nil,
+      &handler : ::HTTP::WebSocket, Hash(String, String), ::HTTP::Server::Context -> Nil
+    ) : Nil
+      add_websocket_route(path, protocols, before_upgrade, &handler)
     end
 
-    private def add_websocket_route(path : String, protocols : Array(String)?, &handler : ::HTTP::WebSocket, Hash(String, String), ::HTTP::Server::Context -> Nil) : Nil
+    private def add_websocket_route(
+      path : String,
+      protocols : Array(String)?,
+      before_upgrade : Proc(::HTTP::Server::Context, Hash(String, String), Nil)? = nil,
+      &handler : ::HTTP::WebSocket, Hash(String, String), ::HTTP::Server::Context -> Nil
+    ) : Nil
       route_key = normalize_route_path(path)
       if @http_paths.includes?(route_key) || @websocket_paths.includes?(route_key)
         raise LF::HTTP::RouteConflictError.new(path)
@@ -55,11 +72,17 @@ module LF::HTTP
 
       @websocket_paths << route_key
       @root.add_route(path, ->(context : ::HTTP::Server::Context, params : Hash(String, String)) {
-        if websocket_upgrade_request?(context.request)
+        if WebSocketRequest.upgrade?(context.request)
+          before_upgrade.try(&.call(context, params))
           websocket_handler = ::HTTP::WebSocketHandler.new(protocols) do |websocket, websocket_context|
-            if registry = websocket_context.websocket_connection_registry
-              io = websocket_context.websocket_io || raise "WebSocket upgrade IO is not initialized"
-              websocket_context.websocket_connection = registry.register(websocket, io)
+            if upgrade = websocket_context.websocket_upgrade
+              if registry = upgrade.registry
+                connection = registry.register(websocket, upgrade.io)
+                unless connection
+                  next
+                end
+                upgrade.connection = connection
+              end
             end
             handler.call(websocket, params, websocket_context)
           end
@@ -124,13 +147,15 @@ module LF::HTTP
       context.response.print body
     end
 
-    private def register_http_path(path : String) : Nil
+    private def register_http_path(path : String, methods : Set(String)) : Nil
       route_key = normalize_route_path(path)
       if @websocket_paths.includes?(route_key)
         raise LF::HTTP::RouteConflictError.new(path)
       end
 
       @http_paths << route_key
+      registered_methods = @http_methods.put_if_absent(route_key) { Set(String).new }
+      methods.each { |method| registered_methods << method.upcase }
     end
 
     private def normalize_route_path(path : String) : String
@@ -138,13 +163,6 @@ module LF::HTTP
       return "/" if segments.empty?
 
       "/" + segments.map { |segment| segment.starts_with?(':') ? ":*" : segment }.join("/")
-    end
-
-    private def websocket_upgrade_request?(request : ::HTTP::Request) : Bool
-      return false unless upgrade = request.headers["Upgrade"]?
-      return false unless upgrade.compare("websocket", case_insensitive: true) == 0
-
-      request.headers.includes_word?("Connection", "Upgrade")
     end
   end
 end

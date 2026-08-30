@@ -1,6 +1,7 @@
 require "http/server"
 require "../../opal"
 require "sync/mutex"
+require "../live_view/autoconfig"
 
 module LF::AutoConfig
   annotation HTTP
@@ -42,6 +43,7 @@ module LF::HTTP::AutoConfig
     @output_finished = false
     @upgraded = false
     @reported = false
+    @scope_released = false
     @lock = Mutex.new
 
     def initialize(
@@ -58,7 +60,11 @@ module LF::HTTP::AutoConfig
         @upgraded = upgraded
         report?
       end
-      finish if report
+      if upgraded
+        release_scope
+      elsif report
+        finish
+      end
     end
 
     def output_finished : Nil
@@ -85,14 +91,29 @@ module LF::HTTP::AutoConfig
     private def finish : Nil
       scope_error : Exception? = nil
       begin
-        @scope.exit
+        release_scope
       rescue error : Exception
         scope_error = error
       ensure
-        @context.dependency_scope = nil
         @requests.request_finished(@connection)
       end
       raise scope_error.as(Exception) if scope_error
+    end
+
+    private def release_scope : Nil
+      release = @lock.synchronize do
+        next false if @scope_released
+        @scope_released = true
+      end
+      return unless release
+
+      begin
+        @scope.exit
+      ensure
+        if @context.dependency_scope.same?(@scope)
+          @context.dependency_scope = nil
+        end
+      end
     end
   end
 
@@ -414,7 +435,11 @@ module LF::HTTP::AutoConfig
             deadline = Time.instant + @configured_drain_timeout
             current_server = @server
             current_server.try(&.close) unless current_server.try(&.closed?)
-            @websocket_connections.shutdown(@websocket_shutdown_timeout_ms)
+            websocket_budget_ms = Math.min(
+              @websocket_shutdown_timeout_ms.to_i64,
+              @configured_drain_timeout.total_milliseconds.to_i64
+            ).to_i
+            @websocket_connections.shutdown(websocket_budget_ms)
             if requests = @requests
               active = requests.drain_until(deadline)
               unless active == 0
@@ -453,6 +478,7 @@ module LF::HTTP::AutoConfig
           {% for controller in controllers %}
             {{ controller }}.setup_routes(router, application_context, {{ global_owner }})
           {% end %}
+          LF::LiveView::AutoConfig.mount(router, application_context)
         end
       end
     )

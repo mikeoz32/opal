@@ -1,0 +1,28 @@
+# Opal LiveView Counter
+
+This example is a complete interactive page using Opal's own LiveView server
+and browser runtime. It has no Phoenix or npm dependency.
+
+From this directory:
+
+```bash
+shards install
+crystal spec --no-color
+crystal run src/live_view_counter_example.cr
+```
+
+Open <http://127.0.0.1:8084/?start=2>. The example demonstrates:
+
+- disconnected HTTP and connected WebSocket mounts;
+- constructor injection into a connection-scoped view;
+- query-parameter initialization;
+- click events and server-owned counter state;
+- debounced form changes and form submit;
+- a delayed server-side state change using `refresh`;
+- focus/value restoration across renders;
+- dynamic document titles and automatic reconnect;
+- HTML escaping for values received from the browser.
+
+The development secret in `config/application.yml` is intentionally local to
+the example. Generate and inject a private secret of at least 32 bytes in real
+deployments.

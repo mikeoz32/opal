@@ -1,5 +1,4 @@
 require "http/web_socket"
-require "sync/mutex"
 
 module LF::HTTP
   class WebSocketConnectionRegistry
@@ -21,18 +20,23 @@ module LF::HTTP
       end
     end
 
-    @lock = Sync::Mutex.new
+    @lock = Mutex.new
     @connections = [] of Connection
     @closing = false
+    @drained = Channel(Nil).new
 
-    def register(websocket : ::HTTP::WebSocket, io : IO) : Connection
+    def register(websocket : ::HTTP::WebSocket, io : IO) : Connection?
       connection = Connection.new(websocket, io)
-      close_immediately = @lock.synchronize do
+      accepted = @lock.synchronize do
+        next false if @closing
+
         @connections << connection
-        @closing
+        true
       end
-      connection.close(::HTTP::WebSocket::CloseCode::GoingAway) if close_immediately
-      connection
+      return connection if accepted
+
+      connection.close(::HTTP::WebSocket::CloseCode::GoingAway)
+      nil
     end
 
     def unregister(connection : Connection) : Nil
@@ -40,6 +44,7 @@ module LF::HTTP
         if index = @connections.index(connection)
           @connections.delete_at(index)
         end
+        close_drained_signal
       end
     end
 
@@ -47,18 +52,24 @@ module LF::HTTP
       @lock.synchronize { @connections.size }
     end
 
-    def shutdown(timeout_ms : Int32) : Nil
+    def closing? : Bool
+      @lock.synchronize { @closing }
+    end
+
+    def shutdown(timeout_ms : Int32) : Int32
       deadline = Time.instant + timeout_ms.milliseconds
       connections = @lock.synchronize do
         @closing = true
+        close_drained_signal
         @connections.dup
       end
 
       connections.each(&.close(::HTTP::WebSocket::CloseCode::GoingAway))
-      return if wait_until_drained(deadline)
+      return 0 if wait_until_drained(deadline)
 
       force_close
       wait_until_drained(deadline)
+      size
     end
 
     private def force_close : Nil
@@ -67,12 +78,21 @@ module LF::HTTP
     end
 
     private def wait_until_drained(deadline : Time::Instant) : Bool
-      loop do
-        return true if size == 0
-        return false if Time.instant >= deadline
+      return true if @drained.closed?
 
-        sleep 1.millisecond
+      remaining = deadline - Time.instant
+      return false unless remaining.positive?
+
+      select
+      when @drained.receive?
+        true
+      when timeout(remaining)
+        false
       end
+    end
+
+    private def close_drained_signal : Nil
+      @drained.close if @closing && @connections.empty? && !@drained.closed?
     end
   end
 end

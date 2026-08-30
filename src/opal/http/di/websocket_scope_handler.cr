@@ -1,15 +1,20 @@
 require "../di_integration"
+require "../websocket_request"
 
 module LF::HTTP::DI
   class WebSocketScopeHandler
     include ::HTTP::Handler
 
-    def initialize(@root : LF::DI::ScopeProvider, @scope : String = "websocket", @connections : LF::HTTP::WebSocketConnectionRegistry? = nil)
+    def initialize(
+      @root : LF::DI::ScopeProvider,
+      @scope : String = "websocket",
+      @connections : LF::HTTP::WebSocketConnectionRegistry? = nil,
+    )
     end
 
     def call(context : ::HTTP::Server::Context) : Nil
       call_next(context)
-      return unless websocket_upgrade_request?(context.request)
+      return unless LF::HTTP::WebSocketRequest.upgrade?(context.request)
 
       upgrade_handler = context.response.upgrade_handler
       return unless upgrade_handler
@@ -17,26 +22,20 @@ module LF::HTTP::DI
       context.response.upgrade_handler = ->(io : IO) {
         scope = @root.enter_scope(@scope)
         previous_scope = context.dependency_scope
-        previous_registry = context.websocket_connection_registry
-        previous_connection = context.websocket_connection
-        previous_io = context.websocket_io
+        previous_upgrade = context.websocket_upgrade
         context.dependency_scope = scope
-        context.websocket_connection_registry = @connections
-        context.websocket_connection = nil
-        context.websocket_io = io
+        context.websocket_upgrade = LF::HTTP::WebSocketUpgrade.new(io, @connections)
 
         begin
           upgrade_handler.call(io)
         ensure
           begin
-            if connections = @connections
-              if connection = context.websocket_connection
-                connections.unregister(connection)
+            if upgrade = context.websocket_upgrade
+              if connection = upgrade.connection
+                upgrade.registry.try(&.unregister(connection))
               end
             end
-            context.websocket_connection_registry = previous_registry
-            context.websocket_connection = previous_connection
-            context.websocket_io = previous_io
+            context.websocket_upgrade = previous_upgrade
           ensure
             begin
               scope.exit
@@ -46,13 +45,6 @@ module LF::HTTP::DI
           end
         end
       }
-    end
-
-    private def websocket_upgrade_request?(request : ::HTTP::Request) : Bool
-      return false unless upgrade = request.headers["Upgrade"]?
-      return false unless upgrade.compare("websocket", case_insensitive: true) == 0
-
-      request.headers.includes_word?("Connection", "Upgrade")
     end
   end
 end

@@ -1,0 +1,211 @@
+# Opal LiveView
+
+Opal LiveView provides server-rendered, event-driven pages over Opal's native
+WebSocket layer. It has its own protocol and dependency-free browser client;
+projects do not install Phoenix packages or configure an npm build.
+
+## Minimal application
+
+```crystal
+require "opal"
+require "opal/autoconfig/http"
+
+@[LF::LiveView::Page("/counter")]
+class CounterLive < LF::LiveView::View
+  @count = 0
+
+  def handle_event(event : String, value : JSON::Any) : Nil
+    case event
+    when "increment" then @count += 1
+    when "decrement" then @count -= 1
+    else super
+    end
+  end
+
+  def render : String
+    <<-HTML
+      <button data-opal-click="decrement">-</button>
+      <output>#{@count}</output>
+      <button data-opal-click="increment">+</button>
+    HTML
+  end
+end
+
+@[LF::Application]
+@[LF::AutoConfig::HTTP]
+class MyApplication
+end
+
+MyApplication.run_http
+```
+
+Configure a secret of at least 32 bytes:
+
+```yaml
+http:
+  host: 127.0.0.1
+  port: 8080
+
+live_view:
+  secret: replace-with-a-generated-production-secret
+```
+
+Opal serves the initial document, browser module, and socket endpoint. See
+`examples/live_view_counter` for constructor DI, query params, click events,
+debounced form changes, form submit, title updates, and escaped values.
+
+## Lifecycle
+
+`mount` runs for the initial HTTP render and again for the connected socket:
+
+```crystal
+def mount(context : LF::LiveView::MountContext) : Nil
+  @connected = context.connected?
+  @filter = context.query_params["filter"]? || "all"
+  @project_id = context.params["project_id"]
+  authorize!(context.request, @project_id)
+end
+```
+
+Always repeat authentication and authorization in connected mount. The signed
+mount token makes route state tamper-evident; it does not grant access by
+itself. On reconnect, a fresh view is mounted from the signed original URL and
+current handshake request. Persist state that must survive reconnect in an
+application service or database.
+
+## Events and forms
+
+Click values use `data-opal-value-*`:
+
+```html
+<button data-opal-click="delete" data-opal-value-id="42">Delete</button>
+```
+
+The event receives a JSON object:
+
+```crystal
+def handle_event(event : String, value : JSON::Any) : Nil
+  case event
+  when "delete"
+    @todos.delete(value.as_h["id"].as_s.to_i64)
+  else
+    super
+  end
+end
+```
+
+Forms serialize successful fields by name. Repeated names become arrays:
+
+```html
+<form data-opal-change="validate"
+      data-opal-debounce="200"
+      data-opal-submit="save">
+  <input name="title" value="...">
+  <button type="submit">Save</button>
+</form>
+```
+
+`data-opal-change` reacts to `change`, or debounced `input` when
+`data-opal-debounce` is present. The client restores the active input and its
+selection after a render when it can identify the element by `id` or `name`.
+
+## Server-initiated updates
+
+Events rerender automatically. For state changed by a timer or subscription,
+call protected `refresh` after updating the view:
+
+```crystal
+include LF::DI::Disposable
+
+@stop = Channel(Nil).new
+
+def mount(context : LF::LiveView::MountContext) : Nil
+  return unless context.connected?
+  spawn do
+    loop do
+      select
+      when @stop.receive?
+        break
+      when timeout(1.second)
+        @clock = Time.local
+        refresh
+      end
+    end
+  end
+end
+
+def destroy : Nil
+  @stop.close unless @stop.closed?
+end
+```
+
+Refresh requests are coalesced and outbound renders remain serialized. Stop
+subscriptions and timers from `LF::DI::Disposable#destroy` when the WebSocket
+scope exits.
+
+## Rendering safely
+
+`render` returns trusted HTML. Escape every untrusted value:
+
+```crystal
+title = LF::LiveView::HTML.escape(@todo.title)
+%(<li>#{title}</li>)
+```
+
+The mount token and built-in document metadata are escaped by the endpoint.
+Opal does not add event values or tokens to log metadata. Do not put secrets in
+application exception messages.
+
+### Custom document layout
+
+Override `render_document` when the page needs an application layout. Keep both
+framework arguments in the returned document:
+
+```crystal
+def render_document(live_root : String, client_script : String) : String
+  "<!doctype html><html><body><nav>My app</nav>#{live_root}#{client_script}</body></html>"
+end
+```
+
+## Configuration
+
+```yaml
+live_view:
+  secret: at-least-32-bytes-and-kept-private
+  socket_path: /_opal/live
+  client_path: /_opal/live.js
+  mount_token_max_age_ms: 86400000
+  max_message_bytes: 65536
+  allowed_origins:
+    - https://app.example.com
+```
+
+When `allowed_origins` is omitted, the endpoint requires the browser `Origin`
+to match the request `Host`. Use an allowlist only when proxy topology makes
+the default inappropriate.
+
+## Manual assembly
+
+Without Application autoconfiguration, create an endpoint, register factories,
+and mount it into the router. The WebSocket scope handler must precede the
+request scope handler:
+
+```crystal
+root = LF::DI::DefaultContainer.new
+endpoint = LF::LiveView::Endpoint.new(ENV["LIVE_VIEW_SECRET"])
+endpoint.page("/counter", CounterLive) { |_scope| CounterLive.new }
+
+app = LF::HTTP::App.new { |router| endpoint.mount(router) }
+server = HTTP::Server.new([
+  LF::HTTP::DI::WebSocketScopeHandler.new(root),
+  LF::HTTP::DI::RequestScopeHandler.new(root),
+  app,
+])
+```
+
+## Current v1 boundary
+
+The first protocol intentionally uses complete root renders. It does not yet
+provide structural diffs, nested stateful components, upload transport, live
+navigation, or JavaScript hooks. These features can be added to Opal's protocol
+without introducing a Phoenix dependency.

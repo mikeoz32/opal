@@ -8,8 +8,12 @@
 !/docs/plans/**
 !/docs/data/
 !/docs/data/**
+!/docs/live-view.md
 /.cache/
 /.worktree/
+/output/
 examples/todo_api_sqlite/bin/
 examples/todo_api_sqlite/todo.db
 examples/todo_api_sqlite/todo_api_sqlite_example
+examples/live_view_counter/bin/
+examples/live_view_counter/lib/
