@@ -8,6 +8,10 @@ class TodoRepository
   def find(manager : LF::Data::EntityManager, id : Int64) : Todo?
     manager.find(Todo, id)
   end
+
+  def delete(manager : LF::Data::EntityManager, id : Int64) : Bool
+    manager.delete(Todo, id)
+  end
 end
 
 class TodoService
@@ -35,6 +39,11 @@ Passing one manager lets several repositories participate in one atomic unit
 without fiber-local or global state. Returned entities are detached from the
 closed manager and cannot be scheduled in another manager without loading the
 managed instance there first.
+
+`delete(Entity, id)` uses the entity's exact non-nil lookup ID type. It loads or
+reuses the managed entity, schedules `remove`, and returns `false` when no row
+exists. The DELETE still occurs at explicit or transaction-completion flush,
+so version checks and rollback behavior remain identical to `remove(entity)`.
 
 No query performs an implicit flush. A normal block return flushes, commits,
 then closes the manager. An application, flush, or driver exception rolls back

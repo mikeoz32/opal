@@ -21,6 +21,13 @@ end
 a stateless converter. Mapping validates IDs, versions, duplicate columns,
 supported stored types, and converter calls at compile time.
 
+The declared ID type is also the lookup contract. Assigned IDs use their exact
+property type. A generated `Int32?` or `Int64?` property remains nilable only
+while the entity is new; `find` and delete-by-ID require non-nil `Int32` or
+`Int64` values. Wrong, nilable, and differently typed entity IDs fail during
+compilation. ID converters accept the application-facing ID type before the
+converted database value becomes an identity-map key.
+
 An EntityManager tracks `New`, `Managed`, `Removed`, and `Detached` states.
 `persist` and `remove` only schedule work; transaction completion performs the
 remaining `flush`. An explicit `flush` is required when generated IDs or new

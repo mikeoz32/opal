@@ -209,6 +209,23 @@ describe "PostgreSQL Data integration" do
         as: Time
       ).should be_a(Time)
     end
+
+    source.transaction do |manager|
+      manager.delete(
+        PostgreSQLIntegrationProject,
+        project.id.not_nil!
+      ).should be_true
+    end
+    source.transaction do |manager|
+      manager.find(
+        PostgreSQLIntegrationProject,
+        project.id.not_nil!
+      ).should be_nil
+      manager.delete(
+        PostgreSQLIntegrationProject,
+        project.id.not_nil!
+      ).should be_false
+    end
   ensure
     source.try &.close
   end

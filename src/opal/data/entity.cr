@@ -199,6 +199,24 @@ module LF
             {% end %}
           end
 
+          def self.__lf_id_type
+            {% begin %}
+              {% id_ivar = @type.instance_vars.find do |ivar|
+                   column_annotation = ivar.annotation(LF::Data::Column)
+                   !(column_annotation && column_annotation[:ignore]) &&
+                     ivar.annotation(LF::Data::Id)
+                 end %}
+              {% id_annotation = id_ivar.annotation(LF::Data::Id) %}
+              {% id_type = id_ivar.type.resolve %}
+              {% if id_annotation[:generated] %}
+                {% lookup_id_type = id_type.union_types.reject { |type| type == Nil }.first %}
+              {% else %}
+                {% lookup_id_type = id_type %}
+              {% end %}
+              {{lookup_id_type}}
+            {% end %}
+          end
+
           def self.__lf_generated_id? : Bool
             {% begin %}
               {% id_ivar = @type.instance_vars.find do |ivar|
@@ -372,6 +390,16 @@ module LF
           def self.__lf_find_args(id : T) forall T
             {% begin %}
             {% id_ivar = @type.instance_vars.find { |ivar| ivar.annotation(LF::Data::Id) } %}
+            {% id_annotation = id_ivar.annotation(LF::Data::Id) %}
+            {% id_type = id_ivar.type.resolve %}
+            {% if id_annotation[:generated] %}
+              {% lookup_id_type = id_type.union_types.reject { |type| type == Nil }.first %}
+            {% else %}
+              {% lookup_id_type = id_type %}
+            {% end %}
+            {% unless T.resolve == lookup_id_type %}
+              {% raise "#{@type}.__lf_find_args expects #{lookup_id_type}, not #{T.resolve}" %}
+            {% end %}
             {% id_column_annotation = id_ivar.annotation(LF::Data::Column) %}
             Tuple.new(
               {% if id_converter = id_column_annotation && id_column_annotation[:converter] %}
