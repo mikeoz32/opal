@@ -13,6 +13,10 @@ All notable changes to Opal are documented in this file.
   and dynamic queries, bulk DML, converters, listeners, and optimistic locking;
 - SQLite dialect, portable schema operations, forward-only migrations, and
   Data Application autoconfiguration;
+- opt-in PostgreSQL dialect with numbered binds, `RETURNING`, native schema
+  rendering, and real-service integration coverage;
+- connection-pinned migration sessions with PostgreSQL advisory locks and
+  explicit SQLite transactional-history coordination;
 - end-to-end SQLite Data and Todo examples with process-level verification.
 
 ### Changed
