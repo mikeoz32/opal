@@ -35,4 +35,3 @@ decisions.
 - Resource ownership remains explicit.
 - Driver errors and transaction errors retain their original types.
 - The API is optional and does not alter the EntityManager contract.
-

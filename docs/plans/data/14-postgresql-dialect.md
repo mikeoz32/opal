@@ -40,4 +40,3 @@ an opt-in integration job may run against a service container.
 
 Run dialect contract specs, compile-time specialization specs, all Data specs,
 and the optional PostgreSQL integration job.
-

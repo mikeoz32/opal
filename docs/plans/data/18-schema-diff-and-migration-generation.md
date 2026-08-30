@@ -34,4 +34,3 @@ explicitly supplies a schema model. No startup auto-sync is introduced.
 - Destructive changes never execute implicitly.
 - Ambiguous changes fail rather than guessing.
 - Generated migrations pass the existing MigrationRunner contract.
-
