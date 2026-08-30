@@ -70,8 +70,10 @@ schema.
 
 ## Task 3: Refactor Repository Boundaries
 
-`TodoRepository` remains `@[LF::DI::Service]` and injects `DataSource`, not
-`DB::Database` or a long-lived EntityManager.
+`TodoRepository` remains a stateless `@[LF::DI::Service]`. `TodoService`
+injects `DataSource`, while repository methods receive the transaction-local
+EntityManager explicitly. Neither repository owns `DB::Database` or a
+long-lived EntityManager.
 
 Organize methods as:
 

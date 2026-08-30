@@ -23,6 +23,8 @@ therefore ends in a usable, documented, fully tested repository state.
 
 ## Execution Plans
 
+### V1 delivery
+
 | Order | Plan | Deliverable | Depends on |
 | --- | --- | --- | --- |
 | 01 | [Foundation and test infrastructure](data/01-foundation-and-test-infrastructure.md) | dependencies, opt-in entrypoint, shared DB test harness | ADR-0005 |
@@ -37,6 +39,17 @@ therefore ends in a usable, documented, fully tested repository state.
 | 10 | [Data autoconfiguration](data/10-data-autoconfiguration.md) | YAML-driven DataSource and startup migration integration | 03, 08, 09 |
 | 11 | [Todo example and public documentation](data/11-todo-example-and-documentation.md) | end-to-end example, process checks, user guides | 04-10 |
 | 12 | [Data correctness hardening](data/12-data-correctness-hardening.md) | correctness regressions and lifecycle hardening | 01-11 |
+
+Plan 11 is the v1 integration gate. Plan 12 is the final correctness and
+release-hardening pass over that complete surface.
+
+### Post-v1 roadmap
+
+The following plans begin only after the Data v1 release. They are not v1
+release prerequisites.
+
+| Order | Plan | Deliverable | Depends on |
+| --- | --- | --- | --- |
 | 13 | [Typed entity IDs](data/13-typed-entity-ids.md) | compile-time ID-safe entity operations | 01-12 |
 | 14 | [PostgreSQL dialect](data/14-postgresql-dialect.md) | optional PostgreSQL SQL and schema support | 01-08, 12 |
 | 15 | [Dialect-specific migration locks](data/15-dialect-migration-locks.md) | explicit concurrent migration safety | 08, 14 |
@@ -50,6 +63,8 @@ Dialect and DataSource and may be developed alongside entity mapping and Unit
 of Work, but it is merged before Plan 09. Plans 06 and 07 may be developed in
 parallel after Plan 05. Plan 09 then adds the generic Application mechanism,
 Plan 10 adapts Data to it, and Plan 11 is the final integration gate.
+Plan 12 hardens the complete v1 surface. Plans 13 through 18 are sequenced
+post-v1 capabilities and do not delay the v1 release.
 
 ## Branch And Review Strategy
 
@@ -67,6 +82,7 @@ codex/data-08-migrations
 codex/data-09-application-autoconfig
 codex/data-10-autoconfig
 codex/data-11-example-docs
+codex/data-12-correctness-hardening
 ```
 
 Each branch must be reviewable without uncommitted code from a later plan.
@@ -120,7 +136,7 @@ files, executables, and server processes live under `/tmp` and are removed in
 
 ## Release Gate
 
-After Plan 18, run:
+After Plan 12, run:
 
 ```bash
 CRYSTAL_CACHE_DIR=/tmp/opal-crystal-cache crystal spec --no-color
@@ -132,5 +148,5 @@ git status --short --branch
 Then audit every normative ADR-0005 section and confirm deferred features were
 not partially introduced: lazy loading, joins, composite IDs, inheritance
 mapping, projections, savepoints, second-level cache, generated repositories,
-`attach`, `merge`, and dirty checking. Plans 13-18 may add only the explicitly
-scoped capabilities described in their own documents.
+`attach`, `merge`, and dirty checking. After the v1 tag, Plans 13-18 may add
+only the explicitly scoped capabilities described in their own documents.

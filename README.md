@@ -1,6 +1,7 @@
 # Opal
 
-Opal is a modular HTTP, dependency injection, and application bootstrap toolkit for Crystal.
+Opal is a modular HTTP, dependency injection, application bootstrap, and
+persistence toolkit for Crystal.
 
 It is built on top of Crystal's standard `HTTP::Handler` stack and focuses on:
 
@@ -10,6 +11,7 @@ It is built on top of Crystal's standard `HTTP::Handler` stack and focuses on:
 - lightweight API handlers via `LF::HTTP::Controller`
 - scoped dependency injection with deterministic lifecycle cleanup
 - optional compile-time application bootstrap
+- transaction-local persistence with compile-time entity and query contracts
 
 ## Status
 
@@ -23,7 +25,7 @@ Add this to your application's `shard.yml`:
 ```yaml
 dependencies:
   opal:
-    github: your-username/opal
+    github: mikeoz32/opal
 ```
 
 Then install shards:
@@ -293,7 +295,22 @@ shutdown, and state/error contracts; it does not expose the mutable root
 container. Application extensions receive a controlled `LF::ApplicationContext`
 for bean registration and scope creation.
 
-## Data Transaction Rollback
+## Data
+
+The Data layer is loaded through `require "opal/data"`; concrete dialects and
+drivers remain opt-in. Start with the [Data getting-started guide](docs/data/getting-started.md).
+
+Public Data guides:
+
+- [dialects](docs/data/dialects.md)
+- [entities](docs/data/entities.md)
+- [transactions and repositories](docs/data/transactions-and-repositories.md)
+- [queries](docs/data/queries.md)
+- [migrations](docs/data/migrations.md)
+- [autoconfiguration](docs/data/autoconfiguration.md)
+- [raw SQL and converters](docs/data/raw-sql-and-converters.md)
+
+### Transaction rollback
 
 `LF::Data::EntityManager` is transaction-local. If a transaction fails after an
 explicit `flush`, generated IDs or optimistic-lock versions may already have
@@ -437,7 +454,8 @@ The repository includes these examples:
   Compile-time application discovery, generated entrypoints, and typed resolution.
 
 - [examples/todo_api_sqlite](examples/todo_api_sqlite/README.md)
-  Standalone Todo API project with SQLite persistence.
+  End-to-end Todo API using Data entities, migrations, repositories,
+  autoconfiguration, optimistic locking, and SQLite.
 
 - [examples/data_layer_sqlite](examples/data_layer_sqlite/README.md)
   Standalone SQLite data-layer showcase covering mappings, queries, unit of
