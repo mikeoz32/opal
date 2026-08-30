@@ -5,6 +5,7 @@ module LF
       ReturningRow
       TransactionalDDL
       MigrationLock
+      SchemaInspection
       AddColumn
       RenameColumn
       ForeignKeyDDL

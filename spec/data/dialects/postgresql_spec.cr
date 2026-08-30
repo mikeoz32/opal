@@ -32,6 +32,7 @@ describe LF::Data::Dialects::PostgreSQL do
     dialect.supports?(LF::Data::DialectCapability::ReturningRow).should be_true
     dialect.supports?(LF::Data::DialectCapability::TransactionalDDL).should be_true
     dialect.supports?(LF::Data::DialectCapability::MigrationLock).should be_true
+    dialect.supports?(LF::Data::DialectCapability::SchemaInspection).should be_true
     dialect.supports?(LF::Data::DialectCapability::LastInsertId).should be_false
   end
 

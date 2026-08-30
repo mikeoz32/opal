@@ -71,6 +71,7 @@ describe LF::Data::Dialects::PostgreSQL::SchemaCompiler do
       LF::Data::Schema::RenameColumn.new("tasks", "done", "completed"),
       LF::Data::Schema::DropIndex.new("idx_tasks_done"),
       LF::Data::Schema::DropTable.new("tasks"),
+      LF::Data::Schema::RenameTable.new("tasks", "renamed_tasks"),
       LF::Data::Schema::RawSQL.new("backfill", "UPDATE tasks SET done = FALSE"),
     ] of LF::Data::Schema::Operation
 
@@ -80,6 +81,7 @@ describe LF::Data::Dialects::PostgreSQL::SchemaCompiler do
         %(ALTER TABLE "tasks" RENAME COLUMN "done" TO "completed"),
         %(DROP INDEX "idx_tasks_done"),
         %(DROP TABLE "tasks"),
+        %(ALTER TABLE "tasks" RENAME TO "renamed_tasks"),
         "UPDATE tasks SET done = FALSE",
       ])
   end

@@ -57,14 +57,15 @@ module LF
         table : TableDefinition,
         if_not_exists : Bool = false
       record DropTable, table_name : String
+      record RenameTable, from : String, to : String
       record AddColumn, table_name : String, column : ColumnDefinition
       record RenameColumn, table_name : String, from : String, to : String
       record CreateIndex, table_name : String, index : IndexDefinition
       record DropIndex, name : String
       record RawSQL, name : String, sql : String
 
-      alias Operation = CreateTable | DropTable | AddColumn | RenameColumn |
-                        CreateIndex | DropIndex | RawSQL
+      alias Operation = CreateTable | DropTable | RenameTable | AddColumn |
+                        RenameColumn | CreateIndex | DropIndex | RawSQL
 
       def self.validate_identifier(identifier : String) : Nil
         if identifier.empty? || identifier.includes?('\0')

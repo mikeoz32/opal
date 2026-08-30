@@ -61,10 +61,17 @@ module LF
           )
         end
 
+        def schema_introspector(
+          connection : DB::Connection,
+        ) : LF::Data::Schema::Introspector
+          SchemaIntrospector.new(connection)
+        end
+
         def supports?(capability : DialectCapability) : Bool
           case capability
           when .returning_row?, .transactional_ddl?, .migration_lock?,
-               .add_column?, .rename_column?, .foreign_key_ddl?
+               .schema_inspection?, .add_column?, .rename_column?,
+               .foreign_key_ddl?
             true
           when .last_insert_id?
             false
@@ -80,3 +87,4 @@ end
 require "./postgresql/advisory_migration_lock"
 require "./postgresql/schema_compiler"
 require "./postgresql/schema_renderer"
+require "./postgresql/schema_introspector"

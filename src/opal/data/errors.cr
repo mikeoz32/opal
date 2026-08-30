@@ -300,5 +300,53 @@ module LF
         super("Dialect #{dialect.inspect} does not support schema operation #{operation.inspect}")
       end
     end
+
+    class SchemaInspectionError < Error
+      getter dialect : String
+
+      def initialize(@dialect : String, message : String, cause : Exception? = nil)
+        super("Cannot inspect #{dialect.inspect} schema: #{message}", cause)
+      end
+    end
+
+    class UnsupportedSchemaInspectionError < SchemaInspectionError
+      def initialize(dialect : String)
+        super(dialect, "dialect does not provide schema introspection")
+      end
+    end
+
+    class UnsafeSchemaChangeError < Error
+      getter changes : Array(String)
+
+      def initialize(@changes : Array(String))
+        super(
+          "Schema diff contains destructive changes; pass allow_destructive: true " \
+          "after review: #{changes.join(", ")}"
+        )
+      end
+    end
+
+    class UnresolvedSchemaDiffError < Error
+      getter diagnostics : Array(Schema::DiffDiagnostic)
+
+      def initialize(@diagnostics : Array(Schema::DiffDiagnostic))
+        super(
+          "Schema diff requires explicit migration decisions: " \
+          "#{diagnostics.map(&.message).join("; ")}"
+        )
+      end
+    end
+
+    class EmptySchemaDiffError < Error
+      def initialize
+        super("Schema diff is empty; no migration source was generated")
+      end
+    end
+
+    class MigrationSourceGenerationError < Error
+      def initialize(reason : String)
+        super("Cannot generate migration source: #{reason}")
+      end
+    end
   end
 end

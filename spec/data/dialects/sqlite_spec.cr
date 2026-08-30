@@ -60,6 +60,7 @@ describe "SQLite dialect" do
     dialect.supports?(LF::Data::DialectCapability::LastInsertId).should be_true
     dialect.supports?(LF::Data::DialectCapability::ReturningRow).should be_false
     dialect.supports?(LF::Data::DialectCapability::MigrationLock).should be_true
+    dialect.supports?(LF::Data::DialectCapability::SchemaInspection).should be_true
   end
 
   it "generates static CRUD SQL for a generated-id versioned entity" do

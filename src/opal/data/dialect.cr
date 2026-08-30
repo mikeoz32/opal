@@ -24,6 +24,27 @@ module LF
         raise UnsupportedSchemaOperationError.new(name, "schema migrations")
       end
 
+      def schema_introspector(connection : DB::Connection) : Schema::Introspector
+        raise UnsupportedSchemaInspectionError.new(name)
+      end
+
+      def schema_type_matches?(
+        desired : Schema::ColumnType,
+        actual : Schema::ColumnType,
+      ) : Bool
+        desired == actual
+      end
+
+      def schema_default_matches?(
+        desired : Schema::DefaultValue?,
+        actual : Schema::ColumnSnapshot,
+      ) : Bool
+        return !actual.has_default? unless desired
+        return false unless inspected = actual.default
+
+        schema_literal_matches?(desired.value, inspected.value)
+      end
+
       def migration_lock(
         connection : DB::Connection,
         namespace : String,
@@ -44,6 +65,23 @@ module LF
       end
 
       abstract def supports?(capability : DialectCapability) : Bool
+
+      private def schema_literal_matches?(
+        desired : Schema::Literal,
+        actual : Schema::Literal,
+      ) : Bool
+        case desired
+        when Int32, Int64
+          case actual
+          when Int32, Int64
+            desired.to_i64 == actual.to_i64
+          else
+            false
+          end
+        else
+          desired == actual
+        end
+      end
     end
   end
 end

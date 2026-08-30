@@ -19,6 +19,11 @@ module LF
                 operation.table_name,
                 "DROP TABLE #{quote(operation.table_name)}"
               )]
+            when LF::Data::Schema::RenameTable
+              [Statement.new(
+                operation.to,
+                "ALTER TABLE #{quote(operation.from)} RENAME TO #{quote(operation.to)}"
+              )]
             when LF::Data::Schema::AddColumn
               if operation.column.generated?
                 raise UnsupportedSchemaOperationError.new(

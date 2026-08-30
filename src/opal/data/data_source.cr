@@ -58,6 +58,21 @@ module LF
         end
       end
 
+      def inspect_schema(
+        ignored_tables : Set(String) = Set(String).new,
+      ) : Schema::Snapshot
+        ensure_open(:schema_inspection)
+        unless @dialect.supports?(DialectCapability::SchemaInspection)
+          raise UnsupportedSchemaInspectionError.new(@dialect.name)
+        end
+        __lf_with_connection do |connection|
+          @dialect.schema_introspector(connection).inspect(
+            __lf_statement_observer,
+            ignored_tables
+          ).as(Schema::Snapshot)
+        end
+      end
+
       # Framework internal: migration reconciliation needs to distinguish a
       # rollback from a successful commit that failed during manager cleanup.
       def __lf_transaction(
@@ -166,14 +181,7 @@ module LF
         version : Int64,
         name : String,
       ) : Bool
-        observer = if @dispatcher.empty?
-                     nil
-                   else
-                     ->(event : StatementCompletionEvent) do
-                       @dispatcher.statement_completion(event)
-                       nil
-                     end
-                   end
+        observer = __lf_statement_observer
         history = MigrationHistory.new(connection, @dialect, observer)
         entry = history.load.find { |candidate| candidate.version == version }
         if entry
@@ -197,6 +205,15 @@ module LF
 
       private def ensure_open(operation : Symbol) : Nil
         raise ClosedDataSourceError.new(operation) if closed?
+      end
+
+      private def __lf_statement_observer : StatementObserver?
+        return nil if @dispatcher.empty?
+
+        ->(event : StatementCompletionEvent) do
+          @dispatcher.statement_completion(event)
+          nil
+        end
       end
     end
   end
