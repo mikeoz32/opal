@@ -28,11 +28,16 @@ decisions.
   own transactions and become unusable when their manager closes.
 - `find`, `find_by`, `exists?`, and `count` delegate to existing manager/query
   terminals. `query` and `dynamic_query` expose the existing builders.
+- `persist`, `remove`, and delete-by-ID preserve queued Unit of Work semantics;
+  `update` and `delete_all` expose the existing typed bulk builders. Repository
+  does not own `flush` because a flush spans every entity type in the manager.
 - Reads never flush pending writes. Existing identity-map, listener, SQL-plan,
   and native error behavior is unchanged.
 - Pagination is one-based, requires positive page and size values, and requires
-  explicit ordering. It executes a count plus a limited/offset SELECT and
-  returns an empty page outside the result range.
+  explicit ordering. It accepts an unpaginated composed static query, executes
+  a count plus a limited/offset SELECT, and returns an empty page outside the
+  result range. A query from another manager is rejected before SQL. Page
+  navigation predicates perform no SQL.
 
 ## Tasks
 

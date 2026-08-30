@@ -22,6 +22,22 @@ module LF
       def empty? : Bool
         items.empty?
       end
+
+      def first? : Bool
+        number == 1_i64
+      end
+
+      def last? : Bool
+        !has_next?
+      end
+
+      def has_previous? : Bool
+        number > 1_i64
+      end
+
+      def has_next? : Bool
+        number < total_pages
+      end
     end
 
     class Repository(EntityType, IDType)
@@ -32,6 +48,18 @@ module LF
 
       def find(id : IDType) : EntityType?
         manager.find(EntityType, id)
+      end
+
+      def persist(entity : EntityType) : Nil
+        manager.persist(entity)
+      end
+
+      def remove(entity : EntityType) : Nil
+        manager.remove(entity)
+      end
+
+      def delete(id : IDType) : Bool
+        manager.delete(EntityType, id)
       end
 
       def find_by(predicate : Predicate) : EntityType? forall Predicate
@@ -62,16 +90,36 @@ module LF
         manager.dynamic_query(EntityType)
       end
 
+      def update
+        manager.update(EntityType)
+      end
+
+      def delete_all
+        manager.delete(EntityType)
+      end
+
       def page(
-        number : Int,
-        page_size : Int,
+        selection : Query::SelectQuery(
+          EntityType,
+          Predicate,
+          Orders,
+          Query::NoLimit,
+          Query::NoOffset,
+        ),
         *,
-        order_by : Ordering,
-      ) : Page(EntityType) forall Ordering
-        page_number, normalized_size, offset = page_window(number, page_size)
-        total_items = count
-        items = query
-          .order_by(order_by)
+        number : Int,
+        size : Int,
+      ) : Page(EntityType) forall Predicate, Orders
+        {% if Orders == Query::NoOrdering %}
+          {% raise "#{EntityType} repository pagination requires at least one order_by" %}
+        {% end %}
+        unless selection.manager.same?(manager)
+          raise RepositoryQueryOwnershipError.new(EntityType.name)
+        end
+
+        page_number, normalized_size, offset = page_window(number, size)
+        total_items = selection.count
+        items = selection
           .limit(normalized_size)
           .offset(offset)
           .to_a
@@ -87,22 +135,26 @@ module LF
         number : Int,
         page_size : Int,
         *,
+        order_by : Ordering,
+      ) : Page(EntityType) forall Ordering
+        page(
+          query.order_by(order_by),
+          number: number,
+          size: page_size
+        )
+      end
+
+      def page(
+        number : Int,
+        page_size : Int,
+        *,
         where predicate : Predicate,
         order_by : Ordering,
       ) : Page(EntityType) forall Predicate, Ordering
-        page_number, normalized_size, offset = page_window(number, page_size)
-        filtered = query.where(predicate)
-        total_items = filtered.count
-        items = filtered
-          .order_by(order_by)
-          .limit(normalized_size)
-          .offset(offset)
-          .to_a
-        Page(EntityType).new(
-          items,
-          page_number,
-          normalized_size,
-          total_items
+        page(
+          query.where(predicate).order_by(order_by),
+          number: number,
+          size: page_size
         )
       end
 

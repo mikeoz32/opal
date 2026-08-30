@@ -79,7 +79,7 @@ class TodoRepository
 
   def create(manager : LF::Data::EntityManager, title : String) : Todo
     todo = Todo.new(title)
-    manager.persist(todo)
+    manager.repository(Todo).persist(todo)
     manager.flush
     todo
   end
@@ -90,7 +90,8 @@ class TodoRepository
     title : String?,
     completed : Bool?,
   ) : Todo?
-    todo = find(manager, id)
+    repository = manager.repository(Todo)
+    todo = repository.find(id)
     return nil unless todo
 
     changed = false
@@ -103,18 +104,14 @@ class TodoRepository
       changed = true
     end
     if changed
-      manager.persist(todo)
+      repository.persist(todo)
       manager.flush
     end
     todo
   end
 
   def delete(manager : LF::Data::EntityManager, id : Int64) : Bool
-    todo = find(manager, id)
-    return false unless todo
-
-    manager.remove(todo)
-    true
+    manager.repository(Todo).delete(id)
   end
 end
 
@@ -126,7 +123,7 @@ class TodoAuditRepository
     action : String,
   ) : TodoAudit
     audit = TodoAudit.new(todo_id, action)
-    manager.persist(audit)
+    manager.repository(TodoAudit).persist(audit)
     audit
   end
 

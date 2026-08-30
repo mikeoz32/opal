@@ -122,6 +122,59 @@ describe LF::Data::Repository do
     end
   end
 
+  it "delegates entity writes and typed bulk builders without flushing" do
+    with_repository_source do |database, source, listener|
+      listener.statements.clear
+
+      created = source.transaction do |manager|
+        repository = manager.repository(RepositoryRecord)
+        record = RepositoryRecord.new("created", "odd")
+
+        repository.persist(record)
+        repository.count.should eq(0_i64)
+        record
+      end
+
+      listener.statements.map(&.operation).should eq([
+        LF::Data::StatementOperation::Select,
+        LF::Data::StatementOperation::Insert,
+      ])
+
+      source.transaction do |manager|
+        repository = manager.repository(RepositoryRecord)
+        fields = RepositoryRecord::Fields
+
+        repository.update
+          .set(fields.active, false)
+          .where(fields.id.eq(created.id.not_nil!))
+          .execute
+          .should eq(1_i64)
+        repository.delete(created.id.not_nil!).should be_true
+      end
+
+      database.scalar("SELECT count(*) FROM repository_records").should eq(0_i64)
+
+      records = seed_repository_records(source)
+      source.transaction do |manager|
+        repository = manager.repository(RepositoryRecord)
+        repository.remove(
+          repository.find(records.first.id.not_nil!).not_nil!
+        )
+      end
+
+      source.transaction do |manager|
+        repository = manager.repository(RepositoryRecord)
+        fields = RepositoryRecord::Fields
+
+        repository.delete_all
+          .where(fields.category.eq("even"))
+          .execute
+          .should eq(2_i64)
+      end
+      database.scalar("SELECT count(*) FROM repository_records").should eq(2_i64)
+    end
+  end
+
   it "returns deterministic one-based pages with totals" do
     with_repository_source do |database, source, listener|
       seed_repository_records(source)
@@ -155,6 +208,58 @@ describe LF::Data::Repository do
     end
   end
 
+  it "paginates a composed query with stable multi-column ordering" do
+    with_repository_source do |database, source, listener|
+      seed_repository_records(source)
+
+      source.transaction do |manager|
+        repository = manager.repository(RepositoryRecord)
+        fields = RepositoryRecord::Fields
+        selection = repository.query
+          .where(fields.category.eq("odd"))
+          .where(fields.active.eq(true))
+          .order_by(fields.category.asc)
+          .order_by(fields.id.desc)
+
+        page = repository.page(selection, number: 1, size: 1)
+        page.items.map(&.name).should eq(["three"])
+        page.total_items.should eq(2_i64)
+        page.total_pages.should eq(2_i64)
+        page.first?.should be_true
+        page.last?.should be_false
+        page.has_previous?.should be_false
+        page.has_next?.should be_true
+
+        last = repository.page(selection, number: 2, size: 1)
+        last.items.map(&.name).should eq(["one"])
+        last.first?.should be_false
+        last.last?.should be_true
+        last.has_previous?.should be_true
+        last.has_next?.should be_false
+      end
+    end
+  end
+
+  it "rejects a composed query owned by another manager" do
+    with_repository_source do |database, source, listener|
+      selection = source.transaction do |manager|
+        manager.repository(RepositoryRecord).query
+          .order_by(RepositoryRecord::Fields.id.asc)
+      end
+
+      source.transaction do |manager|
+        error = expect_raises(LF::Data::RepositoryQueryOwnershipError) do
+          manager.repository(RepositoryRecord).page(
+            selection,
+            number: 1,
+            size: 20
+          )
+        end
+        error.entity_name.should eq("RepositoryRecord")
+      end
+    end
+  end
+
   it "defines empty and invalid pagination behavior" do
     with_repository_source do |database, source, listener|
       source.transaction do |manager|
@@ -166,6 +271,10 @@ describe LF::Data::Repository do
         page.total_items.should eq(0_i64)
         page.total_pages.should eq(0_i64)
         page.empty?.should be_true
+        page.first?.should be_true
+        page.last?.should be_true
+        page.has_previous?.should be_false
+        page.has_next?.should be_false
 
         page_error = expect_raises(LF::Data::InvalidQueryError) do
           repository.page(0, 20, order_by: fields.id.asc)
