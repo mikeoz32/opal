@@ -29,9 +29,18 @@ version/name history in `_lf_migrations`. Repeated runs skip exact applied
 migrations; renamed or unknown applied versions refuse startup.
 
 Each pending migration and its history row share one database transaction on
-dialects with transactional DDL. Concurrent SQLite runners reconcile through
-the unique history version. Schema and history statements use the DataSource
-listener stream.
+dialects with transactional DDL. The runner pins one datasource connection for
+the entire migration session. PostgreSQL acquires a session advisory lock,
+namespaced by the current database and application lock namespace, before
+history planning and releases it on every exit path. SQLite explicitly uses
+transactional history conflict reconciliation rather than pretending to own an
+engine advisory lock. A dialect without both transactional DDL and a safe
+migration-lock strategy fails before history SQL runs.
+
+`MigrationRunner` accepts `lock_namespace` and `lock_timeout`. A timeout raises
+`MigrationLockTimeoutError`; if migration execution and lock cleanup both fail,
+`MigrationLockCleanupError` preserves both exceptions. Schema and history
+statements use the DataSource listener stream.
 
 Applications may run migrations as a deployment step or enable startup
 migrations through Data autoconfiguration. V1 has no `down`, schema diff,
