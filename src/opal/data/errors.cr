@@ -88,6 +88,17 @@ module LF
       end
     end
 
+    class RepositoryQueryOwnershipError < Error
+      getter entity_name : String
+
+      def initialize(@entity_name : String)
+        super(
+          "Repository query belongs to a different EntityManager: " \
+          "entity=#{entity_name}"
+        )
+      end
+    end
+
     class InvalidPredicateError < Error
       getter operation : Symbol
       getter field : String

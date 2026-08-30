@@ -71,4 +71,12 @@ describe LF::Data::Error do
     error.expected_version.should eq(3_i64)
     error.message.not_nil!.should contain("expected_version=3")
   end
+
+  it "exposes repository query ownership context" do
+    error = LF::Data::RepositoryQueryOwnershipError.new("Todo")
+
+    error.should be_a(LF::Data::Error)
+    error.entity_name.should eq("Todo")
+    error.message.not_nil!.should contain("different EntityManager")
+  end
 end

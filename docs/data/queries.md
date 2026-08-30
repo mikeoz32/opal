@@ -36,8 +36,10 @@ Opal owns no prepared-statement cache. SQL executes through the checked-out
 caching.
 
 Inside a transaction, `manager.repository(Entity)` provides typed `find`,
-`find_by`, `count`, `exists?`, and deterministic one-based pagination over
-these same plans. Its `query` and `dynamic_query` methods expose the original
-builders without changing their behavior. See
+`find_by`, `count`, `exists?`, entity writes, typed bulk builders, and
+deterministic one-based pagination over these same plans. Pagination accepts a
+composed ordered static query, so repeated predicates and stable multi-column
+ordering are preserved. Its `query` and `dynamic_query` methods expose the
+original builders without changing their behavior. See
 [transactions and repositories](transactions-and-repositories.md) for the
 lifecycle and pagination contract.

@@ -566,8 +566,12 @@ abandon the manager before further managed operations.
 `Repository(Entity, ID)`. The entity macro supplies the exact application-side
 lookup ID type, including removal of `Nil` from generated `Int32?` and `Int64?`
 IDs. The repository provides `find`, `find_by`, `count`, `exists?`, and access
-to the existing static and dynamic query builders. It generates no new SQL
-plans and introduces no registry or persistence methods on entities.
+to the existing static and dynamic query builders. Entity-typed `persist`,
+`remove`, and delete-by-ID delegate queued writes; `update` and `delete_all`
+expose the existing typed bulk builders. `flush` remains a manager operation
+because it coordinates the complete transaction-local Unit of Work. The
+facade generates no new SQL plans and introduces no registry or persistence
+methods on entities.
 
 A repository is constructed only from an active transaction-local manager. It
 does not accept or own a `DataSource`, open a transaction, flush before reads,
@@ -576,11 +580,14 @@ the application service while allowing custom stateless repositories to use a
 small typed facade internally.
 
 Pagination is one-based and requires a positive page number, positive page
-size, and explicit typed ordering. It executes one existing count terminal and
-one ordered SELECT with limit and offset. An out-of-range page has no items but
-retains the matching total; an empty result has zero total pages. Predicate
-pagination uses the same predicate for both statements. Transaction failures
-and driver failures propagate with their existing types.
+size, and explicit typed ordering. It may accept an unpaginated composed static
+query, preserving repeated predicates and multi-column ordering. It executes
+one existing count terminal and one ordered SELECT with limit and offset. An
+out-of-range page has no items but retains the matching total; an empty result
+has zero total pages. Page navigation predicates are computed from its metadata
+without SQL. A query created by another manager fails with
+`RepositoryQueryOwnershipError` before SQL execution. Transaction failures and
+driver failures propagate with their existing types.
 
 ## Dialect Architecture
 
@@ -890,6 +897,7 @@ include:
 - `DetachedEntityError`;
 - `MappingError`;
 - `InvalidQueryError`;
+- `RepositoryQueryOwnershipError`;
 - `OptimisticLockError`;
 - `RelationshipError`;
 - `UnsavedRelationshipError`;

@@ -6,11 +6,11 @@ and accept the active manager explicitly:
 ```crystal
 class TodoRepository
   def find(manager : LF::Data::EntityManager, id : Int64) : Todo?
-    manager.find(Todo, id)
+    manager.repository(Todo).find(id)
   end
 
   def delete(manager : LF::Data::EntityManager, id : Int64) : Bool
-    manager.delete(Todo, id)
+    manager.repository(Todo).delete(id)
   end
 end
 
@@ -51,11 +51,14 @@ source.transaction do |manager|
   open_count = todos.count(Todo::Fields.completed.eq(false))
   any_open = todos.exists?(Todo::Fields.completed.eq(false))
 
+  selection = todos.query
+    .where(Todo::Fields.completed.eq(false))
+    .order_by(Todo::Fields.created_at.desc)
+    .order_by(Todo::Fields.id.desc)
   page = todos.page(
-    2,
-    20,
-    where: Todo::Fields.completed.eq(false),
-    order_by: Todo::Fields.id.asc
+    selection,
+    number: 2,
+    size: 20
   )
 end
 ```
@@ -64,13 +67,40 @@ end
 For a generated `Int64?` entity ID, `find` accepts `Int64`, not `Int64?` or a
 different integer type. `find_by` returns the first matching row; use the
 facade's `query` or `dynamic_query` when ordering or runtime query composition
-is required.
+is required. `persist`, `remove`, and delete-by-ID bind writes to the same
+entity type. `update` and `delete_all` expose the existing typed bulk builders:
+
+```crystal
+todos.persist(Todo.new("ship it"))
+todos.delete(id)
+
+todos.update
+  .set(Todo::Fields.completed, true)
+  .where(Todo::Fields.id.eq(id))
+  .execute
+
+todos.delete_all
+  .where(Todo::Fields.completed.eq(true))
+  .execute
+```
+
+Repository writes retain normal Unit of Work semantics. `persist`, `remove`,
+and delete-by-ID remain queued until explicit or transaction-completion flush;
+bulk builders execute immediately under their existing pending-operation rules.
+`flush` stays on `EntityManager` because it coordinates all entity types and
+repositories in the transaction.
 
 Pages are one-based and require positive page numbers and sizes. An explicit
-`order_by` is mandatory so repeated page requests have a caller-defined order.
+ordering is mandatory so repeated page requests have a caller-defined order.
+Passing a composed static query preserves all predicates and supports repeated
+`order_by` calls for a stable tie-breaker. The query must not already have a
+limit or offset because the repository owns those values for the page.
+It must also come from the same manager as the repository; mixing transaction
+contexts raises `RepositoryQueryOwnershipError` before executing SQL.
 Each page performs one `count` and one existing typed SELECT, returns an empty
 `items` array when the requested page is outside the result, and reports zero
-`total_pages` for an empty result set.
+`total_pages` for an empty result set. `first?`, `last?`, `has_previous?`, and
+`has_next?` describe navigation without additional SQL.
 
 The facade is bound to the manager that created it. It cannot be constructed
 from a `DataSource`, open a transaction, or outlive the transaction block; a
