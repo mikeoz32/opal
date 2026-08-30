@@ -164,10 +164,23 @@ class UsersApi
 end
 ```
 
+Controller-level annotations do not require a separate `HttpPolicies` class.
+Register the policy beans and set up the controller normally:
+
+```crystal
+root.register(LF::DI::ServiceConfiguration.new)
+
+app = LF::HTTP::App.new do |router|
+  UsersApi.setup_routes(router, root)
+end
+```
+
 The order is global → controller → action → parameter. Interceptors unwind in
-reverse order; filters search action → controller → global. With HTTP
-autoconfiguration, annotations on the `@[LF::Application]` class are global.
-Standalone assembly passes a global annotation owner explicitly:
+reverse order; filters search action → controller → global.
+
+Global policies are optional. With HTTP autoconfiguration, put their annotations
+on the `@[LF::Application]` class. A manually assembled standalone application
+can use a separate annotation owner only when it actually needs global policies:
 
 ```crystal
 UsersApi.setup_routes(router, root, HttpPolicies)
