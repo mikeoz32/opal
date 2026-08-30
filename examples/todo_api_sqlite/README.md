@@ -6,7 +6,7 @@ This standalone application is the end-to-end Opal Data v1 example. It uses:
   version;
 - a forward-only `MigrationSet` applied by Data autoconfiguration;
 - stateless Todo and audit repositories that receive one transaction-local
-  `EntityManager`;
+  `EntityManager` and use its optional typed repository facade;
 - an application service that owns transaction boundaries and composes both
   repositories atomically;
 - HTTP controller discovery, constructor DI, and Data/HTTP lifecycle ordering.

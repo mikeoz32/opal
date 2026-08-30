@@ -22,6 +22,8 @@ All notable changes to Opal are documented in this file.
 - compile-time `belongs_to`, `has_many`, and `has_one` metadata with explicit
   loading, dependency-ordered flushes, and opt-in persist/remove cascades;
 - entity-declared lookup ID enforcement and typed delete-by-ID scheduling;
+- manager-bound typed repositories with find/count/exists conveniences and
+  deterministic one-based pagination;
 - end-to-end SQLite Data and Todo examples with process-level verification;
 - bounded transport-aware HTTP drain with typed timeout reporting;
 - explicit controller `HEAD` and `OPTIONS` routes, deterministic HTTP 405

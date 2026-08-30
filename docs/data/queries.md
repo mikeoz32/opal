@@ -34,3 +34,10 @@ writes.
 Opal owns no prepared-statement cache. SQL executes through the checked-out
 `DB::Connection`, and `crystal-db` owns connection-local preparation and
 caching.
+
+Inside a transaction, `manager.repository(Entity)` provides typed `find`,
+`find_by`, `count`, `exists?`, and deterministic one-based pagination over
+these same plans. Its `query` and `dynamic_query` methods expose the original
+builders without changing their behavior. See
+[transactions and repositories](transactions-and-repositories.md) for the
+lifecycle and pagination contract.
