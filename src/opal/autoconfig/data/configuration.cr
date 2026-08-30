@@ -56,6 +56,8 @@ module LF::Data::AutoConfig
       case scheme
       when "sqlite3"
         LF::Data::Dialects::SQLite.new
+      when "postgres"
+        LF::Data::Dialects::PostgreSQL.new
       else
         raise ConfigurationError.new("Unsupported database scheme: #{scheme}")
       end
