@@ -44,16 +44,23 @@ end
 
 `ApplicationRuntime#install` configures and records an extension. Shutdown
 stops installed extensions in reverse installation order, then shuts down DI.
-All extensions and DI receive a shutdown attempt even when an earlier stop
-fails. Extension failures are reported as
-`LF::ApplicationRuntime::ShutdownError`; a DI-only shutdown failure keeps its
-original DI error type.
+Ordinary extension failures do not prevent later shutdown attempts. An
+extension whose stop error includes `LF::ApplicationExtension::StopIncomplete`
+instead preserves itself, all earlier extensions on which it may depend, and
+root DI. New application resolution stays disabled; a later shutdown retries
+from that extension and preserves reverse installation order. Extension
+failures are reported as `LF::ApplicationRuntime::ShutdownError`; a DI-only
+shutdown failure keeps its original DI error type.
 
 If extension configuration fails, the runtime calls `stop` on the partially
 configured extension and closes the runtime. This destroys partial bean state
 and stops previously installed extensions. An extension must therefore make
 `stop` safe after partial configuration. When configuration and cleanup both
-fail, `LF::ApplicationRuntime::InstallError` preserves both phases.
+fail, `LF::ApplicationRuntime::InstallError` preserves both phases. If that
+cleanup failure is `StopIncomplete`, the runtime retains the partial extension,
+its earlier dependencies, and root DI for a safe shutdown retry. The resulting
+`InstallError#pending_runtime` exposes that ownership even when generated
+application bootstrap fails; bootstrap does not retry or discard it implicitly.
 
 ### Conditional application autoconfiguration
 

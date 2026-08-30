@@ -24,6 +24,12 @@ module LF::HTTP::Controller
   annotation Patch
   end
 
+  annotation Head
+  end
+
+  annotation Options
+  end
+
   macro included
     {% verbatim do %}
       macro setup_routes(router, scope_provider)
@@ -55,7 +61,7 @@ module LF::HTTP::Controller
         end
 
         {% for method in controller_type.methods.sort_by(&.line_number) %}
-          {% for route_method in {LF::HTTP::Controller::Get, LF::HTTP::Controller::Post, LF::HTTP::Controller::Put, LF::HTTP::Controller::Delete, LF::HTTP::Controller::Patch, LF::HTTP::Controller::Route} %}
+          {% for route_method in {LF::HTTP::Controller::Get, LF::HTTP::Controller::Post, LF::HTTP::Controller::Put, LF::HTTP::Controller::Delete, LF::HTTP::Controller::Patch, LF::HTTP::Controller::Head, LF::HTTP::Controller::Options, LF::HTTP::Controller::Route} %}
             {% router_method = route_method.stringify.split("::")[-1].downcase.id %}
             {% router_method = "add".id if router_method == "route" %}
             {% for ann in method.annotations(route_method) %}

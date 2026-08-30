@@ -408,9 +408,23 @@ TodoApplication.run_http
 At compile time Opal discovers `LF::HTTP::Controller` includers in
 fully-qualified name order. At startup it builds the controller route table,
 the standard log and request-scope handlers, and an `HTTP::Server`. The server
-uses `http.host` (`0.0.0.0` by default) and `http.port` (`8080` by default).
-`run_http` blocks in `HTTP::Server#listen`; process termination closes the
-server before application DI shutdown.
+uses `http.host` (`0.0.0.0` by default), `http.port` (`8080` by default), and
+the positive `http.drain_timeout_ms` (`30000` by default). `run_http` blocks in
+`HTTP::Server#listen`; process termination closes the server before application
+DI shutdown.
+
+Shutdown closes listeners and idle keep-alive sockets, then waits through the
+configured deadline for response output and upgraded connection work. A
+deadline breach force-closes remaining transports and surfaces
+`LF::HTTP::AutoConfig::DrainTimeoutError` through application shutdown. Opal
+keeps root DI alive while timed-out request scopes can still use it; after those
+scopes exit, retrying application shutdown completes singleton disposal.
+
+Method dispatch is exact: `HEAD` and `OPTIONS` are not inferred from `GET` and
+must be registered explicitly. A method mismatch returns `405` with a stable,
+sorted `Allow` header. Applications can pass an `LF::HTTP::Router::ErrorMapper`
+to `LF::HTTP::App.new` to replace the default error body; the router preserves
+the status and `Allow` metadata.
 
 ## Integration Pattern
 
