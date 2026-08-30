@@ -59,9 +59,17 @@ module LF
           message.includes?("UNIQUE constraint failed: #{table}.#{column}")
         end
 
+        def migration_lock(
+          connection : DB::Connection,
+          namespace : String,
+          timeout : Time::Span,
+        ) : LF::Data::MigrationLock
+          TransactionalHistoryMigrationLock.new
+        end
+
         def supports?(capability : DialectCapability) : Bool
           case capability
-          when .last_insert_id?, .transactional_ddl?, .add_column?, .rename_column?, .foreign_key_ddl?
+          when .last_insert_id?, .transactional_ddl?, .migration_lock?, .add_column?, .rename_column?, .foreign_key_ddl?
             true
           when .returning_row?
             false

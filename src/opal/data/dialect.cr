@@ -24,6 +24,17 @@ module LF
         raise UnsupportedSchemaOperationError.new(name, "schema migrations")
       end
 
+      def migration_lock(
+        connection : DB::Connection,
+        namespace : String,
+        timeout : Time::Span,
+      ) : MigrationLock
+        raise UnsupportedMigrationCapabilityError.new(
+          name,
+          DialectCapability::MigrationLock
+        )
+      end
+
       def migration_history_record_conflict?(
         error : Exception,
         table : String,

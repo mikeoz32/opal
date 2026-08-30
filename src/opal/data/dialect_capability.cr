@@ -4,6 +4,7 @@ module LF
       LastInsertId
       ReturningRow
       TransactionalDDL
+      MigrationLock
       AddColumn
       RenameColumn
       ForeignKeyDDL
