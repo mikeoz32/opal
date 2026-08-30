@@ -39,4 +39,3 @@ repository abstraction in this plan.
 
 Run the focused compile fixtures, all Data specs, the root suite, and
 `git diff --check`.
-

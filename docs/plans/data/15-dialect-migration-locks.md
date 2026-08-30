@@ -34,4 +34,3 @@ and namespaced for the application/database.
 - No broad exception is treated as a migration conflict.
 - Non-transactional unsupported dialects fail before executing migrations.
 - Lock cleanup errors preserve the primary migration error.
-

@@ -35,4 +35,3 @@ joins, or global relationship registries.
 - Cascade behavior is explicit in the API and docs.
 - Cycles and unsupported cascade combinations fail with typed errors.
 - Existing non-relational entities behave identically.
-
