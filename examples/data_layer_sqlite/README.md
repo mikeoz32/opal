@@ -12,6 +12,12 @@ It demonstrates:
 - ordered migrations, indexes, uniqueness, and foreign keys;
 - `DataSource` ownership and dialect connection setup;
 - transaction-local `EntityManager` unit of work operations;
+- compile-time `belongs_to`, `has_many`, and `has_one` metadata;
+- graph persistence with generated foreign-key propagation and deterministic
+  insert ordering;
+- explicit relationship loading and loaded-only owner-side remove cascades;
+- relationship-driven foreign-key schema metadata, including `has_one`
+  uniqueness;
 - static typed queries and the explicit `DynamicQuery` fallback;
 - bulk update with automatic version increment;
 - raw SQL followed by explicit identity-map invalidation with `clear`;
@@ -20,6 +26,95 @@ It demonstrates:
   CRUD backed by transaction-local entity managers.
 - an Application + DI + controller-discovery HTTP executable where Data
   autoconfiguration owns the data source and startup migrations.
+
+## Relationship graph
+
+The showcase domain declares a project with tasks and one profile. Each task
+belongs to its project and owns task events. Navigation properties are separate
+from the scalar foreign-key fields used by SQL and typed queries:
+
+```crystal
+@[LF::Data::HasMany(
+  foreign_key: "project_id",
+  cascade_persist: true,
+  cascade_remove: true,
+)]
+getter tasks : Array(Task) = [] of Task
+
+@[LF::Data::BelongsTo(
+  foreign_key: "project_id",
+  cascade_persist: true,
+)]
+property project : Project?
+```
+
+Build the graph in memory and persist it through its owner. One flush inserts
+the project before its dependents and propagates each generated ID into the
+matching scalar key:
+
+```crystal
+project = Project.new("opal")
+project.profile = ProjectProfile.new(project, "primary")
+
+task = Task.new(project, "write relationship docs")
+task.events << TaskEvent.new(task, "created")
+project.tasks << task
+
+store.source.transaction do |manager|
+  manager.persist(project)
+  manager.flush
+end
+
+project.id                 # generated project ID
+task.project_id            # the same ID, copied before task INSERT
+task.events.first.task_id  # generated task ID
+```
+
+Hydration never fills navigation properties or issues hidden queries. Query
+related rows and attach them explicitly before using owner-side remove
+cascades:
+
+```crystal
+store.source.transaction do |manager|
+  project = manager.find(Project, project_id).not_nil!
+
+  project.tasks.concat(
+    manager.query(Task)
+      .where(Task::Fields.project_id.eq(project_id))
+      .to_a
+  )
+  project.profile = manager.query(ProjectProfile)
+    .where(ProjectProfile::Fields.project_id.eq(project_id))
+    .first?
+
+  project.tasks.each do |task|
+    task.events.concat(
+      manager.query(TaskEvent)
+        .where(TaskEvent::Fields.task_id.eq(task.id.not_nil!))
+        .to_a
+    )
+  end
+
+  manager.remove(project)
+end
+```
+
+The migration uses typed relationship descriptors instead of repeating table
+and column names:
+
+```crystal
+table.foreign_key(
+  Task::Relations.project,
+  name: "fk_showcase_tasks_project"
+)
+
+# HasOne also contributes a UNIQUE constraint for project_id.
+table.foreign_key(Project::Relations.profile)
+```
+
+Removing an item from `project.tasks` only mutates the array. It never deletes
+the row; call `manager.remove(task)` explicitly. Lazy loading, proxies, orphan
+removal, and implicit relationship queries are intentionally absent.
 
 Run the executable:
 
