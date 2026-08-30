@@ -1,5 +1,7 @@
 name: opal
 version: 0.1.0
+description: Modular HTTP, dependency injection, application bootstrap, and persistence toolkit for Crystal
+repository: https://github.com/mikeoz32/opal
 
 authors:
   - Mike Oz <kozloffsky@hotmail.com>
