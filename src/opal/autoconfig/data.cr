@@ -16,8 +16,6 @@ module LF::Data::AutoConfig
   class Extension
     include LF::ApplicationExtension
 
-    PRIORITY = 100
-
     getter data_source : LF::Data::DataSource?
     getter? configured = false
     getter? stopped = false
@@ -55,8 +53,6 @@ module LF::Data::AutoConfig
         configuration.url,
         dialect: configuration.dialect
       )
-    rescue error : Exception
-      raise ConfigurationError.new("Failed to open configured database", error)
     end
 
     private def resolve_migrations(

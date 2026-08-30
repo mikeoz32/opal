@@ -71,7 +71,7 @@ end
 
 describe LF::Data::AutoConfig do
   it "records a stable priority above ordinary infrastructure extensions" do
-    LF::Data::AutoConfig::Extension::PRIORITY.should eq(100)
+    {{ LF::Data::AutoConfig::Extension.annotation(LF::ApplicationAutoConfiguration)["priority"] }}.should eq(100)
   end
 
   it "parses SQLite configuration without changing URI query parameters" do
@@ -299,7 +299,7 @@ describe LF::Data::AutoConfig do
     LF::DataSpecSupport::TempPath.cleanup_database(database_path) if database_path
   end
 
-  it "preserves a missing-driver cause in an isolated executable" do
+  it "propagates a missing-driver error unchanged in an isolated executable" do
     database_path = LF::DataSpecSupport::TempPath.database
     with_data_autoconfig_config(sqlite_autoconfig_yaml(database_path)) do |path|
       fixture = File.expand_path(
@@ -326,6 +326,21 @@ describe LF::Data::AutoConfig do
     end
   ensure
     LF::DataSpecSupport::TempPath.cleanup_database(database_path) if database_path
+  end
+
+  it "propagates database-open errors without wrapping them" do
+    missing_directory = "/tmp/opal-data-missing-#{Random::Secure.hex(8)}"
+    database_path = File.join(missing_directory, "database.db")
+    with_data_autoconfig_config(sqlite_autoconfig_yaml(database_path)) do |path|
+      runtime = build_data_autoconfig_runtime(path)
+
+      error = expect_raises(DB::Error) do
+        runtime.install(LF::Data::AutoConfig::Extension.new)
+      end
+
+      error.should_not be_a(LF::Data::Error)
+      runtime.closed?.should be_true
+    end
   end
 
   it "installs automatically during Application bootstrap before lower priorities" do

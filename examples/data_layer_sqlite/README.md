@@ -12,7 +12,6 @@ It demonstrates:
 - ordered migrations, indexes, uniqueness, and foreign keys;
 - `DataSource` ownership and dialect connection setup;
 - transaction-local `EntityManager` unit of work operations;
-- connection-scoped read queries without opening a database transaction;
 - static typed queries and the explicit `DynamicQuery` fallback;
 - bulk update with automatic version increment;
 - raw SQL followed by explicit identity-map invalidation with `clear`;

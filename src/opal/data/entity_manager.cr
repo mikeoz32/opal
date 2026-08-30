@@ -14,12 +14,10 @@ module LF
         @entries_by_identity = {} of Internal::EntityKey => Internal::TrackedEntity
         @operation_queue = Internal::OperationQueue.new
         @next_sequence = 0_i64
-        @read_only = false
       end
 
       def persist(entity : T) : Nil forall T
         ensure_available(:persist)
-        ensure_writable(:persist)
 
         if entry = @entries_by_object[entity.object_id]?
           case entry.state
@@ -41,7 +39,6 @@ module LF
 
       def remove(entity : T) : Nil forall T
         ensure_available(:remove)
-        ensure_writable(:remove)
 
         entry = @entries_by_object[entity.object_id]?
         unless entry
@@ -130,7 +127,6 @@ module LF
 
       def update(entity : T.class) forall T
         ensure_available(:bulk_update)
-        ensure_writable(:bulk_update)
         Query::UpdateQuery(
           T,
           typeof(Tuple.new),
@@ -141,7 +137,6 @@ module LF
 
       def delete(entity : T.class) forall T
         ensure_available(:bulk_delete)
-        ensure_writable(:bulk_delete)
         Query::DeleteQuery(T, Query::NoPredicate).new(
           self,
           Query::NoPredicate.new
@@ -150,13 +145,7 @@ module LF
 
       def connection : DB::Connection
         ensure_available(:connection)
-        ensure_writable(:connection)
         @connection
-      end
-
-      # Framework internal: marks this manager as usable only for read paths.
-      def __lf_read_only! : Nil
-        @read_only = true
       end
 
       # Framework internal: bridges extension-owned SQL to DataSource listeners.
@@ -246,7 +235,6 @@ module LF
         query : Query::UpdateQuery(T, F, V, P),
       ) : Int64 forall T, F, V, P
         ensure_available(:bulk_update)
-        ensure_writable(:bulk_update)
         ensure_no_pending(T.name, :bulk_update)
         plan = @dialect.update_query_plan(T, typeof(query))
         result = execute_observed_exec(
@@ -264,7 +252,6 @@ module LF
         query : Query::DeleteQuery(T, P),
       ) : Int64 forall T, P
         ensure_available(:bulk_delete)
-        ensure_writable(:bulk_delete)
         ensure_no_pending(T.name, :bulk_delete)
         plan = @dialect.delete_query_plan(T, typeof(query))
         result = execute_observed_exec(
@@ -279,7 +266,6 @@ module LF
 
       def flush : Nil
         ensure_available(:flush)
-        ensure_writable(:flush)
 
         begin
           do_flush
@@ -794,10 +780,6 @@ module LF
           raise FailedEntityManagerError.new(operation, failure)
         end
         raise ClosedEntityManagerError.new(operation) if closed?
-      end
-
-      private def ensure_writable(operation : Symbol) : Nil
-        raise ReadOnlyEntityManagerError.new(operation) if @read_only
       end
     end
   end

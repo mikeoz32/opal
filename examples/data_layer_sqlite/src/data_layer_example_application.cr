@@ -36,7 +36,7 @@ module DataLayerExample
 
     @[LF::HTTP::Controller::Get("/projects")]
     def projects
-      @data_source.read do |manager|
+      @data_source.transaction do |manager|
         projects = manager.query(Project).order_by(Project::Fields.name.asc).to_a
         Web::ProjectListResponse.new(projects.map { |project| Web::ProjectResponse.new(project) })
       end
@@ -61,7 +61,7 @@ module DataLayerExample
 
     @[LF::HTTP::Controller::Get("/projects/:project_id/tasks")]
     def tasks(project_id : Int64)
-      @data_source.read do |manager|
+      @data_source.transaction do |manager|
         raise LF::HTTP::NotFound.new("Project not found") unless manager.find(Project, project_id)
 
         tasks = manager.query(Task)

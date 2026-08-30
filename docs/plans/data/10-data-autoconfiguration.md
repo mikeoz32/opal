@@ -78,8 +78,11 @@ Parse once during extension configure:
 
 Do not duplicate pool settings into new YAML keys in v1.
 
-Preserve original causes for malformed URI, missing driver, and DB open errors.
-Never include credentials from the URL in error messages.
+Wrap malformed adapter configuration in `ConfigurationError` and preserve its
+cause. Missing-driver, pool, connection, and DB-open failures propagate
+unchanged so callers retain their original driver/`DB::Error` types. Messages
+created by Opal never include the URL or its credentials; messages originating
+inside a concrete driver are not rewritten by the adapter.
 
 Do not add a runtime mutable dialect registry. The adapter uses a compile-time
 generated scheme switch containing only concrete dialect entrypoints it
