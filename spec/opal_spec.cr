@@ -1513,7 +1513,7 @@ describe "LF::HTTP::Router" do
     end
 
     io = IO::Memory.new
-    request = HTTP::Request.new("GET", "/users/123")
+    request = HTTP::Request.new("TRACE", "/users/123")
     response = HTTP::Server::Response.new(io)
     context = HTTP::Server::Context.new(request, response)
 
@@ -1521,6 +1521,7 @@ describe "LF::HTTP::Router" do
     response.close
 
     response.status.should eq(HTTP::Status::METHOD_NOT_ALLOWED)
+    response.headers["Allow"].should eq("POST")
     body = io.to_s.split("\r\n\r\n", 2)[1]
     body.should eq("Method Not Allowed")
   end
@@ -1541,8 +1542,49 @@ describe "LF::HTTP::Router" do
     response.close
 
     response.status.should eq(HTTP::Status::METHOD_NOT_ALLOWED)
+    response.headers["Allow"].should eq("POST")
     body = io.to_s.split("\r\n\r\n", 2)[1]
     body.should eq("Method Not Allowed")
+  end
+
+  it "reports stable method metadata for explicit HEAD and OPTIONS semantics" do
+    router = LF::HTTP::Router.new
+    router.add("/multi", Set{"POST", "GET"}) do |ctx, _params|
+      ctx.response.print "matched"
+    end
+
+    {"HEAD", "OPTIONS"}.each do |method|
+      io = IO::Memory.new
+      response = HTTP::Server::Response.new(io)
+      context = HTTP::Server::Context.new(HTTP::Request.new(method, "/multi"), response)
+
+      router.call(context)
+      response.close
+
+      response.status.should eq(HTTP::Status::METHOD_NOT_ALLOWED)
+      response.headers["Allow"].should eq("GET, POST")
+    end
+  end
+
+  it "lets applications replace error bodies without losing router metadata" do
+    mapper = ->(context : HTTP::Server::Context, _status : HTTP::Status, _body : String) do
+      context.response.content_type = "application/problem+json"
+      context.response.print %({"code":"route_error"})
+    end
+    app = LF::HTTP::App.new(mapper) do |router|
+      router.post("/only-post") { |context, _params| context.response.print "posted" }
+    end
+    io = IO::Memory.new
+    response = HTTP::Server::Response.new(io)
+    context = HTTP::Server::Context.new(HTTP::Request.new("CONNECT", "/only-post"), response)
+
+    app.call(context)
+    response.close
+
+    response.status.should eq(HTTP::Status::METHOD_NOT_ALLOWED)
+    response.headers["Allow"].should eq("POST")
+    response.headers["Content-Type"].should eq("application/problem+json")
+    io.to_s.split("\r\n\r\n", 2)[1].should eq(%({"code":"route_error"}))
   end
 
   it "matches routes with trailing slashes" do
@@ -1722,6 +1764,7 @@ describe "LF::HTTP::Router" do
     response.close
 
     response.status.should eq(HTTP::Status::NOT_FOUND)
+    response.headers["Allow"]?.should be_nil
     body = io.to_s.split("\r\n\r\n", 2)[1]
     body.should eq("Not Found")
   end

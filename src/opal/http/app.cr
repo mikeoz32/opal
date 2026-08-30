@@ -12,6 +12,11 @@ module LF::HTTP
       yield @router
     end
 
+    def initialize(error_mapper : Router::ErrorMapper, &block : Router -> Nil)
+      @router = Router.new(error_mapper)
+      yield @router
+    end
+
     def initialize
       @router = Router.new
     end

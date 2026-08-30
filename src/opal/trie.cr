@@ -17,6 +17,10 @@ module LF::Routing::Trie
       @node.try(&.handler_for(method))
     end
 
+    def allowed_methods : Array(String)
+      @node.try(&.allowed_methods) || [] of String
+    end
+
     # :nodoc:
     def record(node : Node, params : Hash(String, String)) : Nil
       @node = node
@@ -65,6 +69,10 @@ module LF::Routing::Trie
 
     def handler_for(method : String) : Handler?
       @handlers[method]?
+    end
+
+    def allowed_methods : Array(String)
+      @handlers.keys.sort
     end
 
     private def segments_for(path : String) : Array(String)

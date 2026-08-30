@@ -1,6 +1,5 @@
 require "http/server"
 require "../../opal"
-require "sync/condition_variable"
 require "sync/mutex"
 
 module LF::AutoConfig
@@ -18,57 +17,279 @@ module LF::HTTP::AutoConfig
     end
   end
 
-  class RequestDrainHandler
+  class DrainTimeoutError < Error
+    include LF::ApplicationExtension::StopIncomplete
+
+    getter active_requests : Int32
+
+    def initialize(@active_requests)
+      super("HTTP drain timed out with #{@active_requests} active request(s)")
+    end
+  end
+
+  private class ConnectionState
+    getter io : IO
+    property? active = false
+    property? closing = false
+    property completion : RequestCompletion? = nil
+
+    def initialize(@io)
+    end
+  end
+
+  private class RequestCompletion
+    @handler_finished = false
+    @output_finished = false
+    @upgraded = false
+    @reported = false
+    @lock = Mutex.new
+
+    def initialize(
+      @requests : ConnectionDrainHandler,
+      @connection : ConnectionState,
+      @context : ::HTTP::Server::Context,
+      @scope : LF::DI::Container,
+    )
+    end
+
+    def handler_finished(upgraded : Bool) : Nil
+      report = @lock.synchronize do
+        @handler_finished = true
+        @upgraded = upgraded
+        report?
+      end
+      finish if report
+    end
+
+    def output_finished : Nil
+      report = @lock.synchronize do
+        @output_finished = true
+        report?
+      end
+      finish if report
+    end
+
+    def connection_finished : Nil
+      report = @lock.synchronize do
+        next false if @reported
+        @reported = true
+      end
+      finish if report
+    end
+
+    private def report? : Bool
+      return false if @reported || @upgraded || !@handler_finished || !@output_finished
+      @reported = true
+    end
+
+    private def finish : Nil
+      scope_error : Exception? = nil
+      begin
+        @scope.exit
+      rescue error : Exception
+        scope_error = error
+      ensure
+        @context.dependency_scope = nil
+        @requests.request_finished(@connection)
+      end
+      raise scope_error.as(Exception) if scope_error
+    end
+  end
+
+  private class CompletionOutput < IO
+    @closed = false
+
+    def initialize(@output : IO, @completion : RequestCompletion)
+    end
+
+    def read(slice : Bytes) : NoReturn
+      raise IO::Error.new("response output is write-only")
+    end
+
+    def write(slice : Bytes) : Nil
+      @output.write(slice)
+    end
+
+    def flush : Nil
+      @output.flush
+    end
+
+    def close : Nil
+      return if @closed
+      @output.close
+    ensure
+      unless @closed
+        @closed = true
+        @completion.output_finished
+      end
+    end
+
+    def closed? : Bool
+      @closed
+    end
+  end
+
+  # Tracks the complete connection lifetime, including response finalization,
+  # idle keep-alive sockets, and work handed to an HTTP upgrade callback.
+  private class ConnectionDrainHandler
     include ::HTTP::Handler
 
-    @lock : Sync::Mutex
-    @drained : Sync::ConditionVariable
-    @accepting = true
-    @active_requests = 0
+    @connections = [] of ConnectionState
+    @connection_by_fiber = {} of Fiber => ConnectionState
+    @active = 0
+    @draining = false
+    @lock = Mutex.new
+    @idle = Channel(Nil).new
 
-    def initialize
-      @lock = Sync::Mutex.new
-      @drained = Sync::ConditionVariable.new(@lock)
+    def initialize(@handler : ::HTTP::Handler, @scope_provider : LF::DI::ScopeProvider)
+    end
+
+    def connection_started(io : IO) : ConnectionState
+      state = ConnectionState.new(io)
+      @lock.synchronize { @connections << state }
+      state
+    end
+
+    def attach_connection(state : ConnectionState) : Nil
+      @lock.synchronize { @connection_by_fiber[Fiber.current] = state }
+    end
+
+    def connection_finished(state : ConnectionState) : Nil
+      completion_error : Exception? = nil
+      begin
+        state.completion.try(&.connection_finished)
+      rescue error : Exception
+        completion_error = error
+      ensure
+        @lock.synchronize do
+          @connection_by_fiber.delete(Fiber.current)
+          @connections.delete(state)
+          if state.active?
+            state.active = false
+            @active -= 1
+          end
+          close_idle_signal
+        end
+      end
+      raise completion_error.as(Exception) if completion_error
     end
 
     def call(context : ::HTTP::Server::Context) : Nil
-      accepted = @lock.synchronize do
-        if @accepting
-          @active_requests += 1
-          true
-        else
-          false
-        end
+      completion, connection = request_started(context)
+      unless completion
+        connection.try(&.io.close)
+        raise IO::Error.new("HTTP server is draining")
       end
 
-      unless accepted
-        context.response.status = ::HTTP::Status::SERVICE_UNAVAILABLE
-        context.response.content_type = "text/plain"
-        context.response.print "Service Unavailable"
-        return
-      end
-
-      call_next(context)
+      context.response.output = CompletionOutput.new(context.response.output, completion)
+      @handler.call(context)
     ensure
-      if accepted
-        @lock.synchronize do
-          @active_requests -= 1
-          @drained.broadcast if @active_requests == 0
+      completion.try(&.handler_finished(!context.response.upgrade_handler.nil?))
+    end
+
+    def request_finished(connection : ConnectionState) : Nil
+      close = @lock.synchronize do
+        if connection.active?
+          connection.active = false
+          @active -= 1
         end
+        connection.completion = nil
+        should_close = @draining && !connection.closing?
+        connection.closing = true if should_close
+        close_idle_signal
+        should_close
+      end
+      connection.io.close if close
+    rescue IO::Error
+      # A peer may close concurrently with the drain transition.
+    end
+
+    def drain_until(deadline : Time::Instant) : Int32
+      close = @lock.synchronize do
+        @draining = true
+        idle = @connections.select { |connection| !connection.active? && !connection.closing? }
+        idle.each { |connection| connection.closing = true }
+        close_idle_signal
+        idle.map(&.io)
+      end
+      close.each do |io|
+        io.close
+      rescue IO::Error
+        # The peer may already have closed an idle keep-alive connection.
+      end
+      return 0 if @idle.closed?
+
+      remaining = deadline - Time.instant
+      return active_requests unless remaining.positive?
+
+      select
+      when @idle.receive?
+        0
+      when timeout(remaining)
+        active_requests
       end
     end
 
-    def stop_accepting : Nil
-      @lock.synchronize do
-        @accepting = false
+    def force_close : Nil
+      close = @lock.synchronize do
+        @connections.each { |connection| connection.closing = true }
+        @connections.map(&.io)
+      end
+      close.each do |io|
+        io.close
+      rescue IO::Error
+        # A request may complete while the timeout path closes transports.
       end
     end
 
-    def wait_until_drained : Nil
-      @lock.synchronize do
-        while @active_requests > 0
-          @drained.wait
-        end
+    def drained? : Bool
+      @lock.synchronize { @active == 0 }
+    end
+
+    private def request_started(context : ::HTTP::Server::Context) : {RequestCompletion?, ConnectionState?}
+      connection = @lock.synchronize do
+        current_connection = @connection_by_fiber[Fiber.current]?
+        return {nil, nil} unless current_connection
+        return {nil, current_connection} if @draining || current_connection.closing?
+        current_connection.active = true
+        @active += 1
+        current_connection
+      end
+
+      begin
+        scope = @scope_provider.enter_scope("request")
+        context.dependency_scope = scope
+        completion = RequestCompletion.new(self, connection, context, scope)
+        @lock.synchronize { connection.completion = completion }
+        {completion, connection}
+      rescue error : Exception
+        context.dependency_scope = nil
+        request_finished(connection)
+        raise error
+      end
+    end
+
+    private def active_requests : Int32
+      @lock.synchronize { @active }
+    end
+
+    private def close_idle_signal : Nil
+      @idle.close if @draining && @active == 0 && !@idle.closed?
+    end
+  end
+
+  private class DrainingHttpServer < ::HTTP::Server
+    def initialize(@requests : ConnectionDrainHandler)
+      super(@requests)
+    end
+
+    protected def dispatch(io) : Nil
+      connection = @requests.connection_started(io)
+      spawn do
+        @requests.attach_connection(connection)
+        handle_client(io)
+      ensure
+        @requests.connection_finished(connection)
       end
     end
   end
@@ -78,11 +299,17 @@ module LF::HTTP::AutoConfig
 
     getter configured_host = "0.0.0.0"
     getter configured_port = 8080
+    getter configured_drain_timeout = 30.seconds
 
-    @server : ::HTTP::Server?
+    @server : DrainingHttpServer?
+    @requests : ConnectionDrainHandler?
     @address : Socket::IPAddress?
-    @stopped = false
-    @request_drain = RequestDrainHandler.new
+    @stop_lock = Mutex.new
+    @stop_done = Channel(Nil).new
+    @stop_started = false
+    @stop_in_progress = false
+    @stop_complete = false
+    @stop_error : Exception?
 
     def initialize(&@app_builder : LF::ApplicationContext -> LF::HTTP::App)
     end
@@ -93,24 +320,28 @@ module LF::HTTP::AutoConfig
       begin
         @configured_host = config.get("http.host", "0.0.0.0")
         @configured_port = config.get("http.port", 8080)
+        drain_timeout_ms = config.get("http.drain_timeout_ms", 30_000)
         unless 0 <= @configured_port <= 65_535
           raise "http.port must be between 0 and 65535"
         end
+        raise "http.drain_timeout_ms must be positive" unless drain_timeout_ms > 0
+        @configured_drain_timeout = drain_timeout_ms.milliseconds
       rescue error : Exception
         raise ConfigurationError.new(error.message || error.class.to_s)
       end
 
       app = @app_builder.call(context)
-      @server = ::HTTP::Server.new([
+      handler = ::HTTP::Server.build_middleware([
         ::HTTP::LogHandler.new,
-        @request_drain,
-        LF::HTTP::DI::RequestScopeHandler.new(context),
         app,
       ])
+      requests = ConnectionDrainHandler.new(handler, context)
+      @requests = requests
+      @server = DrainingHttpServer.new(requests)
     end
 
     def bind : Socket::IPAddress
-      raise Error.new("HTTP extension is stopped") if @stopped
+      raise Error.new("HTTP extension is stopped") if stopped?
       return @address.as(Socket::IPAddress) if @address
 
       begin
@@ -132,15 +363,75 @@ module LF::HTTP::AutoConfig
     end
 
     def stopped? : Bool
-      @stopped
+      @stop_lock.synchronize { @stop_started }
     end
 
     def stop : Nil
-      return if @stopped
-      @stopped = true
-      @request_drain.stop_accepting
-      @server.try(&.close)
-      @request_drain.wait_until_drained
+      loop do
+        owner = false
+        wait : Channel(Nil)? = nil
+        immediate_error : Exception? = nil
+        complete = false
+
+        @stop_lock.synchronize do
+          if @stop_complete
+            immediate_error = @stop_error
+            complete = true
+          elsif @stop_in_progress
+            wait = @stop_done
+          elsif error = @stop_error
+            if @requests.try(&.drained?)
+              @stop_in_progress = true
+              @stop_done = Channel(Nil).new
+              owner = true
+            else
+              immediate_error = error
+            end
+          else
+            @stop_started = true
+            @stop_in_progress = true
+            @stop_done = Channel(Nil).new
+            owner = true
+          end
+        end
+
+        raise immediate_error.as(Exception) if immediate_error
+        return if complete
+
+        if wait_channel = wait
+          wait_channel.receive?
+          next
+        end
+
+        if owner
+          attempt_error : Exception? = nil
+          begin
+            deadline = Time.instant + @configured_drain_timeout
+            current_server = @server
+            current_server.try(&.close) unless current_server.try(&.closed?)
+            if requests = @requests
+              active = requests.drain_until(deadline)
+              unless active == 0
+                requests.force_close
+                raise DrainTimeoutError.new(active)
+              end
+            end
+          rescue error : Exception
+            attempt_error = error
+          ensure
+            done = @stop_lock.synchronize do
+              @stop_error = attempt_error
+              @stop_complete = attempt_error.nil? || !attempt_error.is_a?(LF::ApplicationExtension::StopIncomplete)
+              @stop_in_progress = false
+              @stop_done
+            end
+            done.close
+          end
+
+          raise attempt_error.as(Exception) if attempt_error
+          return
+        end
+      end
     end
 
     private def server : ::HTTP::Server

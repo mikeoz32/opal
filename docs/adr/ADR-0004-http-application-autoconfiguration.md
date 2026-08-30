@@ -50,10 +50,11 @@ UsersApi.setup_routes(router, scope_provider)
 ```
 
 At expansion time it registers the controller as a request-scoped bean and
-generates route closures. Constructor arguments use DI's existing
-name-then-type `resolve_dependency` behavior. Each route resolves its controller
-from the request child scope by a stable, fully-qualified internal bean name,
-so request dispatch uses a hash lookup and does not scan by type.
+generates route closures. `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, and
+`OPTIONS` have explicit controller annotations. Constructor arguments use DI's
+existing name-then-type `resolve_dependency` behavior. Each route resolves its
+controller from the request child scope by a stable, fully-qualified internal
+bean name, so request dispatch uses a hash lookup and does not scan by type.
 
 Route method arguments are limited to:
 
@@ -72,27 +73,42 @@ Application autoconfiguration passes `LF::ApplicationContext`.
 ### Discovery and server
 
 The integration discovers `LF::HTTP::Controller.includers` at compile time and
-orders them by fully-qualified class name. Startup builds one route table and
+orders them by fully-qualified class name. Startup builds one route table. A
+connection-aware server dispatch wrapper owns transport registration and invokes
 this handler chain:
 
-1. `HTTP::LogHandler`
-2. `LF::HTTP::AutoConfig::RequestDrainHandler`
-3. `LF::HTTP::DI::RequestScopeHandler`
-4. `LF::HTTP::App`
+1. `LF::HTTP::AutoConfig::ConnectionDrainHandler`
+2. `HTTP::LogHandler`
+3. `LF::HTTP::App`
 
-`RequestDrainHandler` rejects new work during shutdown and tracks active
-requests. `RequestScopeHandler` depends on `LF::DI::ScopeProvider`, creates a
-real child `LF::DI::Container` per request, stores it on the HTTP context, and
-always exits it.
+The connection drain handler rejects new work during shutdown and tracks
+response completion, idle keep-alive sockets, and upgraded connection work.
+It also creates the real child `LF::DI::Container`, stores it on the HTTP
+context, and exits it only after response output closes or upgraded work returns.
+This gives request-scoped dependencies the same ownership boundary as the
+transport work that may capture them. `RequestScopeHandler` remains available
+for manually assembled standalone handler chains that do not use HTTP
+autoconfiguration.
 
-`http.host` and `http.port` come from `LF::ConfigService`, with defaults
-`0.0.0.0` and `8080`. Port `0` is valid. Invalid values raise
+`http.host`, `http.port`, and `http.drain_timeout_ms` come from
+`LF::ConfigService`, with defaults `0.0.0.0`, `8080`, and `30000`. Port `0` is
+valid and the drain timeout must be positive. Invalid values raise
 `LF::HTTP::AutoConfig::ConfigurationError`.
 
 `run_http` blocks in `HTTP::Server#listen`. `Process.on_terminate` closes the
 server. Extension stop is idempotent. It first rejects new requests and closes
-the listening sockets, then waits for active request scopes to exit before
-application shutdown destroys root DI.
+the listening and idle sockets, then waits for active request scopes, response
+output, and upgraded work to exit before application shutdown destroys root DI.
+At the deadline it force-closes remaining transports and returns a typed
+`LF::HTTP::AutoConfig::DrainTimeoutError`. That error marks application shutdown
+as incomplete: new application resolution stays disabled, but root DI remains
+alive while request scopes can still reference it. Once the remaining work has
+exited, retrying shutdown completes extension stop and root DI disposal.
+
+Router method dispatch is exact; `HEAD` and `OPTIONS` require explicit routes.
+Method mismatch returns `405` with sorted `Allow` metadata. A caller may supply
+`LF::HTTP::Router::ErrorMapper` to replace the default error body without
+changing the status or `Allow` header.
 
 ## Performance
 

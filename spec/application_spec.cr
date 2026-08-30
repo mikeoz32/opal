@@ -109,6 +109,45 @@ class ApplicationSpecFailingExtension
   end
 end
 
+class ApplicationSpecIncompleteStopError < Exception
+  include LF::ApplicationExtension::StopIncomplete
+end
+
+class ApplicationSpecIncompleteExtension
+  include LF::ApplicationExtension
+
+  property can_stop = false
+  getter stop_calls = 0
+
+  def configure(context : LF::ApplicationContext) : Nil
+    context.register_bean(name: "incomplete_extension_probe", type: ApplicationSpecShutdownProbe) do |_scope|
+      ApplicationSpecShutdownProbe.new
+    end
+  end
+
+  def stop : Nil
+    @stop_calls += 1
+    raise ApplicationSpecIncompleteStopError.new("extension still active") unless @can_stop
+  end
+end
+
+class ApplicationSpecIncompleteConfigureExtension
+  include LF::ApplicationExtension
+
+  property can_stop = false
+  getter stop_calls = 0
+
+  def configure(context : LF::ApplicationContext) : Nil
+    context.resolve(ApplicationSpecShutdownProbe)
+    raise ApplicationSpecConfigureFailure.new("configure failed after starting work")
+  end
+
+  def stop : Nil
+    @stop_calls += 1
+    raise ApplicationSpecIncompleteStopError.new("partial extension still active") unless @can_stop
+  end
+end
+
 class ApplicationSpecConfigureFailure < Exception
 end
 
@@ -298,6 +337,38 @@ describe LF::ApplicationRuntime do
     ApplicationSpecShutdownProbe.destroy_calls.should eq(1)
   end
 
+  it "keeps root DI alive until an incomplete extension stop can be retried" do
+    ApplicationSpecShutdownProbe.reset
+    application = ApplicationSpecApp.bootstrap
+    trace = [] of String
+    application.install(ApplicationSpecExtension.new("dependency", trace))
+    extension = ApplicationSpecIncompleteExtension.new
+    application.install(extension)
+    application.resolve("incomplete_extension_probe", ApplicationSpecShutdownProbe)
+
+    error = expect_raises(LF::ApplicationRuntime::ShutdownError) do
+      application.shutdown
+    end
+
+    error.extension_errors.first.should be_a(ApplicationSpecIncompleteStopError)
+    error.container_error.should be_nil
+    application.shutdown_pending?.should be_true
+    application.closed?.should be_false
+    ApplicationSpecShutdownProbe.destroy_calls.should eq(0)
+    trace.should eq(["configure:dependency"])
+    expect_raises(LF::ApplicationRuntime::ClosedError) do
+      application.resolve(ApplicationSpecValue)
+    end
+
+    extension.can_stop = true
+    application.shutdown
+
+    extension.stop_calls.should eq(2)
+    application.closed?.should be_true
+    ApplicationSpecShutdownProbe.destroy_calls.should eq(1)
+    trace.should eq(["configure:dependency", "stop:dependency"])
+  end
+
   it "cleans up and closes the runtime when extension configuration fails" do
     ApplicationSpecShutdownProbe.reset
     application = ApplicationSpecApp.bootstrap
@@ -313,6 +384,36 @@ describe LF::ApplicationRuntime do
     expect_raises(LF::ApplicationRuntime::ClosedError) do
       application.resolve(ApplicationSpecValue)
     end
+  end
+
+  it "retains a partially configured extension when its stop is incomplete" do
+    ApplicationSpecShutdownProbe.reset
+    application = ApplicationSpecApp.bootstrap
+    trace = [] of String
+    application.install(ApplicationSpecExtension.new("dependency", trace))
+    extension = ApplicationSpecIncompleteConfigureExtension.new
+
+    error = expect_raises(LF::ApplicationRuntime::InstallError) do
+      application.install(extension)
+    end
+
+    error.configure_error.should be_a(ApplicationSpecConfigureFailure)
+    error.cleanup_errors.size.should eq(1)
+    error.cleanup_errors.first.should be_a(ApplicationSpecIncompleteStopError)
+    error.pending_runtime.should be(application)
+    extension.stop_calls.should eq(1)
+    application.shutdown_pending?.should be_true
+    application.closed?.should be_false
+    ApplicationSpecShutdownProbe.destroy_calls.should eq(0)
+    trace.should eq(["configure:dependency"])
+
+    extension.can_stop = true
+    application.shutdown
+
+    extension.stop_calls.should eq(2)
+    application.closed?.should be_true
+    ApplicationSpecShutdownProbe.destroy_calls.should eq(1)
+    trace.should eq(["configure:dependency", "stop:dependency"])
   end
 
   it "registers DI-managed services during bootstrap" do

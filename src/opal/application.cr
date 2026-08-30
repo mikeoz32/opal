@@ -12,6 +12,12 @@ module LF
   end
 
   module ApplicationExtension
+    # Marks an extension stop failure as retryable because application-owned
+    # resources may still be in use. ApplicationRuntime keeps root DI alive
+    # until a later shutdown attempt reports that the extension has stopped.
+    module StopIncomplete
+    end
+
     abstract def configure(context : ApplicationContext) : Nil
     abstract def stop : Nil
   end
@@ -82,14 +88,20 @@ module LF
     class InstallError < Error
       getter configure_error : Exception
       getter cleanup_errors : Array(Exception)
+      getter pending_runtime : ApplicationRuntime?
 
-      def initialize(@configure_error : Exception, @cleanup_errors : Array(Exception))
+      def initialize(
+        @configure_error : Exception,
+        @cleanup_errors : Array(Exception),
+        @pending_runtime : ApplicationRuntime? = nil,
+      )
         details = cleanup_errors.map { |error| error.message || error.class.to_s }
         super("Application extension installation and cleanup failed: #{details.join(" | ")}")
       end
     end
 
     @closed = false
+    @shutdown_started = false
     @context : ApplicationContext
     @extensions = [] of ApplicationExtension
 
@@ -99,6 +111,10 @@ module LF
 
     def closed? : Bool
       @closed
+    end
+
+    def shutdown_pending? : Bool
+      @shutdown_started && !@closed
     end
 
     def resolve(type : T.class) : T forall T
@@ -118,21 +134,36 @@ module LF
         extension.configure(@context)
       rescue configure_error : Exception
         cleanup_errors = [] of Exception
+        stop_incomplete = false
         begin
           extension.stop
         rescue cleanup_error : Exception
           cleanup_errors << cleanup_error
+          if cleanup_error.is_a?(ApplicationExtension::StopIncomplete)
+            # The partially configured extension may still own work that uses
+            # application beans. Retain it as the newest extension and leave
+            # its dependencies and root DI alive for a later shutdown retry.
+            @extensions << extension
+            @shutdown_started = true
+            stop_incomplete = true
+          end
         end
-        begin
-          shutdown
-        rescue cleanup_error : Exception
-          cleanup_errors << cleanup_error
+        unless stop_incomplete
+          begin
+            shutdown
+          rescue cleanup_error : Exception
+            cleanup_errors << cleanup_error
+          end
         end
 
         if cleanup_errors.empty?
           raise configure_error
         else
-          raise InstallError.new(configure_error, cleanup_errors)
+          raise InstallError.new(
+            configure_error,
+            cleanup_errors,
+            stop_incomplete ? self : nil
+          )
         end
       end
 
@@ -142,16 +173,26 @@ module LF
 
     def shutdown : Nil
       raise AlreadyClosedError.new if @closed
-      @closed = true
+      @shutdown_started = true
 
       extension_errors = [] of Exception
-      @extensions.reverse_each do |extension|
+      extension_index = @extensions.size - 1
+      while extension_index >= 0
+        extension = @extensions[extension_index]
         begin
           extension.stop
         rescue error : Exception
           extension_errors << error
+          if error.is_a?(ApplicationExtension::StopIncomplete)
+            # Earlier extensions may own resources still used by the incomplete
+            # extension. Preserve their reverse-order shutdown dependency.
+            @extensions = @extensions[0..extension_index]
+            raise ShutdownError.new(extension_errors, nil)
+          end
         end
+        extension_index -= 1
       end
+
       @extensions.clear
 
       container_error : Exception? = nil
@@ -159,6 +200,8 @@ module LF
         @container.shutdown
       rescue error : Exception
         container_error = error
+      ensure
+        @closed = true
       end
 
       if extension_errors.empty?
@@ -197,7 +240,7 @@ module LF
     end
 
     private def ensure_open : Nil
-      raise ClosedError.new if @closed
+      raise ClosedError.new if @shutdown_started
     end
   end
 end
@@ -333,13 +376,14 @@ macro finished
             created_runtime
           rescue error : Exception
             if active_runtime = runtime
-              unless active_runtime.closed?
+              unless active_runtime.closed? || active_runtime.shutdown_pending?
                 begin
                   active_runtime.shutdown
                 rescue cleanup_error : Exception
                   raise LF::ApplicationRuntime::InstallError.new(
                     error,
-                    [cleanup_error] of Exception
+                    [cleanup_error] of Exception,
+                    active_runtime.shutdown_pending? ? active_runtime : nil
                   )
                 end
               end

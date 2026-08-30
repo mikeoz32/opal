@@ -41,6 +41,16 @@ class ControllerDISpecController
     "#{@controller_di_spec_service.value}:#{@instance}"
   end
 
+  @[LF::HTTP::Controller::Head("/constructor-di")]
+  def head : String
+    "head:#{@instance}"
+  end
+
+  @[LF::HTTP::Controller::Options("/constructor-di")]
+  def options : String
+    "GET, HEAD, OPTIONS"
+  end
+
   @[LF::HTTP::Controller::Get("/constructor-di/:id")]
   def show_with_id(id : Int32) : String
     "#{@controller_di_spec_service.value}:#{id}"
@@ -51,10 +61,14 @@ class ControllerDISpecController
   end
 end
 
-private def call_controller_app(app : LF::HTTP::App, root : LF::DI::DefaultContainer) : HTTP::Client::Response
+private def call_controller_app(
+  app : LF::HTTP::App,
+  root : LF::DI::DefaultContainer,
+  method = "GET",
+) : HTTP::Client::Response
   io = IO::Memory.new
   context = HTTP::Server::Context.new(
-    HTTP::Request.new("GET", "/constructor-di"),
+    HTTP::Request.new(method, "/constructor-di"),
     HTTP::Server::Response.new(io)
   )
   scope = root.enter_scope("request")
@@ -108,6 +122,26 @@ describe LF::HTTP::Controller do
     response = HTTP::Client::Response.from_io(IO::Memory.new(io.to_s))
     response.status.should eq(HTTP::Status::INTERNAL_SERVER_ERROR)
     response.body.should eq("DI context not initialized")
+    root.shutdown
+  end
+
+  it "registers explicit HEAD and OPTIONS controller routes" do
+    ControllerDISpecController.reset
+    root = LF::DI::DefaultContainer.new
+    root.add_bean(name: "controller_di_spec_service", type: ControllerDISpecService) do |_scope|
+      ControllerDISpecService.new("injected")
+    end
+    app = LF::HTTP::App.new do |router|
+      ControllerDISpecController.setup_routes(router, root)
+    end
+
+    call_controller_app(app, root, "HEAD").status.should eq(HTTP::Status::OK)
+    options = call_controller_app(app, root, "OPTIONS")
+    options.status.should eq(HTTP::Status::OK)
+    options.body.should eq("GET, HEAD, OPTIONS")
+    unsupported = call_controller_app(app, root, "TRACE")
+    unsupported.status.should eq(HTTP::Status::METHOD_NOT_ALLOWED)
+    unsupported.headers["Allow"].should eq("GET, HEAD, OPTIONS")
     root.shutdown
   end
 

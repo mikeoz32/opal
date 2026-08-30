@@ -5,10 +5,16 @@ module LF::HTTP
   class Router
     include ::HTTP::Handler
 
-    @root : LF::Routing::Trie::Node
+    alias ErrorMapper = ::HTTP::Server::Context, ::HTTP::Status, String -> Nil
 
-    def initialize
+    @root : LF::Routing::Trie::Node
+    @error_mapper : ErrorMapper
+
+    def initialize(error_mapper : ErrorMapper? = nil)
       @root = LF::Routing::Trie::Node.new
+      @error_mapper = error_mapper || ->(context : ::HTTP::Server::Context, status : ::HTTP::Status, body : String) do
+        default_error(context, status, body)
+      end
     end
 
     def add(path : String, methods : Set(String) = Set{"GET"}, &handler : ::HTTP::Server::Context, Hash(String, String) -> Nil)
@@ -39,6 +45,14 @@ module LF::HTTP
       add(path, Set{"PATCH"}, &handler)
     end
 
+    def head(path : String, &handler : ::HTTP::Server::Context, Hash(String, String) -> Nil)
+      add(path, Set{"HEAD"}, &handler)
+    end
+
+    def options(path : String, &handler : ::HTTP::Server::Context, Hash(String, String) -> Nil)
+      add(path, Set{"OPTIONS"}, &handler)
+    end
+
     def call(context : ::HTTP::Server::Context) : Nil
       result = @root.search(context.request.path)
       unless result.matched?
@@ -49,12 +63,17 @@ module LF::HTTP
       if handler = result.handler_for(context.request.method)
         handler.call(context, result.params)
       else
+        context.response.headers["Allow"] = result.allowed_methods.join(", ")
         write_status(context, ::HTTP::Status::METHOD_NOT_ALLOWED, "Method Not Allowed")
       end
     end
 
     private def write_status(context : ::HTTP::Server::Context, status : ::HTTP::Status, body : String) : Nil
       context.response.status = status
+      @error_mapper.call(context, status, body)
+    end
+
+    private def default_error(context : ::HTTP::Server::Context, status : ::HTTP::Status, body : String) : Nil
       context.response.content_type = "text/plain"
       context.response.print body
     end

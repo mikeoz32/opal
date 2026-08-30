@@ -78,6 +78,30 @@ describe "conditional application autoconfiguration" do
     result[:error].should eq("")
   end
 
+  it "exposes a pending runtime when bootstrap cleanup is incomplete" do
+    fixture = File.expand_path(
+      "fixtures/application/autoconfiguration_incomplete_cleanup.cr",
+      __DIR__
+    )
+
+    result = run_autoconfiguration_fixture(fixture)
+
+    result[:status].success?.should be_true
+    result[:error].should eq("")
+  end
+
+  it "exposes a runtime that becomes pending while cleaning up another bootstrap failure" do
+    fixture = File.expand_path(
+      "fixtures/application/autoconfiguration_failure_then_incomplete_shutdown.cr",
+      __DIR__
+    )
+
+    result = run_autoconfiguration_fixture(fixture)
+
+    result[:status].success?.should be_true
+    result[:error].should eq("")
+  end
+
   it "keeps package-specific logic out of Application and DI" do
     application_source = File.read(
       File.expand_path("../src/opal/application.cr", __DIR__)

@@ -20,9 +20,14 @@ All notable changes to Opal are documented in this file.
 - explicit SQLite/PostgreSQL schema inspection, deterministic typed diffs, and
   guarded Crystal migration source generation;
 - entity-declared lookup ID enforcement and typed delete-by-ID scheduling;
-- end-to-end SQLite Data and Todo examples with process-level verification.
+- end-to-end SQLite Data and Todo examples with process-level verification;
+- bounded transport-aware HTTP drain with typed timeout reporting;
+- explicit controller `HEAD` and `OPTIONS` routes, deterministic HTTP 405
+  `Allow` metadata, and application error-body mapping.
 
 ### Changed
 
 - minimum supported Crystal version is 1.21.0;
-- framework package boundaries keep HTTP, Application, DI, and Data optional.
+- framework package boundaries keep HTTP, Application, DI, and Data optional;
+- incomplete extension stops preserve dependent extensions and root DI until a
+  safe shutdown retry.
