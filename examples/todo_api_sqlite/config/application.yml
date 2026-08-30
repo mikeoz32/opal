@@ -4,3 +4,5 @@ http:
 
 database:
   url: sqlite3://./todo.db
+  migrations:
+    run_on_startup: true
