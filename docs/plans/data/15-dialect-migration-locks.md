@@ -16,6 +16,13 @@ transactional history conflict reconciliation. A dialect that cannot provide a
 safe lock or transactional DDL must fail startup rather than silently claim
 concurrent migration safety.
 
+`DialectCapability::MigrationLock` means that the dialect provides an explicit
+safe coordination strategy; it does not mean every database has an engine lock.
+SQLite returns `TransactionalHistoryMigrationLock`, a no-op session object that
+names its transactional-DDL plus unique-history-row strategy. PostgreSQL returns
+a real session advisory lock. This distinction prevents SQLite reconciliation
+from being described as a lock it does not acquire.
+
 The lock must be acquired and released on the same connection. Release is
 idempotent and runs on every failure path. Lock identifiers are deterministic
 and namespaced for the application/database.
