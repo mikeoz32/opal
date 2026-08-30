@@ -307,6 +307,7 @@ Public Data guides:
 - [transactions and repositories](docs/data/transactions-and-repositories.md)
 - [queries](docs/data/queries.md)
 - [migrations](docs/data/migrations.md)
+- [schema diff and migration generation](docs/data/schema-generation.md)
 - [autoconfiguration](docs/data/autoconfiguration.md)
 - [raw SQL and converters](docs/data/raw-sql-and-converters.md)
 
@@ -380,7 +381,8 @@ database:
     run_on_startup: true
 ```
 
-`database.url` is required and currently supports the `sqlite3` scheme.
+`database.url` is required and supports the `sqlite3` and `postgres` schemes.
+Applications still require the matching concrete `sqlite3` or `pg` driver.
 Startup migrations default to `false`; when enabled, exactly one
 `LF::Data::MigrationSet` bean must exist. If HTTP autoconfiguration is also
 enabled, HTTP stops first, then the DataSource closes, then DI disposes its

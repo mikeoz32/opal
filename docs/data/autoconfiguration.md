@@ -28,10 +28,12 @@ database:
     run_on_startup: true
 ```
 
-`database.url` is required. The adapter selects SQLite from the `sqlite3`
-scheme, opens one DataSource, registers that exact instance as a singleton, and
-owns its close. Startup migrations default to `false`; when enabled, exactly
-one `MigrationSet` bean must exist and finishes before bootstrap returns.
+`database.url` is required. The adapter selects SQLite from `sqlite3` and
+PostgreSQL from `postgres`, opens one DataSource, registers that exact instance
+as a singleton, and owns its close. The application must still require the
+matching concrete driver (`sqlite3` or `pg`). Startup migrations default to
+`false`; when enabled, exactly one `MigrationSet` bean must exist and finishes
+before bootstrap returns.
 
 Invalid adapter configuration raises
 `LF::Data::AutoConfig::ConfigurationError`. Missing-driver, pool, connection,

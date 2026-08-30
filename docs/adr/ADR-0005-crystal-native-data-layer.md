@@ -616,16 +616,22 @@ This prevents the base contract from assuming SQLite's last-insert-ID behavior
 and permits a future PostgreSQL dialect to use `RETURNING` without changing
 EntityManager's public API.
 
-The v1 concrete implementation is:
+The concrete implementations are:
 
 ```crystal
 LF::Data::Dialects::SQLite < LF::Data::Dialect
+LF::Data::Dialects::PostgreSQL < LF::Data::Dialect
 ```
 
-It lives under the optional `opal/data/dialects/sqlite` entrypoint. It uses
+SQLite lives under the optional `opal/data/dialects/sqlite` entrypoint. It uses
 double-quoted identifiers, `?` placeholders, SQLite pagination,
 `LastInsertId`, and SQLite schema rendering. It does not require or register
 the `sqlite3` driver; the application must require that shard itself.
+
+PostgreSQL lives under the optional `opal/data/dialects/postgresql` entrypoint.
+It uses double-quoted identifiers, numbered `$1` placeholders, standard offset
+pagination, `ReturningRow`, and PostgreSQL schema rendering. It does not require
+or register the `pg` driver; the application must require that shard itself.
 
 Schema behavior is separated from DML rendering. The base package defines
 typed schema operations and an abstract `SchemaRenderer`. SQLite supplies
@@ -634,13 +640,14 @@ DataSource dialect for a schema renderer and raises
 `UnsupportedSchemaOperationError` when a capability is absent.
 
 `DialectCapability` is a closed framework enum for behavior that changes
-execution, initially generated keys, transactional DDL, add column, rename
-column, and foreign-key DDL. It is not a registry of arbitrary vendor features.
+execution: generated keys, transactional DDL, safe migration locking, schema
+inspection, add column, rename column, and foreign-key DDL. It is not a
+registry of arbitrary vendor features.
 
 The dialect contract does not normalize arbitrary SQL, isolation levels,
-native types, JSON operators, upsert syntax, locking clauses, or driver value
-conversion. PostgreSQL and MySQL dialects are deferred and will receive
-separate execution plans and integration suites.
+vendor-only types, JSON operators, upsert syntax, row-locking clauses, or
+driver value conversion. MySQL and further dialects require separate execution
+plans and integration suites.
 
 ## Migrations
 
@@ -695,32 +702,45 @@ an error: the executable refuses to run against a schema newer than the set it
 knows how to describe. The history remains forward-only and no rollback is
 attempted.
 
-The runner first opens one datasource transaction to ensure and read history.
-It then opens one independent datasource transaction per pending migration. The
-migration `up` method and its history insert use the same checked-out connection;
-a failure in either rolls back that migration and stops later versions, while
-previously committed versions remain applied. Driver and SQL exceptions keep
-their original types.
+The runner pins one checked-out datasource connection for the migration session
+and obtains the dialect migration-lock strategy before planning. It opens one
+transaction to ensure and read history, then one independent transaction per
+pending migration on that same connection. The migration `up` method and its
+history insert share a transaction; a failure in either rolls back that
+migration and stops later versions, while previously committed versions remain
+applied. Driver and SQL exceptions keep their original types.
 
-Concurrent runners use database transactions and the `_lf_migrations.version`
-primary key as their coordination mechanism. There is no process-global lock.
-Two runners may both observe a version as pending, but at most one can commit
-the migration side effects together with its history row. The loser rereads
-history and treats an exact committed version/name as success without rerunning
-`up`; otherwise the original error propagates. This atomicity covers database
-work on dialects with transactional DDL; arbitrary external side effects
-performed by migration code are outside the transaction guarantee. Pending
-migrations are rejected when the dialect does not advertise
-`DialectCapability::TransactionalDDL`.
+Concurrent PostgreSQL runners use a session advisory lock acquired before
+history planning. Its two-key identifier hashes the current database and an
+application namespace, and acquisition has a bounded timeout. SQLite has no
+advisory lock: it explicitly retains transactional DDL plus the
+`_lf_migrations.version` primary-key reconciliation strategy. Two SQLite
+runners may observe a version as pending, but at most one can commit its effects
+and history row; the loser rereads exact version/name history. There is no
+process-global lock. Arbitrary external side effects remain outside the
+transaction guarantee. A dialect missing either `TransactionalDDL` or
+`MigrationLock` capability is rejected before history SQL. Lock release is
+idempotent, stays on the pinned connection, and cleanup failure is aggregated
+with any primary migration failure.
 
-The portable schema DSL covers create/drop table, scalar columns, generated
-primary keys, foreign keys, unique constraints, indexes, add column, and rename
-column. Unsupported SQLite alterations raise
+The portable schema DSL covers create/drop/rename table, scalar columns,
+generated primary keys, foreign keys, unique constraints, indexes, add column,
+and rename column. Unsupported SQLite alterations raise
 `LF::Data::UnsupportedSchemaOperationError`. Raw SQL is an explicit method on
 the schema editor.
 
-Migrations are forward-only. `down`, automatic schema generation from entity
-metadata, automatic destructive changes, and source checksums are excluded.
+SQLite and PostgreSQL provide dialect-owned schema introspection. An application
+may explicitly declare a `Schema::Model`, compare it with an inspected snapshot,
+review a deterministic typed diff, and generate a normal Crystal migration
+class. Inspection and generation never execute schema changes. Rename hints are
+explicit; destructive table/index operations require a generation opt-in;
+unresolved column or constraint changes refuse source generation. The migration
+history table is unmanaged by default, and application tables may be explicitly
+excluded before dialect metadata inspection.
+
+Migrations remain forward-only. `down`, automatic schema generation from entity
+metadata, startup schema synchronization, automatic destructive changes, and
+source checksums are excluded.
 
 Schema, history select, and history insert statements participate in the same
 datasource listener stream as entity operations. `StatementObserver` belongs to

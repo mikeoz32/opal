@@ -224,6 +224,62 @@ module LF
       end
     end
 
+    class MigrationLockConfigurationError < MigrationError
+      getter namespace : String
+      getter timeout : Time::Span
+
+      def initialize(@namespace : String, @timeout : Time::Span, reason : String)
+        super(
+          :invalid_lock_configuration,
+          message: "Invalid migration lock configuration: #{reason}"
+        )
+      end
+    end
+
+    class MigrationLockTimeoutError < MigrationError
+      getter dialect : String
+      getter namespace : String
+      getter timeout : Time::Span
+
+      def initialize(
+        @dialect : String,
+        @namespace : String,
+        @timeout : Time::Span,
+      )
+        super(
+          :lock_timeout,
+          message: "Timed out acquiring #{dialect.inspect} migration lock " \
+                   "for namespace #{namespace.inspect} after #{timeout}"
+        )
+      end
+    end
+
+    class MigrationLockReleaseError < MigrationError
+      getter dialect : String
+      getter namespace : String
+
+      def initialize(@dialect : String, @namespace : String)
+        super(
+          :lock_release_failed,
+          message: "Dialect #{dialect.inspect} did not release migration lock " \
+                   "for namespace #{namespace.inspect}"
+        )
+      end
+    end
+
+    class MigrationLockCleanupError < MigrationError
+      getter primary_error : Exception
+      getter cleanup_error : Exception
+
+      def initialize(@primary_error : Exception, @cleanup_error : Exception)
+        super(
+          :lock_cleanup_failed,
+          message: "Migration failed and migration lock cleanup also failed",
+          cause: primary_error
+        )
+      end
+    end
+
     class ForeignKeySetupError < Error
       getter dialect : String
       getter value : Int64
@@ -242,6 +298,54 @@ module LF
 
       def initialize(@dialect : String, @operation : String)
         super("Dialect #{dialect.inspect} does not support schema operation #{operation.inspect}")
+      end
+    end
+
+    class SchemaInspectionError < Error
+      getter dialect : String
+
+      def initialize(@dialect : String, message : String, cause : Exception? = nil)
+        super("Cannot inspect #{dialect.inspect} schema: #{message}", cause)
+      end
+    end
+
+    class UnsupportedSchemaInspectionError < SchemaInspectionError
+      def initialize(dialect : String)
+        super(dialect, "dialect does not provide schema introspection")
+      end
+    end
+
+    class UnsafeSchemaChangeError < Error
+      getter changes : Array(String)
+
+      def initialize(@changes : Array(String))
+        super(
+          "Schema diff contains destructive changes; pass allow_destructive: true " \
+          "after review: #{changes.join(", ")}"
+        )
+      end
+    end
+
+    class UnresolvedSchemaDiffError < Error
+      getter diagnostics : Array(Schema::DiffDiagnostic)
+
+      def initialize(@diagnostics : Array(Schema::DiffDiagnostic))
+        super(
+          "Schema diff requires explicit migration decisions: " \
+          "#{diagnostics.map(&.message).join("; ")}"
+        )
+      end
+    end
+
+    class EmptySchemaDiffError < Error
+      def initialize
+        super("Schema diff is empty; no migration source was generated")
+      end
+    end
+
+    class MigrationSourceGenerationError < Error
+      def initialize(reason : String)
+        super("Cannot generate migration source: #{reason}")
       end
     end
   end

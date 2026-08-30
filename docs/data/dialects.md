@@ -2,7 +2,8 @@
 
 Data core depends only on `LF::Data::Dialect`. A concrete dialect owns SQL
 quoting, placeholders, static plan policy, generated-key behavior, schema
-rendering, connection initialization, and capability reporting.
+rendering and introspection, connection initialization, and capability
+reporting.
 
 SQLite is loaded separately:
 
@@ -17,10 +18,28 @@ their driver explicitly. Database URL query parameters are passed unchanged to
 `crystal-db`, so pool configuration stays in the URL rather than new Opal YAML
 keys.
 
+PostgreSQL follows the same boundary:
+
+```crystal
+require "opal/data"
+require "opal/data/dialects/postgresql"
+require "pg"
+```
+
+The PostgreSQL dialect uses numbered `$1` binds, `INSERT ... RETURNING` for
+generated IDs, native boolean/timestamp/byte types, transactional DDL, and a
+database/application-namespaced advisory migration lock. Requiring the dialect
+does not load or register `crystal-pg`; the application owns that choice.
+
+SQLite and PostgreSQL both advertise `SchemaInspection`. Introspection
+normalizes only the portable schema types and artifacts that Opal can represent;
+vendor-only types and expression or partial indexes fail with
+`SchemaInspectionError` rather than being silently omitted.
+
 Unsupported operations fail before partial execution with typed Opal errors.
 Driver, pool, connection, and SQL failures retain their original `DB::Error`
 types.
 
-PostgreSQL and MySQL are not part of Data v1. Adding a dialect must not add
-`case dialect` branches, driver dependencies, or mutable registries to Data
-core.
+MySQL and any additional dialects remain future packages. Adding a dialect
+must not add `case dialect` branches, driver dependencies, or mutable
+registries to Data core.

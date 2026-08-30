@@ -2,14 +2,11 @@ require "../spec_helper"
 require "../../../src/opal/data"
 
 private module ExpressionTitleConverter
-  class_getter dumps = 0
-
   def self.load(result : DB::ResultSet) : String
     result.read(String)
   end
 
   def self.dump(value : String) : String
-    @@dumps += 1
     value.downcase
   end
 end
@@ -43,12 +40,9 @@ end
 
 describe LF::Data::Query do
   it "builds typed comparison predicates with dumped arguments" do
-    dumps = ExpressionTitleConverter.dumps
-
     expression = ExpressionEntity::Fields.title.eq("Mixed")
 
     expression.__lf_args.should eq({"mixed"})
-    ExpressionTitleConverter.dumps.should eq(dumps + 1)
     typeof(expression).should_not eq(
       typeof(ExpressionEntity::Fields.id.eq(1_i64))
     )

@@ -6,7 +6,8 @@
 **Goal:** Compare declared schema metadata with an inspected database schema
 and generate explicit migration plans.
 
-**Prerequisite:** Plans 02, 08, 14, and the relationship metadata from Plan 16.
+**Prerequisite:** Plans 02, 08, and 14. Relationship-derived schema metadata
+from Plan 16 extends this contract but does not block an explicit schema model.
 
 ## Scope
 
@@ -17,6 +18,9 @@ explicit opt-in marker and must be visible in the generated plan.
 
 Entity mapping remains separate from schema authority unless an application
 explicitly supplies a schema model. No startup auto-sync is introduced.
+The initial generator compares portable tables, columns, constraints, and
+indexes already represented by the schema DSL. Relationship declarations from
+Plan 16 may later populate that model; they do not create a global registry.
 
 ## Tasks
 
@@ -25,7 +29,8 @@ explicitly supplies a schema model. No startup auto-sync is introduced.
 3. Produce deterministic typed operation plans.
 4. Detect ambiguous renames and destructive changes.
 5. Generate migration source with stable ordering and readable diagnostics.
-6. Test SQLite and PostgreSQL differences, empty diffs, and rollback plans.
+6. Test SQLite and PostgreSQL differences, empty diffs, destructive guards,
+   and generated-source compatibility with `MigrationRunner`.
 
 ## Definition Of Done
 

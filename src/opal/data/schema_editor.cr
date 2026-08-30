@@ -23,6 +23,12 @@ module LF
         execute(Schema::DropTable.new(name))
       end
 
+      def rename_table(from : String, to : String) : Nil
+        Schema.validate_identifier(from)
+        Schema.validate_identifier(to)
+        execute(Schema::RenameTable.new(from, to))
+      end
+
       def add_column(table_name : String, & : Schema::TableBuilder ->) : Nil
         Schema.validate_identifier(table_name)
         builder = Schema::TableBuilder.new(table_name)

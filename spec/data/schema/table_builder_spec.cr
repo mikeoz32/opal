@@ -157,13 +157,14 @@ describe LF::Data::Schema::TableBuilder do
     operations = [] of LF::Data::Schema::Operation
     operations << LF::Data::Schema::CreateTable.new(table.build)
     operations << LF::Data::Schema::DropTable.new("todos")
+    operations << LF::Data::Schema::RenameTable.new("todos", "tasks")
     operations << LF::Data::Schema::AddColumn.new("todos", column)
     operations << LF::Data::Schema::RenameColumn.new("todos", "old", "new")
     operations << LF::Data::Schema::CreateIndex.new("todos", index)
     operations << LF::Data::Schema::DropIndex.new("idx_todos_id")
     operations << LF::Data::Schema::RawSQL.new("backfill", "UPDATE todos SET id = id")
 
-    operations.size.should eq(7)
+    operations.size.should eq(8)
     operations.last.as(LF::Data::Schema::RawSQL).name.should eq("backfill")
   end
 end

@@ -135,6 +135,8 @@ describe LF::Data::Dialects::SQLite::SchemaRenderer do
         events = [] of LF::Data::StatementCompletionEvent
         schema = sqlite_schema_editor(connection, events)
         schema.create_table("todos") { |table| table.generated_id("id") }
+        schema.rename_table("todos", "tasks")
+        schema.rename_table("tasks", "todos")
         schema.add_column("todos") do |table|
           table.bool("completed", null: false, default: false)
         end
@@ -146,6 +148,8 @@ describe LF::Data::Dialects::SQLite::SchemaRenderer do
 
         events.map { |event| {event.entity_name, event.sql} }.should eq([
           {"todos", %(CREATE TABLE "todos" ("id" INTEGER PRIMARY KEY AUTOINCREMENT))},
+          {"tasks", %(ALTER TABLE "todos" RENAME TO "tasks")},
+          {"todos", %(ALTER TABLE "tasks" RENAME TO "todos")},
           {"todos", %(ALTER TABLE "todos" ADD COLUMN "completed" INTEGER NOT NULL DEFAULT 0)},
           {"todos", %(ALTER TABLE "todos" RENAME COLUMN "completed" TO "done")},
           {"idx_todos_done", %(CREATE UNIQUE INDEX "idx_todos_done" ON "todos" ("done"))},
@@ -153,7 +157,7 @@ describe LF::Data::Dialects::SQLite::SchemaRenderer do
           {"idx_todos_done", %(DROP INDEX "idx_todos_done")},
           {"todos", %(DROP TABLE "todos")},
         ])
-        events[4].rows_affected.should eq(1_i64)
+        events[6].rows_affected.should eq(1_i64)
         LF::DataSpecSupport::SQLiteDatabase.assert_table_missing!(database, "todos")
       end
     end

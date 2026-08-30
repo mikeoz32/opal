@@ -88,6 +88,17 @@ describe LF::Data::AutoConfig do
     end
   end
 
+  it "selects PostgreSQL without loading or configuring the concrete driver" do
+    with_data_autoconfig_config(
+      "database:\n  url: postgres://opal:secret@db.example.test/opal\n"
+    ) do |path|
+      parsed = LF::Data::AutoConfig::Configuration.load(LF::ConfigService.new(path))
+
+      parsed.url.should eq("postgres://opal:secret@db.example.test/opal")
+      parsed.dialect.should be_a(LF::Data::Dialects::PostgreSQL)
+    end
+  end
+
   it "requires database.url to be a String" do
     with_data_autoconfig_config("database:\n  url: 42\n") do |path|
       error = expect_raises(LF::Data::AutoConfig::ConfigurationError) do
@@ -123,13 +134,13 @@ describe LF::Data::AutoConfig do
 
   it "rejects unsupported database schemes without leaking credentials" do
     with_data_autoconfig_config(
-      "database:\n  url: postgres://user:password@example.test/app\n"
+      "database:\n  url: mysql://user:password@example.test/app\n"
     ) do |path|
       error = expect_raises(LF::Data::AutoConfig::ConfigurationError) do
         LF::Data::AutoConfig::Configuration.load(LF::ConfigService.new(path))
       end
 
-      error.message.not_nil!.should contain("Unsupported database scheme: postgres")
+      error.message.not_nil!.should contain("Unsupported database scheme: mysql")
       error.message.not_nil!.should_not contain("user")
       error.message.not_nil!.should_not contain("password")
     end
