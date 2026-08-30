@@ -2,7 +2,8 @@
 
 Data core depends only on `LF::Data::Dialect`. A concrete dialect owns SQL
 quoting, placeholders, static plan policy, generated-key behavior, schema
-rendering, connection initialization, and capability reporting.
+rendering and introspection, connection initialization, and capability
+reporting.
 
 SQLite is loaded separately:
 
@@ -29,6 +30,11 @@ The PostgreSQL dialect uses numbered `$1` binds, `INSERT ... RETURNING` for
 generated IDs, native boolean/timestamp/byte types, transactional DDL, and a
 database/application-namespaced advisory migration lock. Requiring the dialect
 does not load or register `crystal-pg`; the application owns that choice.
+
+SQLite and PostgreSQL both advertise `SchemaInspection`. Introspection
+normalizes only the portable schema types and artifacts that Opal can represent;
+vendor-only types and expression or partial indexes fail with
+`SchemaInspectionError` rather than being silently omitted.
 
 Unsupported operations fail before partial execution with typed Opal errors.
 Driver, pool, connection, and SQL failures retain their original `DB::Error`

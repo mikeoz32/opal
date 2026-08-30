@@ -43,5 +43,7 @@ migration-lock strategy fails before history SQL runs.
 statements use the DataSource listener stream.
 
 Applications may run migrations as a deployment step or enable startup
-migrations through Data autoconfiguration. V1 has no `down`, schema diff,
-entity-driven schema generation, destructive auto-sync, or source checksums.
+migrations through Data autoconfiguration. Explicit, read-only schema diff and
+Crystal migration source generation are documented in the
+[schema generation guide](schema-generation.md). There is no `down`,
+entity-driven schema inference, destructive auto-sync, or source checksum.

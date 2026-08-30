@@ -55,7 +55,7 @@ release prerequisites.
 | 15 | [Dialect-specific migration locks](data/15-dialect-migration-locks.md) | explicit concurrent migration safety | 08, 14 |
 | 16 | [Relationships and cascades](data/16-relationships-and-cascades.md) | explicit relationship metadata and flush policies | 04-08, 13-14 |
 | 17 | [Repository and query API](data/17-repository-query-api.md) | typed convenience API over existing queries | 05-07, 13 |
-| 18 | [Schema diff and migration generation](data/18-schema-diff-and-migration-generation.md) | deterministic schema plans and source generation | 02, 08, 14, 16 |
+| 18 | [Schema diff and migration generation](data/18-schema-diff-and-migration-generation.md) | deterministic schema plans and source generation | 02, 08, 14; extended by 16 |
 
 Plans 01 through 08 deliver a complete standalone Data layer before any
 Application integration starts. Within that boundary, Plan 08 depends only on

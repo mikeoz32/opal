@@ -307,6 +307,7 @@ Public Data guides:
 - [transactions and repositories](docs/data/transactions-and-repositories.md)
 - [queries](docs/data/queries.md)
 - [migrations](docs/data/migrations.md)
+- [schema diff and migration generation](docs/data/schema-generation.md)
 - [autoconfiguration](docs/data/autoconfiguration.md)
 - [raw SQL and converters](docs/data/raw-sql-and-converters.md)
 

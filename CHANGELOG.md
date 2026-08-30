@@ -17,6 +17,8 @@ All notable changes to Opal are documented in this file.
   rendering, and real-service integration coverage;
 - connection-pinned migration sessions with PostgreSQL advisory locks and
   explicit SQLite transactional-history coordination;
+- explicit SQLite/PostgreSQL schema inspection, deterministic typed diffs, and
+  guarded Crystal migration source generation;
 - end-to-end SQLite Data and Todo examples with process-level verification.
 
 ### Changed

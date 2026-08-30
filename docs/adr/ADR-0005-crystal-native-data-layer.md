@@ -640,9 +640,9 @@ DataSource dialect for a schema renderer and raises
 `UnsupportedSchemaOperationError` when a capability is absent.
 
 `DialectCapability` is a closed framework enum for behavior that changes
-execution: generated keys, transactional DDL, safe migration locking, add
-column, rename column, and foreign-key DDL. It is not a registry of arbitrary
-vendor features.
+execution: generated keys, transactional DDL, safe migration locking, schema
+inspection, add column, rename column, and foreign-key DDL. It is not a
+registry of arbitrary vendor features.
 
 The dialect contract does not normalize arbitrary SQL, isolation levels,
 vendor-only types, JSON operators, upsert syntax, row-locking clauses, or
@@ -723,14 +723,24 @@ transaction guarantee. A dialect missing either `TransactionalDDL` or
 idempotent, stays on the pinned connection, and cleanup failure is aggregated
 with any primary migration failure.
 
-The portable schema DSL covers create/drop table, scalar columns, generated
-primary keys, foreign keys, unique constraints, indexes, add column, and rename
-column. Unsupported SQLite alterations raise
+The portable schema DSL covers create/drop/rename table, scalar columns,
+generated primary keys, foreign keys, unique constraints, indexes, add column,
+and rename column. Unsupported SQLite alterations raise
 `LF::Data::UnsupportedSchemaOperationError`. Raw SQL is an explicit method on
 the schema editor.
 
-Migrations are forward-only. `down`, automatic schema generation from entity
-metadata, automatic destructive changes, and source checksums are excluded.
+SQLite and PostgreSQL provide dialect-owned schema introspection. An application
+may explicitly declare a `Schema::Model`, compare it with an inspected snapshot,
+review a deterministic typed diff, and generate a normal Crystal migration
+class. Inspection and generation never execute schema changes. Rename hints are
+explicit; destructive table/index operations require a generation opt-in;
+unresolved column or constraint changes refuse source generation. The migration
+history table is unmanaged by default, and application tables may be explicitly
+excluded before dialect metadata inspection.
+
+Migrations remain forward-only. `down`, automatic schema generation from entity
+metadata, startup schema synchronization, automatic destructive changes, and
+source checksums are excluded.
 
 Schema, history select, and history insert statements participate in the same
 datasource listener stream as entity operations. `StatementObserver` belongs to
