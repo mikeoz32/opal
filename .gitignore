@@ -6,6 +6,8 @@
 !/docs/adr/**
 !/docs/plans/
 !/docs/plans/**
+!/docs/data/
+!/docs/data/**
 /.cache/
 /.worktree/
 examples/todo_api_sqlite/bin/
