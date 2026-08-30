@@ -1,0 +1,51 @@
+name: PostgreSQL integration
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  postgresql-17:
+    name: PostgreSQL 17 integration
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: opal
+          POSTGRES_PASSWORD: opal
+          POSTGRES_DB: opal
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U opal -d opal"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      OPAL_POSTGRESQL_URL: postgres://opal:opal@127.0.0.1:5432/opal
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Install Crystal
+        uses: crystal-lang/install-crystal@v1
+        with:
+          crystal: 1.21.0
+
+      - name: Install PostgreSQL development library
+        run: sudo apt-get update && sudo apt-get install --yes libpq-dev
+
+      - name: Install dependencies
+        run: shards install
+
+      - name: Check dependency resolution
+        run: shards check
+
+      - name: Run PostgreSQL integration specs
+        run: crystal spec integration/postgresql_spec.cr --no-color
