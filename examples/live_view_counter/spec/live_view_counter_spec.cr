@@ -10,8 +10,8 @@ describe CounterLive do
     view.handle_event("increment", JSON.parse("{}"))
     view.handle_event("save_name", JSON.parse(%({"name":"<Mike>"})))
 
-    view.render.should contain(">3</output>")
-    view.render.should contain("&lt;Mike&gt;")
+    view.render.to_html.should contain(">3</output>")
+    view.render.to_html.should contain("&lt;Mike&gt;")
     view.title.should eq("Counter 3 · Opal")
   end
 end

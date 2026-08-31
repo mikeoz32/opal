@@ -322,8 +322,10 @@ class CounterLive < LF::LiveView::View
     end
   end
 
-  def render : String
-    %(<button data-opal-click="increment">#{@count}</button>)
+  def render : LF::LiveView::Rendered
+    LF::LiveView::HTML.rendered(
+      %(<button id="counter" data-opal-click="increment">#{@count}</button>)
+    )
   end
 end
 ```
@@ -332,8 +334,8 @@ With HTTP autoconfiguration, Opal discovers annotated pages, constructor-
 injects dependencies into separate request and WebSocket instances, serves the
 initial HTML and `/_opal/live.js`, and mounts the socket at `/_opal/live`.
 Configure `live_view.secret` with at least 32 bytes. See the
-[LiveView guide](docs/live-view.md) for lifecycle, security, forms, reconnect,
-manual assembly, and the explicit v1 feature boundary.
+[LiveView guide](docs/live-view.md) for lifecycle, structural rendering,
+security, forms, reconnect, manual assembly, and current feature boundaries.
 
 ## DI Container
 

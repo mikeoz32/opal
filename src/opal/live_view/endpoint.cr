@@ -11,10 +11,11 @@ require "./view"
 
 module LF::LiveView
   class Endpoint
-    PROTOCOL_VERSION = 1
-    SOCKET_PATH      = "/_opal/live"
-    CLIENT_PATH      = "/_opal/live.js"
-    CLIENT_SOURCE    = {{ read_file("#{__DIR__}/../../../assets/opal_live_view.js") }}
+    PROTOCOL_VERSION        = 2
+    LEGACY_PROTOCOL_VERSION = 1
+    SOCKET_PATH             = "/_opal/live"
+    CLIENT_PATH             = "/_opal/live.js"
+    CLIENT_SOURCE           = {{ read_file("#{__DIR__}/../../../assets/opal_live_view.js") }}
 
     private class Route
       getter name : String
@@ -161,7 +162,7 @@ module LF::LiveView
       live_root = String.build do |html|
         html << "<main id=\"opal-live-root\" data-opal-live-root data-opal-token=\""
         html << HTML.escape(token) << "\" data-opal-socket=\""
-        html << HTML.escape(@socket_path) << "\">" << view.render << "</main>"
+        html << HTML.escape(@socket_path) << "\">" << view.__opal_render.to_html << "</main>"
       end
       client_script = %(<script type="module" src="#{HTML.escape(@client_path)}"></script>)
       view.render_document(live_root, client_script)
@@ -216,7 +217,8 @@ module LF::LiveView
         unless string(join, "type") == "join"
           raise ProtocolError.new("The first LiveView message must be join")
         end
-        unless integer(join, "protocol") == PROTOCOL_VERSION
+        protocol = integer(join, "protocol")
+        unless {LEGACY_PROTOCOL_VERSION, PROTOCOL_VERSION}.includes?(protocol)
           raise ProtocolError.new("Unsupported LiveView protocol version")
         end
 
@@ -253,7 +255,8 @@ module LF::LiveView
         view.__opal_connect(send_info, request_refresh)
         view.mount(MountContext.new(context.request, mount.params, mount.resource, true))
         version = 0_i64
-        send_render(websocket, view, version)
+        rendered = view.__opal_render
+        send_render(websocket, view, rendered, nil, protocol, version)
 
         idle_deadline = Time.instant + @idle_timeout
         loop do
@@ -284,7 +287,16 @@ module LF::LiveView
               reference = integer(message, "ref")
               client_version = integer(message, "version")
               if client_version != version
-                send_render(websocket, view, version, reference: reference, status: "stale")
+                send_render(
+                  websocket,
+                  view,
+                  rendered,
+                  rendered,
+                  protocol,
+                  version,
+                  reference: reference,
+                  status: "stale"
+                )
                 next
               end
 
@@ -301,7 +313,18 @@ module LF::LiveView
                 return
               end
               version += 1
-              send_render(websocket, view, version, reference: reference, status: "ok")
+              next_rendered = view.__opal_render
+              send_render(
+                websocket,
+                view,
+                next_rendered,
+                rendered,
+                protocol,
+                version,
+                reference: reference,
+                status: "ok"
+              )
+              rendered = next_rendered
             else
               raise ProtocolError.new("Unsupported LiveView message type")
             end
@@ -315,10 +338,14 @@ module LF::LiveView
               return
             end
             version += 1
-            send_render(websocket, view, version)
+            next_rendered = view.__opal_render
+            send_render(websocket, view, next_rendered, rendered, protocol, version)
+            rendered = next_rendered
           when refresh_channel.receive
             version += 1
-            send_render(websocket, view, version)
+            next_rendered = view.__opal_render
+            send_render(websocket, view, next_rendered, rendered, protocol, version)
+            rendered = next_rendered
           when timeout(remaining_idle)
             close_socket(websocket, ::HTTP::WebSocket::CloseCode::GoingAway, "idle timeout")
             return
@@ -397,17 +424,44 @@ module LF::LiveView
     private def send_render(
       websocket : ::HTTP::WebSocket,
       view : View,
+      rendered : Rendered,
+      previous : Rendered?,
+      protocol : Int64,
       version : Int64,
       *,
       reference : Int64? = nil,
       status : String? = nil,
     ) : Nil
+      changes = previous.try { |old| rendered.diff(old) }
       websocket.send(JSON.build do |json|
         json.object do
           json.field "type", "render"
-          json.field "protocol", PROTOCOL_VERSION
+          json.field "protocol", protocol
           json.field "version", version
-          json.field "html", view.render
+          if protocol == LEGACY_PROTOCOL_VERSION
+            json.field "html", rendered.to_html
+          elsif changes
+            json.field "fingerprint", rendered.fingerprint
+            json.field "diff" do
+              json.object do
+                changes.each do |index, dynamic|
+                  json.field index.to_s, dynamic
+                end
+              end
+            end
+          else
+            json.field "rendered" do
+              json.object do
+                json.field "fingerprint", rendered.fingerprint
+                json.field "statics" do
+                  rendered.statics.to_json(json)
+                end
+                json.field "dynamics" do
+                  rendered.dynamics.to_json(json)
+                end
+              end
+            end
+          end
           if reference
             json.field "ref", reference
           end

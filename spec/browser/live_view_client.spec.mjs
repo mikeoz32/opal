@@ -7,23 +7,28 @@ test.beforeEach(async ({page}) => {
 
 test("delivers rapid events in order without losing clicks", async ({page}) => {
   const increment = page.getByRole("button", {name: "Increment", exact: true});
+  const counter = page.locator("#counter-value");
+  await counter.evaluate(element => { window.__opalCounterNode = element; });
 
   await increment.evaluate(button => {
     button.click();
     button.click();
   });
 
-  await expect(page.locator("output[aria-live]")).toHaveText("2");
+  await expect(counter).toHaveText("2");
+  await expect.poll(() => counter.evaluate(element => element === window.__opalCounterNode)).toBe(true);
   await expect(page).toHaveTitle("Counter 2 · Opal");
 });
 
 test("debounces form changes once and preserves focused input", async ({page}) => {
   const input = page.getByLabel("Name");
+  await input.evaluate(element => { window.__opalNameInput = element; });
   await input.fill("Alice");
 
   await expect(page.getByTestId("validation-count")).toHaveText("1");
   await expect(input).toBeFocused();
   await expect(input).toHaveValue("Alice");
+  await expect.poll(() => input.evaluate(element => element === window.__opalNameInput)).toBe(true);
 
   await page.getByRole("heading").click();
   await page.waitForTimeout(250);
@@ -36,6 +41,20 @@ test("debounces form changes once and preserves focused input", async ({page}) =
 test("serializes timer updates on the connection", async ({page}) => {
   await page.getByRole("button", {name: "+1 later"}).click();
   await expect(page.locator("output[aria-live]")).toHaveText("1");
+});
+
+test("moves keyed elements without recreating their DOM nodes", async ({page}) => {
+  const first = page.locator("#item-first");
+  await first.evaluate(element => { window.__opalFirstItem = element; });
+
+  await page.getByRole("button", {name: "Reverse keyed items"}).click();
+
+  await expect(page.locator("#keyed-items > li")).toHaveText([
+    "Third keyed item",
+    "Second keyed item",
+    "First keyed item",
+  ]);
+  await expect.poll(() => first.evaluate(element => element === window.__opalFirstItem)).toBe(true);
 });
 
 test("applies an explicitly empty document title", async ({page}) => {

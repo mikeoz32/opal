@@ -37,9 +37,9 @@ can resynchronize and retry it. Every event also carries a monotonically
 increasing connection-local `ref`; its render or error response echoes that
 reference. The browser keeps one event in flight and queues later events until
 the reference is acknowledged, preventing rapid interactions from being
-silently dropped. Join and render messages carry protocol version `1`; an
-unsupported version closes the connection instead of silently changing
-semantics.
+silently dropped. The built-in client negotiates protocol version `2`; the
+server still accepts version `1` for existing clients. An unsupported version
+closes the connection instead of silently changing semantics.
 
 ### View lifecycle and state
 
@@ -54,8 +54,10 @@ dependencies.
 2. with `connected? == true` after the signed mount token is accepted.
 
 The connected instance owns mutable page state and processes events serially
-on the connection fiber. `render` returns trusted HTML for the root's contents;
-application values interpolated into it must use `LF::LiveView::HTML.escape`.
+on the connection fiber. `render` returns either a structured `Rendered` value
+or a compatibility `String`. `LF::LiveView::HTML.rendered` splits a literal
+template into stable static fragments and automatically escaped dynamic
+positions. `HTML.raw` is required for explicitly trusted dynamic markup.
 `handle_event` mutates server state and the endpoint rerenders afterward.
 State changes originating from a subscription, timer, or other application
 fiber call protected `send_info`. `handle_info` executes the mutation on the
@@ -71,9 +73,18 @@ the browser.
 
 ### Rendering and browser bindings
 
-The v1 protocol sends complete root HTML, not a Phoenix-compatible structural
-diff. The client replaces the root contents, restores focus and text selection
-when possible, updates the document title, and emits `opal:render`.
+Protocol v2 sends the template fingerprint, static fragments, and dynamic
+values for its first connected render. If the next render has the same
+fingerprint, the server sends a map containing only changed dynamic positions.
+A changed template sends a new complete snapshot. A view returning `String` is
+treated as opaque and therefore needs a complete snapshot whenever its HTML
+changes. Protocol v1 continues returning complete `html` payloads.
+
+The browser reconstructs trusted server HTML and morphs the existing DOM.
+Compatible unkeyed elements retain identity by position; `id` and
+`data-opal-key` provide stable identity across insertion and reordering.
+Focused form controls retain their browser-owned value and selection. The
+client updates the document title and emits `opal:render` after the patch.
 
 The default client supports:
 
@@ -85,8 +96,9 @@ The default client supports:
 - `opal:render`, `opal:error`, and `opal:event-error` browser events.
 
 The form encoder preserves repeated names as arrays. File uploads, client
-hooks, nested stateful components, live navigation, and minimal DOM diffs are
-deferred. Their absence is an explicit v1 boundary, not Phoenix compatibility.
+hooks, nested stateful components, component-targeted events, streams, and live
+navigation are deferred. Their absence is an explicit protocol-v2 boundary,
+not Phoenix compatibility.
 
 ### Security
 
@@ -130,9 +142,9 @@ connection.
   connection.
 - The protocol is intentionally smaller than Phoenix LiveView and can evolve
   under Opal's own compatibility rules.
-- Full-root HTML is simple and deterministic but can transfer more data and do
-  more DOM work than a structural diff. A future diff format must be negotiated
-  as a protocol version rather than silently changing v1 semantics.
+- Protocol v2 reduces steady-state payloads and DOM churn for structured
+  renders, while protocol v1 and opaque `String` renders retain a simpler
+  compatibility path.
 
 ## References
 

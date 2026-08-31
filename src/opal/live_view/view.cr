@@ -2,6 +2,7 @@ require "http/request"
 require "json"
 require "uri"
 require "./html"
+require "./rendered"
 
 module LF::LiveView
   annotation Page
@@ -37,7 +38,7 @@ module LF::LiveView
     def mount(context : MountContext) : Nil
     end
 
-    abstract def render : String
+    abstract def render : RenderResult
 
     def handle_event(event : String, value : JSON::Any) : Nil
       raise UnknownEventError.new(event)
@@ -91,6 +92,18 @@ module LF::LiveView
     def __opal_disconnect : Nil
       @send_info = nil
       @refresh = nil
+    end
+
+    # :nodoc:
+    def __opal_render : Rendered
+      case rendered = render
+      when Rendered
+        rendered
+      when String
+        Rendered.opaque(rendered)
+      else
+        raise Error.new("Unsupported LiveView render result")
+      end
     end
   end
 
