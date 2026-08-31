@@ -20,6 +20,10 @@ export class OpalLiveView {
     this.eventQueue = [];
     this.inFlightEvent = null;
     this.stopped = false;
+    this.currentResource = this.locationResource();
+    this.navigationMarker = root.id || "opal-live-root";
+    this.popStateHandler = () => this.onPopState();
+    this.markHistoryEntry();
     this.bindEvents();
   }
 
@@ -51,6 +55,10 @@ export class OpalLiveView {
       this.stopHeartbeat();
       this.root.dataset.opalStatus = "disconnected";
       this.failPendingEvents(event.code);
+      if (!this.stopped && this.locationResource() !== this.currentResource) {
+        window.location.reload();
+        return;
+      }
       if (!this.stopped && this.shouldReconnect(event.code)) this.scheduleReconnect();
     });
   }
@@ -61,11 +69,16 @@ export class OpalLiveView {
     if (this.reconnectTimer) window.clearTimeout(this.reconnectTimer);
     this.reconnectTimer = null;
     this.stopHeartbeat();
+    window.removeEventListener("popstate", this.popStateHandler);
     if (this.socket) this.socket.close(1000, "page unload");
   }
 
   bindEvents() {
+    window.addEventListener("popstate", this.popStateHandler);
     this.root.addEventListener("click", event => {
+      const link = event.target.closest("a[data-opal-patch], a[data-opal-navigate]");
+      if (link && this.root.contains(link) && this.navigationClick(event, link)) return;
+
       const target = event.target.closest("[data-opal-click]");
       if (!target || !this.root.contains(target)) return;
       event.preventDefault();
@@ -115,7 +128,22 @@ export class OpalLiveView {
 
   pushEvent(event, value = {}, target = null) {
     if (!event || this.root.dataset.opalStatus !== "connected") return false;
-    this.eventQueue.push({event, value, target, ref: ++this.nextEventRef});
+    this.eventQueue.push({type: "event", event, value, target, ref: ++this.nextEventRef});
+    this.flushEvents();
+    return true;
+  }
+
+  pushPatch(to, {history = "push"} = {}) {
+    if (this.root.dataset.opalStatus !== "connected") return false;
+    if (!["push", "replace", "none"].includes(history)) return false;
+    const url = this.localURL(to);
+    if (!url) return false;
+    this.eventQueue.push({
+      type: "patch",
+      to: this.resourceFor(url),
+      history,
+      ref: ++this.nextEventRef,
+    });
     this.flushEvents();
     return true;
   }
@@ -126,14 +154,23 @@ export class OpalLiveView {
 
     const pending = this.eventQueue.shift();
     this.inFlightEvent = pending;
-    if (!this.send({
-      type: "event",
-      event: pending.event,
-      value: pending.value,
-      target: pending.target,
-      version: this.version,
-      ref: pending.ref,
-    })) {
+    const message = pending.type === "event"
+      ? {
+          type: "event",
+          event: pending.event,
+          value: pending.value,
+          target: pending.target,
+          version: this.version,
+          ref: pending.ref,
+        }
+      : {
+          type: "patch",
+          to: pending.to,
+          history: pending.history,
+          version: this.version,
+          ref: pending.ref,
+        };
+    if (!this.send(message)) {
       this.inFlightEvent = null;
       this.eventQueue.unshift(pending);
     }
@@ -174,8 +211,13 @@ export class OpalLiveView {
       if (message.ref === this.heartbeatRef) this.lastHeartbeatAck = Date.now();
     } else if (message.type === "error") {
       if (this.inFlightEvent && message.ref === this.inFlightEvent.ref) {
+        const pending = this.inFlightEvent;
         this.inFlightEvent = null;
         this.flushEvents();
+        if (pending.type === "patch" && pending.history === "none") {
+          window.location.reload();
+          return;
+        }
       }
       this.root.dispatchEvent(new CustomEvent("opal:error", {detail: message}));
     }
@@ -191,7 +233,50 @@ export class OpalLiveView {
     this.version = message.version;
     this.root.dataset.opalStatus = "connected";
     if (Object.prototype.hasOwnProperty.call(message, "title")) document.title = message.title;
+    this.applyNavigation(message);
     this.root.dispatchEvent(new CustomEvent("opal:render", {detail: message}));
+  }
+
+  applyNavigation(message) {
+    const navigation = message.navigation;
+    if (navigation === undefined) return;
+    if (
+      !navigation ||
+      typeof navigation !== "object" ||
+      !["patch", "navigate"].includes(navigation.kind) ||
+      !["push", "replace", "none"].includes(navigation.history) ||
+      typeof navigation.to !== "string"
+    ) {
+      throw new Error("invalid navigation");
+    }
+
+    const url = this.localURL(navigation.to);
+    if (!url) throw new Error("invalid navigation target");
+    if (navigation.kind === "navigate") {
+      if (navigation.history === "none") throw new Error("invalid navigation history");
+      this.root.dispatchEvent(new CustomEvent("opal:navigate", {detail: navigation}));
+      this.navigateDocument(url, navigation.history === "replace");
+      return;
+    }
+
+    if (typeof message.token !== "string" || message.token.length === 0) {
+      throw new Error("missing navigation token");
+    }
+    const resource = this.resourceFor(url);
+    if (navigation.history === "push") {
+      window.history.pushState(this.navigationState(), "", url);
+    } else if (navigation.history === "replace") {
+      window.history.replaceState(this.navigationState(), "", url);
+    } else if (this.locationResource() !== resource) {
+      throw new Error("navigation history mismatch");
+    } else {
+      this.markHistoryEntry();
+    }
+
+    this.currentResource = resource;
+    this.token = message.token;
+    this.root.dataset.opalToken = message.token;
+    this.root.dispatchEvent(new CustomEvent("opal:navigate", {detail: navigation}));
   }
 
   renderHTML(message) {
@@ -487,6 +572,96 @@ export class OpalLiveView {
     return target;
   }
 
+  navigationClick(event, link) {
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey ||
+      link.hasAttribute("download") ||
+      (link.target && link.target !== "_self")
+    ) {
+      return false;
+    }
+
+    const url = this.localURL(link.href);
+    if (!url) return false;
+    event.preventDefault();
+    const replace = link.hasAttribute("data-opal-replace");
+    if (link.hasAttribute("data-opal-patch")) {
+      if (!this.pushPatch(url.href, {history: replace ? "replace" : "push"})) {
+        this.navigateDocument(url, replace);
+      }
+    } else {
+      this.navigateDocument(url, replace);
+    }
+    return true;
+  }
+
+  onPopState() {
+    const state = window.history.state;
+    if (!state || state.__opalLiveView !== this.navigationMarker) {
+      window.location.reload();
+      return;
+    }
+
+    const resource = this.locationResource();
+    if (resource === this.currentResource) return;
+    if (this.inFlightEvent || this.eventQueue.length > 0) {
+      window.location.reload();
+      return;
+    }
+    if (!this.pushPatch(resource, {history: "none"})) window.location.reload();
+  }
+
+  localURL(value) {
+    try {
+      const url = new URL(value, window.location.href);
+      if (
+        url.origin !== window.location.origin ||
+        url.username ||
+        url.password ||
+        url.hash
+      ) {
+        return null;
+      }
+      return url;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  resourceFor(url) {
+    return `${url.pathname}${url.search}`;
+  }
+
+  locationResource() {
+    return `${window.location.pathname}${window.location.search}`;
+  }
+
+  navigationState() {
+    const current = window.history.state;
+    const state = current && typeof current === "object" && !Array.isArray(current)
+      ? {...current}
+      : {};
+    state.__opalLiveView = this.navigationMarker;
+    return state;
+  }
+
+  markHistoryEntry() {
+    window.history.replaceState(this.navigationState(), "", window.location.href);
+  }
+
+  navigateDocument(url, replace) {
+    if (replace) {
+      window.location.replace(url.href);
+    } else {
+      window.location.assign(url.href);
+    }
+  }
+
   formValue(form, submitter = null) {
     const value = {};
     for (const [name, item] of new FormData(form).entries()) {
@@ -561,7 +736,7 @@ export class OpalLiveView {
     this.eventQueue = [];
     for (const event of pending) {
       this.root.dispatchEvent(new CustomEvent("opal:event-error", {
-        detail: {event: event.event, ref: event.ref, code},
+        detail: {event: event.event || event.type, ref: event.ref, code},
       }));
     }
   }

@@ -50,6 +50,7 @@ class CounterLive < LF::LiveView::View
   @empty_title = false
   @items_reversed = false
   @next_activity = 3
+  @page = 1
 
   def initialize(@counter_label : CounterLabel)
   end
@@ -61,6 +62,11 @@ class CounterLive < LF::LiveView::View
     stream_reset("activity-stream")
     stream_insert("activity-stream", "activity-1", activity_item(1))
     stream_insert("activity-stream", "activity-2", activity_item(2))
+  end
+
+  def handle_params(context : LF::LiveView::ParamsContext) : Nil
+    @page = context.query_params["page"]?.try(&.to_i?) || 1
+    @page = 1 if @page < 1
   end
 
   def handle_event(event : String, value : JSON::Any) : Nil
@@ -97,6 +103,10 @@ class CounterLive < LF::LiveView::View
     when "delete_activity"
       item_id = string_value(value, "id")
       stream_delete("activity-stream", item_id) unless item_id.empty?
+    when "next_page"
+      push_patch("/?start=#{@count}&page=#{@page + 1}")
+    when "replace_page"
+      push_patch("/?start=#{@count}&page=#{@page + 1}", replace: true)
     else
       super
     end
@@ -119,6 +129,9 @@ class CounterLive < LF::LiveView::View
       CounterComponent.new
     end
     activity_items = stream_contents("activity-stream")
+    previous_page = {@page - 1, 1}.max
+    previous_page_path = "/?start=#{@count}&page=#{previous_page}"
+    next_page_path = "/?start=#{@count}&page=#{@page + 1}"
     items = [
       {"first", "First keyed item"},
       {"second", "Second keyed item"},
@@ -147,6 +160,14 @@ class CounterLive < LF::LiveView::View
       </style>
       <h1>#{@counter_label.heading}</h1>
       <p>Hello, <strong>#{@name}</strong>.</p>
+      <nav aria-label="Live navigation">
+        <a id="previous-page" href="#{previous_page_path}" data-opal-patch data-opal-replace>Previous page</a>
+        <a id="next-page" href="#{next_page_path}" data-opal-patch>Next page</a>
+        <button type="button" data-opal-click="next_page">Next page from server</button>
+        <button type="button" data-opal-click="replace_page">Replace page from server</button>
+        <a href="/about" data-opal-navigate>About this example</a>
+      </nav>
+      <output id="page-value" data-testid="page-value">#{@page}</output>
       <div class="counter">
         <button type="button" data-opal-click="decrement" aria-label="Decrement">−</button>
         <output id="counter-value" aria-live="polite">#{@count}</output>
@@ -191,6 +212,21 @@ class CounterLive < LF::LiveView::View
         <button type="button" data-opal-click="delete_activity" data-opal-value-id="#{id}" aria-label="Remove Activity #{sequence}">Remove</button>
       </li>
     HTML
+  end
+end
+
+@[LF::LiveView::Page("/about")]
+class AboutLive < LF::LiveView::View
+  def render : LF::LiveView::Rendered
+    LF::LiveView::HTML.rendered(<<-HTML)
+      <h1>About Opal LiveView</h1>
+      <p>This page was mounted through a fresh document navigation.</p>
+      <a href="/" data-opal-navigate>Back to counter</a>
+    HTML
+  end
+
+  def title : String?
+    "About · Opal LiveView"
   end
 end
 

@@ -38,6 +38,35 @@ module LF::LiveView
       def guards(scope : LF::DI::Container) : Array(LF::HTTP::Guard)
         @guards.call(scope)
       end
+
+      def match_path(path : String) : Hash(String, String)?
+        pattern_segments = segments(@path)
+        path_segments = segments(path)
+        return nil unless pattern_segments.size == path_segments.size
+
+        params = {} of String => String
+        pattern_segments.each_with_index do |segment, index|
+          value = path_segments[index]
+          if segment.starts_with?(':')
+            params[segment[1..]] = value
+          elsif segment != value
+            return nil
+          end
+        end
+        params
+      end
+
+      private def segments(path : String) : Array(String)
+        path.split('/').reject(&.empty?)
+      end
+    end
+
+    private struct NavigationResult
+      getter navigation : Navigation
+      getter token : String?
+
+      def initialize(@navigation, @token = nil)
+      end
     end
 
     getter socket_path : String
@@ -149,6 +178,16 @@ module LF::LiveView
         authorize!(route, scope, context, params, "mount")
         view = route.build(scope)
         view.__opal_mount(MountContext.new(context.request, params, context.request.resource, false))
+        view.__opal_handle_params(ParamsContext.new(params, context.request.resource))
+        if navigation = view.__opal_take_navigation
+          target, target_uri = normalize_navigation(navigation)
+          if target.kind == "patch" && !route.match_path(target_uri.path)
+            raise InvalidNavigationError.new
+          end
+          context.response.status = ::HTTP::Status::FOUND
+          context.response.headers["Location"] = target.to
+          return
+        end
         token = @tokens.sign(route.name, params, context.request.resource)
 
         context.response.headers["Content-Type"] = "text/html; charset=utf-8"
@@ -255,9 +294,20 @@ module LF::LiveView
         end
         view.__opal_connect(send_info, request_refresh)
         view.__opal_mount(MountContext.new(context.request, mount.params, mount.resource, true))
+        view.__opal_handle_params(ParamsContext.new(mount.params, mount.resource))
+        navigation_result = apply_view_navigation(view, route, scope, context)
         version = 0_i64
         rendered = view.__opal_render
-        send_render(websocket, view, rendered, nil, protocol, version)
+        send_render(
+          websocket,
+          view,
+          rendered,
+          nil,
+          protocol,
+          version,
+          navigation: navigation_result.try(&.navigation),
+          token: navigation_result.try(&.token)
+        )
 
         idle_deadline = Time.instant + @idle_timeout
         loop do
@@ -308,10 +358,12 @@ module LF::LiveView
                 view.__opal_handle_event(target, event, value)
               rescue error : UnknownEventError
                 view.__opal_clear_stream_operations
+                view.__opal_clear_navigation
                 send_error(websocket, "unknown_event", reference)
                 next
               rescue error : UnknownComponentError
                 view.__opal_clear_stream_operations
+                view.__opal_clear_navigation
                 send_error(websocket, "unknown_target", reference)
                 next
               rescue error : Exception
@@ -319,6 +371,7 @@ module LF::LiveView
                 close_socket(websocket, ::HTTP::WebSocket::CloseCode::InternalServerError, "event failed")
                 return
               end
+              navigation_result = apply_view_navigation(view, route, scope, context)
               version += 1
               next_rendered = view.__opal_render
               send_render(
@@ -329,7 +382,58 @@ module LF::LiveView
                 protocol,
                 version,
                 reference: reference,
-                status: "ok"
+                status: "ok",
+                navigation: navigation_result.try(&.navigation),
+                token: navigation_result.try(&.token)
+              )
+              rendered = next_rendered
+            when "patch"
+              raise ProtocolError.new("LiveView navigation requires protocol version 2") if protocol == LEGACY_PROTOCOL_VERSION
+              reference = integer(message, "ref")
+              client_version = integer(message, "version")
+              if client_version != version
+                send_render(
+                  websocket,
+                  view,
+                  rendered,
+                  rendered,
+                  protocol,
+                  version,
+                  reference: reference,
+                  status: "stale"
+                )
+                next
+              end
+
+              begin
+                requested = Navigation.patch(string(message, "to"), string(message, "history"))
+                navigation_result = apply_patch_navigation(view, route, scope, context, requested)
+              rescue error : InvalidNavigationError
+                view.__opal_clear_stream_operations
+                view.__opal_clear_navigation
+                send_error(websocket, "invalid_navigation", reference)
+                next
+              rescue error : LF::HTTP::Forbidden
+                raise error
+              rescue error : Exception
+                Log.error(exception: error) { "LiveView navigation failed: route=#{route.name}" }
+                close_socket(websocket, ::HTTP::WebSocket::CloseCode::InternalServerError, "navigation failed")
+                return
+              end
+
+              version += 1
+              next_rendered = view.__opal_render
+              send_render(
+                websocket,
+                view,
+                next_rendered,
+                rendered,
+                protocol,
+                version,
+                reference: reference,
+                status: "ok",
+                navigation: navigation_result.navigation,
+                token: navigation_result.token
               )
               rendered = next_rendered
             else
@@ -344,9 +448,19 @@ module LF::LiveView
               close_socket(websocket, ::HTTP::WebSocket::CloseCode::InternalServerError, "info failed")
               return
             end
+            navigation_result = apply_view_navigation(view, route, scope, context)
             version += 1
             next_rendered = view.__opal_render
-            send_render(websocket, view, next_rendered, rendered, protocol, version)
+            send_render(
+              websocket,
+              view,
+              next_rendered,
+              rendered,
+              protocol,
+              version,
+              navigation: navigation_result.try(&.navigation),
+              token: navigation_result.try(&.token)
+            )
             rendered = next_rendered
           when refresh_channel.receive
             version += 1
@@ -437,6 +551,79 @@ module LF::LiveView
       raise ProtocolError.new("LiveView message field '#{key}' must be an integer or null")
     end
 
+    private def apply_view_navigation(
+      view : View,
+      route : Route,
+      scope : LF::DI::Container,
+      context : ::HTTP::Server::Context,
+    ) : NavigationResult?
+      navigation = view.__opal_take_navigation
+      return nil unless navigation
+
+      if navigation.kind == "patch"
+        apply_patch_navigation(view, route, scope, context, navigation)
+      else
+        normalized, _uri = normalize_navigation(navigation)
+        NavigationResult.new(normalized)
+      end
+    end
+
+    private def apply_patch_navigation(
+      view : View,
+      route : Route,
+      scope : LF::DI::Container,
+      context : ::HTTP::Server::Context,
+      navigation : Navigation,
+    ) : NavigationResult
+      normalized, uri = normalize_navigation(navigation)
+      raise InvalidNavigationError.new unless normalized.kind == "patch"
+      params = route.match_path(uri.path) || raise InvalidNavigationError.new
+
+      navigation_request = ::HTTP::Request.new(
+        "GET",
+        normalized.to,
+        context.request.headers.dup
+      )
+      authorize!(route, scope, context, params, "patch", navigation_request)
+      view.__opal_handle_params(ParamsContext.new(params, normalized.to))
+      if view.__opal_take_navigation
+        raise DuplicateNavigationError.new
+      end
+
+      token = @tokens.sign(route.name, params, normalized.to)
+      NavigationResult.new(normalized, token)
+    end
+
+    private def normalize_navigation(navigation : Navigation) : {Navigation, URI}
+      unless {"patch", "navigate"}.includes?(navigation.kind)
+        raise InvalidNavigationError.new
+      end
+      unless {"push", "replace", "none"}.includes?(navigation.history)
+        raise InvalidNavigationError.new
+      end
+      if navigation.kind == "navigate" && navigation.history == "none"
+        raise InvalidNavigationError.new
+      end
+
+      uri = URI.parse(navigation.to)
+      if uri.scheme || uri.host || uri.user || uri.fragment || !uri.path.starts_with?('/')
+        raise InvalidNavigationError.new
+      end
+
+      resource = uri.path
+      if query = uri.query
+        resource += "?#{query}"
+      end
+      normalized = if navigation.kind == "patch"
+                     Navigation.patch(resource, navigation.history)
+                   else
+                     Navigation.navigate(resource, navigation.history)
+                   end
+      {normalized, URI.parse(resource)}
+    rescue URI::Error
+      raise InvalidNavigationError.new
+    end
+
     private def send_render(
       websocket : ::HTTP::WebSocket,
       view : View,
@@ -447,11 +634,13 @@ module LF::LiveView
       *,
       reference : Int64? = nil,
       status : String? = nil,
+      navigation : Navigation? = nil,
+      token : String? = nil,
     ) : Nil
       changes = previous.try { |old| rendered.diff(old) }
       streams = view.__opal_take_stream_operations
-      if protocol == LEGACY_PROTOCOL_VERSION && !streams.empty?
-        raise ProtocolError.new("LiveView streams require protocol version 2")
+      if protocol == LEGACY_PROTOCOL_VERSION && (!streams.empty? || navigation)
+        raise ProtocolError.new("LiveView streams and navigation require protocol version 2")
       end
       websocket.send(JSON.build do |json|
         json.object do
@@ -486,6 +675,14 @@ module LF::LiveView
             json.field "streams" do
               streams.to_json(json)
             end
+          end
+          if navigation
+            json.field "navigation" do
+              navigation.to_json(json)
+            end
+          end
+          if token
+            json.field "token", token
           end
           if reference
             json.field "ref", reference
@@ -541,8 +738,15 @@ module LF::LiveView
       context : ::HTTP::Server::Context,
       params : Hash(String, String),
       action : String,
+      request_override : ::HTTP::Request? = nil,
     ) : Nil
-      execution_context = LF::HTTP::ExecutionContext.new(context, params, route.name, action)
+      execution_context = LF::HTTP::ExecutionContext.new(
+        context,
+        params,
+        route.name,
+        action,
+        request_override
+      )
       route.guards(scope).each do |guard|
         raise LF::HTTP::Forbidden.new unless guard.can_activate(execution_context)
       end

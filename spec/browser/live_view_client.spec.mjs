@@ -133,6 +133,72 @@ test("applies an explicitly empty document title", async ({page}) => {
   await expect(page).toHaveTitle("");
 });
 
+test("patches history without remounting and reconnects from the refreshed token", async ({page}) => {
+  const root = page.locator("[data-opal-live-root]");
+  await root.evaluate(element => {
+    window.__opalNavigationRoot = element;
+    window.__opalNavigationGeneration = element.__opalLiveView.connectionGeneration;
+    window.__opalNavigationToken = element.dataset.opalToken;
+  });
+
+  await page.getByRole("link", {name: "Next page"}).click();
+  await expect(page).toHaveURL(/\?start=0&page=2$/);
+  await expect(page.getByTestId("page-value")).toHaveText("2");
+  await expect.poll(
+    () => root.evaluate(element => element === window.__opalNavigationRoot),
+  ).toBe(true);
+  await expect.poll(
+    () => root.evaluate(element => element.__opalLiveView.connectionGeneration),
+  ).toBe(await root.evaluate(() => window.__opalNavigationGeneration));
+  await expect.poll(
+    () => root.evaluate(element => element.dataset.opalToken === window.__opalNavigationToken),
+  ).toBe(false);
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\?start=0$/);
+  await expect(page.getByTestId("page-value")).toHaveText("1");
+  await expect.poll(
+    () => root.evaluate(element => element === window.__opalNavigationRoot),
+  ).toBe(true);
+
+  await page.goForward();
+  await expect(page).toHaveURL(/\?start=0&page=2$/);
+  await expect(page.getByTestId("page-value")).toHaveText("2");
+  await expect.poll(
+    () => root.evaluate(element => element === window.__opalNavigationRoot),
+  ).toBe(true);
+
+  await page.goBack();
+  await expect(page.getByTestId("page-value")).toHaveText("1");
+
+  await page.getByRole("button", {name: "Next page from server"}).click();
+  await expect(page).toHaveURL(/\?start=0&page=2$/);
+  await expect(page.getByTestId("page-value")).toHaveText("2");
+
+  const historyLength = await page.evaluate(() => window.history.length);
+  await page.getByRole("button", {name: "Replace page from server"}).click();
+  await expect(page).toHaveURL(/\?start=0&page=3$/);
+  await expect(page.getByTestId("page-value")).toHaveText("3");
+  expect(await page.evaluate(() => window.history.length)).toBe(historyLength);
+
+  const generation = await root.evaluate(element => element.__opalLiveView.connectionGeneration);
+  await root.evaluate(element => element.__opalLiveView.socket.close(4001, "navigation reconnect"));
+  await expect.poll(
+    () => root.evaluate(element => element.__opalLiveView.connectionGeneration),
+  ).toBeGreaterThan(generation);
+  await expect(root).toHaveAttribute("data-opal-status", "connected", {timeout: 10_000});
+  await expect(page.getByTestId("page-value")).toHaveText("3");
+});
+
+test("uses a fresh document mount for navigation outside the current LiveView", async ({page}) => {
+  await page.getByRole("link", {name: "About this example"}).click();
+
+  await expect(page).toHaveURL(/\/about$/);
+  await expect(page.getByRole("heading", {name: "About Opal LiveView"})).toBeVisible();
+  await expect(page).toHaveTitle("About · Opal LiveView");
+  await expect(page.locator("[data-opal-live-root]")).toHaveAttribute("data-opal-status", "connected");
+});
+
 test("reconnects after a transient socket interruption", async ({page}) => {
   const root = page.locator("[data-opal-live-root]");
   const generation = await root.evaluate(element => element.__opalLiveView.connectionGeneration);

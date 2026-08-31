@@ -61,17 +61,26 @@ debounced form changes, form submit, title updates, and escaped values.
 ```crystal
 def mount(context : LF::LiveView::MountContext) : Nil
   @connected = context.connected?
-  @filter = context.query_params["filter"]? || "all"
   @project_id = context.params["project_id"]
   authorize!(context.request, @project_id)
 end
+
+def handle_params(context : LF::LiveView::ParamsContext) : Nil
+  @filter = context.query_params["filter"]? || "all"
+  @project_id = context.params["project_id"]
+end
 ```
+
+`handle_params` runs after each disconnected and connected mount, and again
+after every live patch. Route parameters are available through `params`; query
+parameters are available through `query_params`.
 
 Always repeat authentication and authorization in connected mount. The signed
 mount token makes route state tamper-evident; it does not grant access by
-itself. On reconnect, a fresh view is mounted from the signed original URL and
-current handshake request. Persist state that must survive reconnect in an
-application service or database.
+itself. A successful live patch issues a refreshed token for the current URL,
+so reconnect mounts from the latest acknowledged route and query parameters.
+Persist other state that must survive reconnect in an application service or
+database.
 
 HTTP guards can be declared directly on the view. Application-level guards
 also apply. Opal evaluates them for both the disconnected and connected mount:
@@ -250,6 +259,8 @@ A component disappears when the parent stops rendering its identity. Opal then
 forgets its state and calls `destroy` when the component includes
 `LF::DI::Disposable`; rendering that identity again creates a fresh instance.
 All remaining components are destroyed when their LiveView disconnects.
+Components may also call protected `push_patch` and `push_navigate` from their
+event callbacks; navigation is serialized through their parent connection.
 
 ## Streams
 
@@ -303,6 +314,43 @@ LiveView morphing deliberately preserves that container's children; only
 validated stream operations may insert, update, delete, or reset them. Streams
 are a protocol-v2 feature. A view that queues stream operations rejects a
 legacy protocol-v1 connection instead of sending an incomplete collection.
+
+## Live navigation
+
+Use `data-opal-patch` on a local link to change route or query parameters
+without remounting the current LiveView:
+
+```html
+<a href="/projects/42?tab=activity" data-opal-patch>Activity</a>
+<a href="/projects/42?tab=settings" data-opal-patch data-opal-replace>Settings</a>
+```
+
+The target path must match the current `@[Page]` route. Opal reruns route and
+application guards with action `"patch"`, calls `handle_params`, renders the
+minimal diff, refreshes the signed mount token, and only then commits
+`pushState` or `replaceState`. Browser back and forward use the same serialized
+patch path without creating additional history entries.
+
+A view or stateful component can initiate the same operations from an event or
+info callback:
+
+```crystal
+push_patch("/projects/42?tab=activity")
+push_patch("/projects/42?tab=settings", replace: true)
+push_navigate("/projects")
+```
+
+`push_navigate` and links marked `data-opal-navigate` perform a fresh document
+mount. Opal deliberately does not keep the current socket across page classes
+until it has an explicit, guardable equivalent of Phoenix `live_session`.
+External, scheme-relative, credential-bearing, fragment, and cross-route patch
+targets are never accepted as live patches. Ordinary links remain available
+for fragment and external navigation.
+
+Navigation is protocol-v2-only. `opal:navigate` fires after an acknowledged
+patch and immediately before a document navigation. A failed back/forward
+patch reloads the current document rather than leaving the URL and rendered
+state out of sync.
 
 The mount token and built-in document metadata are escaped by the endpoint.
 Opal does not add event values or tokens to log metadata. Do not put secrets in
@@ -380,6 +428,7 @@ continues accepting protocol-v1 clients and returns their complete `html`
 payloads.
 
 Protocol v2 provides connection-local stateful components, component-targeted
-events, and browser-owned streams. It does not yet provide nested components,
-upload transport, live navigation, or JavaScript hooks. These features can
+events, browser-owned streams, and acknowledged live patches with browser
+history. It does not yet provide nested components, same-socket navigation
+across page classes, upload transport, or JavaScript hooks. These features can
 evolve under Opal's protocol without introducing a Phoenix dependency.

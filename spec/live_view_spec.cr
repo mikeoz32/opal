@@ -165,6 +165,8 @@ class LiveViewSpecComponent < LF::LiveView::Component
     case event
     when "increment"
       @count += 1
+    when "patch_parent"
+      push_patch("/components?source=component")
     else
       super
     end
@@ -240,6 +242,52 @@ class LiveViewSpecStreams < LF::LiveView::View
   end
 end
 
+class LiveViewSpecNavigation < LF::LiveView::View
+  @section = ""
+  @tab = ""
+  @connected = false
+
+  def mount(context : LF::LiveView::MountContext) : Nil
+    @connected = context.connected?
+  end
+
+  def handle_params(context : LF::LiveView::ParamsContext) : Nil
+    @section = context.params["section"]
+    @tab = context.query_params["tab"]? || "default"
+  end
+
+  def handle_event(event : String, value : JSON::Any) : Nil
+    case event
+    when "server_patch"
+      push_patch("/navigation/server?tab=pushed")
+    when "server_replace"
+      push_patch("/navigation/replaced?tab=pushed", replace: true)
+    when "server_navigate"
+      push_navigate("/counter?from=navigation")
+    else
+      super
+    end
+  end
+
+  def render : LF::LiveView::Rendered
+    connected = @connected ? "yes" : "no"
+    LF::LiveView::HTML.rendered(
+      %(<output id="navigation-state">#{@section}:#{@tab}:#{connected}</output>)
+    )
+  end
+
+  def title : String?
+    "#{@section} · #{@tab}"
+  end
+end
+
+class LiveViewSpecNavigationGuard < LF::HTTP::Guard
+  def can_activate(context : LF::HTTP::ExecutionContext) : Bool
+    context.route_params["section"]? != "blocked" &&
+      context.request.query_params["tab"]? != "blocked"
+  end
+end
+
 private def live_view_spec_server(
   secret : String,
   *,
@@ -265,6 +313,13 @@ private def live_view_spec_server(
   endpoint.page("/failure", LiveViewSpecFailure) { |_scope| LiveViewSpecFailure.new }
   endpoint.page("/components", LiveViewSpecComponents) { |_scope| LiveViewSpecComponents.new }
   endpoint.page("/streams", LiveViewSpecStreams) { |_scope| LiveViewSpecStreams.new }
+  endpoint.page(
+    "/navigation/:section",
+    LiveViewSpecNavigation,
+    guards: ->(_scope : LF::DI::Container) do
+      [LiveViewSpecNavigationGuard.new.as(LF::HTTP::Guard)]
+    end
+  ) { |_scope| LiveViewSpecNavigation.new }
   endpoint.page(
     "/guarded",
     LiveViewSpecCounter,
@@ -548,6 +603,19 @@ describe LF::LiveView do
       restored_target = restored_right.match(/data-opal-target="(\d+)"/).not_nil![1].to_i64
       restored_target.should_not eq(right_target)
       LiveViewSpecComponent.mount_count.should eq(5)
+
+      websocket.send({
+        type:    "event",
+        event:   "patch_parent",
+        target:  restored_target,
+        value:   nil,
+        version: 4,
+        ref:     6,
+      }.to_json)
+      component_patch = JSON.parse(websocket.receive.as(String))
+      component_patch["version"].as_i64.should eq(5)
+      component_patch["navigation"]["kind"].as_s.should eq("patch")
+      component_patch["navigation"]["to"].as_s.should eq("/components?source=component")
       websocket.close
     ensure
       websocket.try(&.close)
@@ -642,6 +710,163 @@ describe LF::LiveView do
       websocket.send({type: "join", protocol: 1, token: token}.to_json)
       websocket.receive?.should be_nil
       close.receive.should eq(HTTP::WebSocket::CloseCode::ProtocolError)
+    ensure
+      websocket.try(&.close)
+    end
+  end
+
+  it "patches route and query params, refreshes the token, and emits server navigation" do
+    secret = "n" * 32
+    live_view_spec_server(secret) do |address|
+      response = HTTP::Client.get(
+        "http://#{address.address}:#{address.port}/navigation/initial?tab=first"
+      )
+      response.body.should contain("initial:first:no")
+      token = response.body.match(/data-opal-token="([^"]+)"/).not_nil![1]
+      websocket = HTTP::WebSocket.new(
+        "127.0.0.1",
+        "/_opal/live",
+        port: address.port,
+        headers: HTTP::Headers{"Origin" => "http://#{address.address}:#{address.port}"}
+      )
+      websocket.send({type: "join", protocol: 2, token: token}.to_json)
+      joined = JSON.parse(websocket.receive.as(String))
+      joined["rendered"].as_h["dynamics"].as_a.map(&.as_s).should eq(["initial", "first", "yes"])
+
+      websocket.send({
+        type:    "patch",
+        to:      "/navigation/second?tab=details",
+        history: "push",
+        version: 42,
+        ref:     0,
+      }.to_json)
+      stale = JSON.parse(websocket.receive.as(String))
+      stale["version"].as_i64.should eq(0)
+      stale["ref"].as_i64.should eq(0)
+      stale["status"].as_s.should eq("stale")
+      stale["navigation"]?.should be_nil
+
+      websocket.send({
+        type:    "patch",
+        to:      "/navigation/second?tab=details",
+        history: "push",
+        version: 0,
+        ref:     1,
+      }.to_json)
+      patched = JSON.parse(websocket.receive.as(String))
+      patched["version"].as_i64.should eq(1)
+      patched["ref"].as_i64.should eq(1)
+      patched["status"].as_s.should eq("ok")
+      patched["diff"].as_h.should eq({
+        "0" => JSON::Any.new("second"),
+        "1" => JSON::Any.new("details"),
+      })
+      navigation = patched["navigation"].as_h
+      navigation["kind"].as_s.should eq("patch")
+      navigation["to"].as_s.should eq("/navigation/second?tab=details")
+      navigation["history"].as_s.should eq("push")
+      patched["title"].as_s.should eq("second · details")
+
+      refreshed = LF::LiveView::MountToken.new(secret).verify(patched["token"].as_s)
+      refreshed.route.should eq("LiveViewSpecNavigation")
+      refreshed.params.should eq({"section" => "second"})
+      refreshed.resource.should eq("/navigation/second?tab=details")
+
+      websocket.send({
+        type:    "patch",
+        to:      "/counter",
+        history: "push",
+        version: 1,
+        ref:     2,
+      }.to_json)
+      invalid = JSON.parse(websocket.receive.as(String))
+      invalid["type"].as_s.should eq("error")
+      invalid["reason"].as_s.should eq("invalid_navigation")
+      invalid["ref"].as_i64.should eq(2)
+
+      websocket.send({
+        type:    "patch",
+        to:      "https://evil.example/navigation/second",
+        history: "push",
+        version: 1,
+        ref:     22,
+      }.to_json)
+      external = JSON.parse(websocket.receive.as(String))
+      external["type"].as_s.should eq("error")
+      external["reason"].as_s.should eq("invalid_navigation")
+      external["ref"].as_i64.should eq(22)
+
+      websocket.send({type: "heartbeat", ref: 11}.to_json)
+      JSON.parse(websocket.receive.as(String))["ref"].as_i64.should eq(11)
+
+      websocket.send({
+        type:    "event",
+        event:   "server_patch",
+        value:   nil,
+        version: 1,
+        ref:     3,
+      }.to_json)
+      server_patch = JSON.parse(websocket.receive.as(String))
+      server_patch["version"].as_i64.should eq(2)
+      server_patch["navigation"]["to"].as_s.should eq("/navigation/server?tab=pushed")
+      server_patch["navigation"]["history"].as_s.should eq("push")
+
+      websocket.send({
+        type:    "event",
+        event:   "server_replace",
+        value:   nil,
+        version: 2,
+        ref:     4,
+      }.to_json)
+      server_replace = JSON.parse(websocket.receive.as(String))
+      server_replace["version"].as_i64.should eq(3)
+      server_replace["navigation"]["to"].as_s.should eq("/navigation/replaced?tab=pushed")
+      server_replace["navigation"]["history"].as_s.should eq("replace")
+
+      websocket.send({
+        type:    "event",
+        event:   "server_navigate",
+        value:   nil,
+        version: 3,
+        ref:     5,
+      }.to_json)
+      server_navigate = JSON.parse(websocket.receive.as(String))
+      server_navigate["version"].as_i64.should eq(4)
+      server_navigate["navigation"]["kind"].as_s.should eq("navigate")
+      server_navigate["navigation"]["to"].as_s.should eq("/counter?from=navigation")
+      server_navigate["token"]?.should be_nil
+      websocket.close
+    ensure
+      websocket.try(&.close)
+    end
+  end
+
+  it "reruns guards for live patches" do
+    live_view_spec_server("q" * 32) do |address|
+      response = HTTP::Client.get(
+        "http://#{address.address}:#{address.port}/navigation/allowed"
+      )
+      token = response.body.match(/data-opal-token="([^"]+)"/).not_nil![1]
+      websocket = HTTP::WebSocket.new(
+        "127.0.0.1",
+        "/_opal/live",
+        port: address.port,
+        headers: HTTP::Headers{"Origin" => "http://#{address.address}:#{address.port}"}
+      )
+      close = Channel(HTTP::WebSocket::CloseCode).new(1)
+      websocket.on_close { |code, _reason| close.send(code) }
+      websocket.send({type: "join", protocol: 2, token: token}.to_json)
+      websocket.receive
+
+      websocket.send({
+        type:    "patch",
+        to:      "/navigation/allowed?tab=blocked",
+        history: "push",
+        version: 0,
+        ref:     1,
+      }.to_json)
+      websocket.receive?.should be_nil
+      close.receive.should eq(HTTP::WebSocket::CloseCode::PolicyViolation)
     ensure
       websocket.try(&.close)
     end
