@@ -69,7 +69,10 @@ export class OpalLiveView {
       const target = event.target.closest("[data-opal-click]");
       if (!target || !this.root.contains(target)) return;
       event.preventDefault();
-      this.pushEvent(target.dataset.opalClick, this.eventValue(target));
+      const componentTarget = this.componentTarget(target);
+      if (componentTarget !== undefined) {
+        this.pushEvent(target.dataset.opalClick, this.eventValue(target), componentTarget);
+      }
     });
 
     this.root.addEventListener("submit", event => {
@@ -77,14 +80,20 @@ export class OpalLiveView {
       if (!form) return;
       event.preventDefault();
       const value = this.formValue(form, event.submitter);
-      if (value) this.pushEvent(form.dataset.opalSubmit, value);
+      const componentTarget = this.componentTarget(form);
+      if (value && componentTarget !== undefined) {
+        this.pushEvent(form.dataset.opalSubmit, value, componentTarget);
+      }
     });
 
     const pushChange = target => {
       const owner = target.closest("[data-opal-change]") || target.form?.closest("[data-opal-change]");
       if (!owner || !this.root.contains(owner)) return;
       const value = owner instanceof HTMLFormElement ? this.formValue(owner) : this.eventValue(owner);
-      if (value) this.pushEvent(owner.dataset.opalChange, value);
+      const componentTarget = this.componentTarget(owner);
+      if (value && componentTarget !== undefined) {
+        this.pushEvent(owner.dataset.opalChange, value, componentTarget);
+      }
     };
     this.root.addEventListener("change", event => {
       const target = event.target;
@@ -104,9 +113,9 @@ export class OpalLiveView {
     });
   }
 
-  pushEvent(event, value = {}) {
+  pushEvent(event, value = {}, target = null) {
     if (!event || this.root.dataset.opalStatus !== "connected") return false;
-    this.eventQueue.push({event, value, ref: ++this.nextEventRef});
+    this.eventQueue.push({event, value, target, ref: ++this.nextEventRef});
     this.flushEvents();
     return true;
   }
@@ -121,6 +130,7 @@ export class OpalLiveView {
       type: "event",
       event: pending.event,
       value: pending.value,
+      target: pending.target,
       version: this.version,
       ref: pending.ref,
     })) {
@@ -356,6 +366,28 @@ export class OpalLiveView {
     }
     if ("value" in element && element.name) value[element.name] = element.value;
     return value;
+  }
+
+  componentTarget(element) {
+    const component = element.closest("[data-opal-target]");
+    if (!component || !this.root.contains(component)) return null;
+
+    const rawTarget = component.dataset.opalTarget;
+    if (!/^[1-9]\d*$/.test(rawTarget || "")) {
+      this.root.dispatchEvent(new CustomEvent("opal:error", {
+        detail: {type: "error", reason: "invalid_target"},
+      }));
+      return undefined;
+    }
+
+    const target = Number(rawTarget);
+    if (!Number.isSafeInteger(target)) {
+      this.root.dispatchEvent(new CustomEvent("opal:error", {
+        detail: {type: "error", reason: "invalid_target"},
+      }));
+      return undefined;
+    }
+    return target;
   }
 
   formValue(form, submitter = null) {

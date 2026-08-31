@@ -194,6 +194,63 @@ or `data-opal-key` values when identity must survive insertion or reordering:
 <li data-opal-key="todo-42">...</li>
 ```
 
+## Stateful components
+
+Subclass `LF::LiveView::Component` when multiple independently stateful pieces
+share one LiveView connection. A component identity is its concrete type plus
+the `id` passed to `live_component`. Its `mount` callback runs once for that
+identity, `update` receives the current parent assigns before every render, and
+targeted events run on the component instead of the parent view:
+
+```crystal
+class CounterComponent < LF::LiveView::Component
+  @count = 0
+  @label = ""
+
+  def update(assigns : JSON::Any) : Nil
+    @label = assigns.as_h["label"].as_s
+  end
+
+  def handle_event(event : String, value : JSON::Any) : Nil
+    event == "increment" ? @count += 1 : super
+  end
+
+  def render : LF::LiveView::Rendered
+    LF::LiveView::HTML.rendered(<<-HTML)
+      <section id="counter-#{id}" data-opal-target="#{myself}">
+        <span>#{@label}: #{@count}</span>
+        <button data-opal-click="increment">+</button>
+      </section>
+    HTML
+  end
+end
+```
+
+Render each instance from the parent with a stable id:
+
+```crystal
+def render : LF::LiveView::Rendered
+  left = live_component(CounterComponent, "left", {label: "Left"}) do
+    CounterComponent.new
+  end
+  right = live_component(CounterComponent, "right", {label: "Right"}) do
+    CounterComponent.new
+  end
+
+  LF::LiveView::HTML.rendered(%(<div>#{left}#{right}</div>))
+end
+```
+
+`data-opal-target="#{myself}"` may be placed on the event element or any
+ancestor inside the component. The browser sends the connection-local target
+with click, change, and submit events. Events without a target continue to run
+`View#handle_event`.
+
+A component disappears when the parent stops rendering its identity. Opal then
+forgets its state and calls `destroy` when the component includes
+`LF::DI::Disposable`; rendering that identity again creates a fresh instance.
+All remaining components are destroyed when their LiveView disconnects.
+
 The mount token and built-in document metadata are escaped by the endpoint.
 Opal does not add event values or tokens to log metadata. Do not put secrets in
 application exception messages.
@@ -269,7 +326,7 @@ template or legacy `String` render sends a complete v2 snapshot. The server
 continues accepting protocol-v1 clients and returns their complete `html`
 payloads.
 
-Protocol v2 does not yet provide nested stateful components, component-targeted
-events, streams, upload transport, live navigation, or JavaScript hooks. These
-features can evolve under Opal's protocol without introducing a Phoenix
-dependency.
+Protocol v2 provides connection-local stateful components and component-
+targeted events. It does not yet provide nested components, streams, upload
+transport, live navigation, or JavaScript hooks. These features can evolve
+under Opal's protocol without introducing a Phoenix dependency.

@@ -5,13 +5,18 @@ describe CounterLive do
   it "renders escaped form state and handles counter events" do
     view = CounterLive.new(CounterLabel.new)
     request = HTTP::Request.new("GET", "/?start=2")
-    view.mount(LF::LiveView::MountContext.new(request, {} of String => String, request.resource, true))
+    view.__opal_mount(LF::LiveView::MountContext.new(request, {} of String => String, request.resource, true))
 
-    view.handle_event("increment", JSON.parse("{}"))
-    view.handle_event("save_name", JSON.parse(%({"name":"<Mike>"})))
+    view.__opal_handle_event(nil, "increment", JSON.parse("{}"))
+    view.__opal_handle_event(nil, "save_name", JSON.parse(%({"name":"<Mike>"})))
 
-    view.render.to_html.should contain(">3</output>")
-    view.render.to_html.should contain("&lt;Mike&gt;")
+    rendered = view.__opal_render.to_html
+    rendered.should contain(">3</output>")
+    rendered.should contain("&lt;Mike&gt;")
+    rendered.should contain("Left component")
+    rendered.should contain("Right component")
     view.title.should eq("Counter 3 · Opal")
+  ensure
+    view.try(&.__opal_disconnect)
   end
 end

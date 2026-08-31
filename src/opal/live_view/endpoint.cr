@@ -148,12 +148,13 @@ module LF::LiveView
       begin
         authorize!(route, scope, context, params, "mount")
         view = route.build(scope)
-        view.mount(MountContext.new(context.request, params, context.request.resource, false))
+        view.__opal_mount(MountContext.new(context.request, params, context.request.resource, false))
         token = @tokens.sign(route.name, params, context.request.resource)
 
         context.response.headers["Content-Type"] = "text/html; charset=utf-8"
         context.response.print document(view, token)
       ensure
+        view.try(&.__opal_disconnect)
         destroy_unmanaged(view, route)
       end
     end
@@ -253,7 +254,7 @@ module LF::LiveView
           end
         end
         view.__opal_connect(send_info, request_refresh)
-        view.mount(MountContext.new(context.request, mount.params, mount.resource, true))
+        view.__opal_mount(MountContext.new(context.request, mount.params, mount.resource, true))
         version = 0_i64
         rendered = view.__opal_render
         send_render(websocket, view, rendered, nil, protocol, version)
@@ -302,10 +303,14 @@ module LF::LiveView
 
               event = string(message, "event")
               value = message["value"]? || JSON::Any.new(nil)
+              target = optional_integer(message, "target")
               begin
-                view.handle_event(event, value)
+                view.__opal_handle_event(target, event, value)
               rescue error : UnknownEventError
                 send_error(websocket, "unknown_event", reference)
+                next
+              rescue error : UnknownComponentError
+                send_error(websocket, "unknown_target", reference)
                 next
               rescue error : Exception
                 Log.error(exception: error) { "LiveView event failed: route=#{route.name}" }
@@ -419,6 +424,15 @@ module LF::LiveView
       message[key].as_i64
     rescue KeyError | TypeCastError
       raise ProtocolError.new("LiveView message field '#{key}' must be an integer")
+    end
+
+    private def optional_integer(message : Hash(String, JSON::Any), key : String) : Int64?
+      value = message[key]?
+      return nil unless value
+      return nil if value.raw.nil?
+      value.as_i64
+    rescue TypeCastError
+      raise ProtocolError.new("LiveView message field '#{key}' must be an integer or null")
     end
 
     private def send_render(

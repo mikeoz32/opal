@@ -8,6 +8,39 @@ class CounterLabel
   end
 end
 
+class CounterComponent < LF::LiveView::Component
+  @count = 0
+  @label = "Counter"
+
+  def update(assigns : JSON::Any) : Nil
+    @label = assigns.as_h["label"].as_s
+  end
+
+  def handle_event(event : String, value : JSON::Any) : Nil
+    case event
+    when "increment_component"
+      @count += 1
+    when "decrement_component"
+      @count -= 1
+    else
+      super
+    end
+  end
+
+  def render : LF::LiveView::Rendered
+    LF::LiveView::HTML.rendered(<<-HTML)
+      <section id="component-#{id}" data-opal-key="component-#{id}" data-opal-target="#{myself}">
+        <h2>#{@label} component</h2>
+        <div class="counter">
+          <button type="button" data-opal-click="decrement_component" aria-label="Decrement #{@label} component">−</button>
+          <output id="#{id}-component-value" aria-live="polite">#{@count}</output>
+          <button type="button" data-opal-click="increment_component" aria-label="Increment #{@label} component">+</button>
+        </div>
+      </section>
+    HTML
+  end
+end
+
 @[LF::LiveView::Page("/")]
 class CounterLive < LF::LiveView::View
   @count = 0
@@ -62,6 +95,12 @@ class CounterLive < LF::LiveView::View
   end
 
   def render : LF::LiveView::Rendered
+    left_component = live_component(CounterComponent, "left", {label: "Left"}) do
+      CounterComponent.new
+    end
+    right_component = live_component(CounterComponent, "right", {label: "Right"}) do
+      CounterComponent.new
+    end
     items = [
       {"first", "First keyed item"},
       {"second", "Second keyed item"},
@@ -82,6 +121,8 @@ class CounterLive < LF::LiveView::View
         .counter { display: flex; align-items: center; gap: 1rem; margin: 2rem 0; }
         button, input { font: inherit; padding: .65rem 1rem; }
         output { min-width: 4ch; text-align: center; font-size: 2rem; }
+        .components { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+        .components section { border: 1px solid currentColor; border-radius: .5rem; padding: 0 1rem; }
         [data-opal-status="disconnected"]::before { content: "Reconnecting..."; color: #d97706; }
       </style>
       <h1>#{@counter_label.heading}</h1>
@@ -101,6 +142,7 @@ class CounterLive < LF::LiveView::View
         <button type="submit">Save</button>
       </form>
       <output id="validation-count" data-testid="validation-count">#{@validation_count}</output>
+      <div class="components">#{left_component}#{right_component}</div>
       <button type="button" data-opal-click="reverse_items">Reverse keyed items</button>
       <ul id="keyed-items">#{LF::LiveView::HTML.raw(items_markup)}</ul>
     HTML

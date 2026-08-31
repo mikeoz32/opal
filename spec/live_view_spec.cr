@@ -118,6 +118,93 @@ class LiveViewSpecFailure < LF::LiveView::View
   end
 end
 
+class LiveViewSpecComponent < LF::LiveView::Component
+  include LF::DI::Disposable
+
+  @@mount_count = 0
+  @@update_count = 0
+  @@destroy_count = 0
+
+  def self.reset : Nil
+    @@mount_count = 0
+    @@update_count = 0
+    @@destroy_count = 0
+  end
+
+  def self.mount_count : Int32
+    @@mount_count
+  end
+
+  def self.update_count : Int32
+    @@update_count
+  end
+
+  def self.destroy_count : Int32
+    @@destroy_count
+  end
+
+  @count = 0
+  @label = ""
+
+  def mount : Nil
+    @@mount_count += 1
+  end
+
+  def update(assigns : JSON::Any) : Nil
+    @@update_count += 1
+    @label = assigns.as_h["label"].as_s
+  end
+
+  def render : LF::LiveView::Rendered
+    LF::LiveView::HTML.rendered(
+      %(<button id="component-#{id}" data-opal-target="#{myself}" data-opal-click="increment">#{@label}:#{@count}</button>)
+    )
+  end
+
+  def handle_event(event : String, value : JSON::Any) : Nil
+    case event
+    when "increment"
+      @count += 1
+    else
+      super
+    end
+  end
+
+  def destroy : Nil
+    @@destroy_count += 1
+  end
+end
+
+class LiveViewSpecComponents < LF::LiveView::View
+  @show_right = true
+
+  def handle_event(event : String, value : JSON::Any) : Nil
+    case event
+    when "toggle_right"
+      @show_right = !@show_right
+    else
+      super
+    end
+  end
+
+  def render : LF::LiveView::Rendered
+    left = live_component(LiveViewSpecComponent, "left", {label: "Left"}) do
+      LiveViewSpecComponent.new
+    end
+    right = if @show_right
+              live_component(LiveViewSpecComponent, "right", {label: "Right"}) do
+                LiveViewSpecComponent.new
+              end
+            else
+              LF::LiveView::Rendered.opaque("")
+            end
+
+    LF::LiveView::HTML.rendered(
+      %(<section>#{left}#{right}<button data-opal-click="toggle_right">toggle</button></section>)
+    )
+  end
+end
+
 private def live_view_spec_server(
   secret : String,
   *,
@@ -128,6 +215,7 @@ private def live_view_spec_server(
 )
   LiveViewSpecPush.reset
   LiveViewSpecDisposable.reset
+  LiveViewSpecComponent.reset
   root = LF::DI::DefaultContainer.new
   endpoint = LF::LiveView::Endpoint.new(
     secret,
@@ -140,6 +228,7 @@ private def live_view_spec_server(
   endpoint.page("/push", LiveViewSpecPush) { |_scope| LiveViewSpecPush.new }
   endpoint.page("/disposable", LiveViewSpecDisposable) { |_scope| LiveViewSpecDisposable.new }
   endpoint.page("/failure", LiveViewSpecFailure) { |_scope| LiveViewSpecFailure.new }
+  endpoint.page("/components", LiveViewSpecComponents) { |_scope| LiveViewSpecComponents.new }
   endpoint.page(
     "/guarded",
     LiveViewSpecCounter,
@@ -327,6 +416,102 @@ describe LF::LiveView do
       rendered["diff"].as_h.should eq({"0" => JSON::Any.new("1")})
       rendered["ref"].as_i64.should eq(1)
       rendered["status"].as_s.should eq("ok")
+      websocket.close
+    ensure
+      websocket.try(&.close)
+    end
+  end
+
+  it "keeps stateful component instances and routes events by component target" do
+    live_view_spec_server("k" * 32) do |address|
+      response = HTTP::Client.get("http://#{address.address}:#{address.port}/components")
+      token = response.body.match(/data-opal-token="([^"]+)"/).not_nil![1]
+      response.body.should contain("Left:0")
+      response.body.should contain("Right:0")
+      LiveViewSpecComponent.mount_count.should eq(2)
+      LiveViewSpecComponent.destroy_count.should eq(2)
+
+      websocket = HTTP::WebSocket.new(
+        "127.0.0.1",
+        "/_opal/live",
+        port: address.port,
+        headers: HTTP::Headers{"Origin" => "http://#{address.address}:#{address.port}"}
+      )
+      websocket.send({type: "join", protocol: 2, token: token}.to_json)
+      joined = JSON.parse(websocket.receive.as(String))
+      dynamics = joined["rendered"].as_h["dynamics"].as_a.map(&.as_s)
+      left_target = dynamics[0].match(/data-opal-target="(\d+)"/).not_nil![1].to_i64
+      right_target = dynamics[1].match(/data-opal-target="(\d+)"/).not_nil![1].to_i64
+      left_target.should_not eq(right_target)
+      LiveViewSpecComponent.mount_count.should eq(4)
+
+      websocket.send({
+        type:    "event",
+        event:   "increment",
+        target:  left_target,
+        value:   nil,
+        version: 0,
+        ref:     1,
+      }.to_json)
+      left_update = JSON.parse(websocket.receive.as(String))
+      left_update["diff"].as_h.keys.should eq(["0"])
+      left_update["diff"].as_h["0"].as_s.should contain("Left:1")
+      left_update["diff"].as_h["0"].as_s.should_not contain("Right:1")
+
+      websocket.send({
+        type:    "event",
+        event:   "increment",
+        target:  right_target,
+        value:   nil,
+        version: 1,
+        ref:     2,
+      }.to_json)
+      right_update = JSON.parse(websocket.receive.as(String))
+      right_update["diff"].as_h.keys.should eq(["1"])
+      right_update["diff"].as_h["1"].as_s.should contain("Right:1")
+
+      websocket.send({
+        type:    "event",
+        event:   "increment",
+        target:  999_999,
+        value:   nil,
+        version: 2,
+        ref:     3,
+      }.to_json)
+      unknown = JSON.parse(websocket.receive.as(String))
+      unknown["type"].as_s.should eq("error")
+      unknown["reason"].as_s.should eq("unknown_target")
+      unknown["ref"].as_i64.should eq(3)
+
+      websocket.send({type: "heartbeat", ref: 10}.to_json)
+      JSON.parse(websocket.receive.as(String))["ref"].as_i64.should eq(10)
+
+      websocket.send({
+        type:    "event",
+        event:   "toggle_right",
+        target:  nil,
+        value:   nil,
+        version: 2,
+        ref:     4,
+      }.to_json)
+      removed = JSON.parse(websocket.receive.as(String))
+      removed["version"].as_i64.should eq(3)
+      removed["diff"].as_h["1"].as_s.should be_empty
+      LiveViewSpecComponent.destroy_count.should eq(3)
+
+      websocket.send({
+        type:    "event",
+        event:   "toggle_right",
+        value:   nil,
+        version: 3,
+        ref:     5,
+      }.to_json)
+      restored = JSON.parse(websocket.receive.as(String))
+      restored_right = restored["diff"].as_h["1"].as_s
+      restored_right.should contain("Right:0")
+      restored_target = restored_right.match(/data-opal-target="(\d+)"/).not_nil![1].to_i64
+      restored_target.should_not eq(right_target)
+      LiveViewSpecComponent.mount_count.should eq(5)
       websocket.close
     ensure
       websocket.try(&.close)

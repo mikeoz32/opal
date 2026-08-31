@@ -30,7 +30,7 @@ test("debounces form changes once and preserves focused input", async ({page}) =
   await expect(input).toHaveValue("Alice");
   await expect.poll(() => input.evaluate(element => element === window.__opalNameInput)).toBe(true);
 
-  await page.getByRole("heading").click();
+  await page.getByRole("heading", {level: 1}).click();
   await page.waitForTimeout(250);
   await expect(page.getByTestId("validation-count")).toHaveText("1");
 
@@ -40,7 +40,7 @@ test("debounces form changes once and preserves focused input", async ({page}) =
 
 test("serializes timer updates on the connection", async ({page}) => {
   await page.getByRole("button", {name: "+1 later"}).click();
-  await expect(page.locator("output[aria-live]")).toHaveText("1");
+  await expect(page.locator("#counter-value")).toHaveText("1");
 });
 
 test("moves keyed elements without recreating their DOM nodes", async ({page}) => {
@@ -55,6 +55,28 @@ test("moves keyed elements without recreating their DOM nodes", async ({page}) =
     "First keyed item",
   ]);
   await expect.poll(() => first.evaluate(element => element === window.__opalFirstItem)).toBe(true);
+});
+
+test("keeps component state isolated and targets only its instance", async ({page}) => {
+  const left = page.locator("#left-component-value");
+  const right = page.locator("#right-component-value");
+  await right.evaluate(element => { window.__opalRightComponentNode = element; });
+
+  const incrementLeft = page.getByRole("button", {name: "Increment Left component"});
+  await incrementLeft.evaluate(button => {
+    button.click();
+    button.click();
+  });
+
+  await expect(left).toHaveText("2");
+  await expect(right).toHaveText("0");
+  await expect.poll(
+    () => right.evaluate(element => element === window.__opalRightComponentNode),
+  ).toBe(true);
+
+  await page.getByRole("button", {name: "Increment Right component"}).click();
+  await expect(left).toHaveText("2");
+  await expect(right).toHaveText("1");
 });
 
 test("applies an explicitly empty document title", async ({page}) => {

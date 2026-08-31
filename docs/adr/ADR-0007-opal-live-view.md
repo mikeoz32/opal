@@ -92,13 +92,16 @@ The default client supports:
 - `data-opal-change="event"`, with optional `data-opal-debounce="milliseconds"`;
 - `data-opal-submit="event"` on forms;
 - `data-opal-value-*` values on event targets;
+- `data-opal-target="component-id"` for stateful component events;
 - automatic heartbeat and bounded exponential reconnect;
 - `opal:render`, `opal:error`, and `opal:event-error` browser events.
 
-The form encoder preserves repeated names as arrays. File uploads, client
-hooks, nested stateful components, component-targeted events, streams, and live
-navigation are deferred. Their absence is an explicit protocol-v2 boundary,
-not Phoenix compatibility.
+The form encoder preserves repeated names as arrays. Connection-local stateful
+components use `(component type, id)` identity, mount once, update before each
+render, and receive explicitly targeted events on the same connection fiber.
+Removed components are destroyed. File uploads, client hooks, nested
+components, streams, and live navigation are deferred. Their absence is an
+explicit protocol-v2 boundary, not Phoenix compatibility.
 
 ### Security
 
