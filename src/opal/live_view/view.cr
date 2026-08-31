@@ -5,6 +5,7 @@ require "set"
 require "uri"
 require "./component"
 require "./html"
+require "./navigation"
 require "./rendered"
 require "./stream"
 
@@ -20,18 +21,25 @@ module LF::LiveView
     end
   end
 
-  class MountContext
-    getter request : ::HTTP::Request
+  class ParamsContext
     getter params : Hash(String, String)
     getter uri : URI
-    getter? connected : Bool
 
-    def initialize(@request, @params, resource : String, @connected)
+    def initialize(@params, resource : String)
       @uri = URI.parse(resource)
     end
 
     def query_params : URI::Params
       @uri.query_params
+    end
+  end
+
+  class MountContext < ParamsContext
+    getter request : ::HTTP::Request
+    getter? connected : Bool
+
+    def initialize(@request, params : Hash(String, String), resource : String, @connected)
+      super(params, resource)
     end
   end
 
@@ -46,8 +54,14 @@ module LF::LiveView
     @next_component_cid = 0_i64
     @connected = false
     @stream_operations = [] of StreamOperation
+    @navigation : Navigation?
 
     def mount(context : MountContext) : Nil
+    end
+
+    # Runs after mount and whenever a live patch changes the current route or
+    # query parameters without replacing this view instance.
+    def handle_params(context : ParamsContext) : Nil
     end
 
     abstract def render : RenderResult
@@ -91,6 +105,17 @@ module LF::LiveView
     # running on the LiveView connection fiber.
     protected def refresh : Bool
       @refresh.try(&.call) || false
+    end
+
+    # Changes the URL inside this LiveView without remounting it.
+    protected def push_patch(to : String, *, replace : Bool = false) : Nil
+      queue_navigation(Navigation.patch(to, replace: replace))
+    end
+
+    # Navigates through a fresh HTTP mount. Opal does not yet define
+    # cross-view live sessions, so this intentionally replaces the document.
+    protected def push_navigate(to : String, *, replace : Bool = false) : Nil
+      queue_navigation(Navigation.navigate(to, replace: replace))
     end
 
     # Renders a stateful component. Reusing the same component type and id on
@@ -221,6 +246,7 @@ module LF::LiveView
       @components_by_cid.clear
       @rendered_components = nil
       @stream_operations.clear
+      @navigation = nil
       components.each { |component| destroy_component(component) }
     end
 
@@ -253,6 +279,23 @@ module LF::LiveView
     end
 
     # :nodoc:
+    def __opal_handle_params(context : ParamsContext) : Nil
+      handle_params(context)
+    end
+
+    # :nodoc:
+    def __opal_take_navigation : Navigation?
+      navigation = @navigation
+      @navigation = nil
+      navigation
+    end
+
+    # :nodoc:
+    def __opal_clear_navigation : Nil
+      @navigation = nil
+    end
+
+    # :nodoc:
     def __opal_take_stream_operations : Array(StreamOperation)
       operations = @stream_operations
       @stream_operations = [] of StreamOperation
@@ -275,9 +318,17 @@ module LF::LiveView
       end
     end
 
+    private def queue_navigation(navigation : Navigation) : Nil
+      if @navigation
+        raise DuplicateNavigationError.new
+      end
+      @navigation = navigation
+    end
+
     private def create_component(identity : ComponentIdentity, component : T) : T forall T
       @next_component_cid += 1
-      component.__opal_attach(identity[1], @next_component_cid, @connected)
+      navigate = ->(navigation : Navigation) { queue_navigation(navigation) }
+      component.__opal_attach(identity[1], @next_component_cid, @connected, navigate)
       begin
         component.mount
       rescue error
@@ -290,6 +341,7 @@ module LF::LiveView
     end
 
     private def destroy_component(component : Component) : Nil
+      component.__opal_detach
       component.as?(LF::DI::Disposable).try(&.destroy)
     rescue error : Exception
       Log.error(exception: error) do
@@ -349,6 +401,18 @@ module LF::LiveView
   class DuplicateComponentError < Error
     def initialize(type : String)
       super("Duplicate LiveView component identity for #{type}")
+    end
+  end
+
+  class DuplicateNavigationError < Error
+    def initialize
+      super("A LiveView callback can request only one navigation")
+    end
+  end
+
+  class InvalidNavigationError < Error
+    def initialize
+      super("Invalid LiveView navigation")
     end
   end
 

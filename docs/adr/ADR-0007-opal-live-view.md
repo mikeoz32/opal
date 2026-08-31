@@ -30,16 +30,16 @@ client is a dependency-free ES module embedded in the shard and served from
 Node.js, or an asset bundler to use the default runtime.
 
 The socket endpoint defaults to `/_opal/live`. Client messages are `join`,
-`event`, and `heartbeat`; server messages are `render`, `heartbeat`, and
-non-fatal `error`. Event messages carry the last applied render version. A
-stale event is not executed: the server sends its current render so the client
-can resynchronize and retry it. Every event also carries a monotonically
-increasing connection-local `ref`; its render or error response echoes that
-reference. The browser keeps one event in flight and queues later events until
-the reference is acknowledged, preventing rapid interactions from being
-silently dropped. The built-in client negotiates protocol version `2`; the
-server still accepts version `1` for existing clients. An unsupported version
-closes the connection instead of silently changing semantics.
+`event`, `patch`, and `heartbeat`; server messages are `render`, `heartbeat`,
+and non-fatal `error`. Events and patches carry the last applied render version
+and a monotonically increasing connection-local `ref`. A stale operation is
+not executed: the server sends its current render so the client can
+resynchronize and retry it. The browser keeps one operation in flight and
+queues later operations until the reference is acknowledged, preventing rapid
+interactions from being silently dropped. The built-in client negotiates
+protocol version `2`; the server still accepts version `1` for pages that do
+not use v2-only streams or navigation. An unsupported version closes the
+connection instead of silently changing semantics.
 
 ### View lifecycle and state
 
@@ -52,6 +52,10 @@ dependencies.
 
 1. with `connected? == false` for the initial HTTP render;
 2. with `connected? == true` after the signed mount token is accepted.
+
+`handle_params(context)` runs after each mount and again for an acknowledged
+patch inside the same page route. Patch guards receive a synthetic GET request
+for the target resource while retaining the active connection context.
 
 The connected instance owns mutable page state and processes events serially
 on the connection fiber. `render` returns either a structured `Rendered` value
@@ -66,10 +70,10 @@ remain serialized. `refresh` is reserved for coalescing a render requested by
 code already executing on the connection fiber.
 
 On transport reconnect, the server creates a new WebSocket scope and mounts a
-new view from the original signed path, route params, query params, and the new
-handshake request. Ephemeral socket state therefore resets unless the
-application persisted it. Opal does not serialize arbitrary server state into
-the browser.
+new view from the latest signed path, route params, query params, and the new
+handshake request. Successful patches refresh that signed state. Ephemeral
+non-URL state still resets unless the application persisted it. Opal does not
+serialize arbitrary server state into the browser.
 
 ### Rendering and browser bindings
 
@@ -93,14 +97,25 @@ The default client supports:
 - `data-opal-submit="event"` on forms;
 - `data-opal-value-*` values on event targets;
 - `data-opal-target="component-id"` for stateful component events;
+- `data-opal-patch` and optional `data-opal-replace` for same-view history;
+- `data-opal-navigate` for a fresh document mount;
 - automatic heartbeat and bounded exponential reconnect;
 - `opal:render`, `opal:error`, and `opal:event-error` browser events.
 
 The form encoder preserves repeated names as arrays. Connection-local stateful
 components use `(component type, id)` identity, mount once, update before each
 render, and receive explicitly targeted events on the same connection fiber.
-Removed components are destroyed. File uploads, client hooks, nested
-components, and live navigation are deferred.
+Removed components are destroyed. Components can request navigation through
+their parent connection. File uploads, client hooks, nested components, and
+same-socket navigation across page classes are deferred.
+
+Live patches are additive protocol-v2 messages. The server validates an
+absolute local resource against the current page route, reruns guards, invokes
+`handle_params`, and returns the normalized target plus a refreshed signed
+mount token. The client updates history only after that response. Popstate
+patches use the same event queue and do not create another entry. Navigation
+across page classes uses a fresh HTTP document until Opal defines an explicit
+live-session authorization boundary.
 
 Protocol-v2 stream operations address a marked container and carry ordered
 insert, delete, or reset mutations. The browser validates that inserts contain

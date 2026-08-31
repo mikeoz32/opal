@@ -42,11 +42,17 @@ module LF::HTTP
     getter controller : String
     getter action : String
 
-    def initialize(@http_context, @route_params, @controller, @action)
+    def initialize(
+      @http_context,
+      @route_params,
+      @controller,
+      @action,
+      @request_override : ::HTTP::Request? = nil,
+    )
     end
 
     def request : ::HTTP::Request
-      @http_context.request
+      @request_override || @http_context.request
     end
 
     def response : ::HTTP::Server::Response

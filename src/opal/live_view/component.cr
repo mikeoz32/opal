@@ -1,5 +1,6 @@
 require "json"
 require "../di"
+require "./navigation"
 require "./rendered"
 
 module LF::LiveView
@@ -12,6 +13,7 @@ module LF::LiveView
     @__opal_cid = 0_i64
     @__opal_connected = false
     @__opal_attached = false
+    @__opal_navigate : Proc(Navigation, Nil)?
 
     # Called exactly once when this component identity first appears.
     def mount : Nil
@@ -43,13 +45,31 @@ module LF::LiveView
       @__opal_connected
     end
 
+    protected def push_patch(to : String, *, replace : Bool = false) : Nil
+      navigate(Navigation.patch(to, replace: replace))
+    end
+
+    protected def push_navigate(to : String, *, replace : Bool = false) : Nil
+      navigate(Navigation.navigate(to, replace: replace))
+    end
+
     # :nodoc:
-    def __opal_attach(id : String, cid : Int64, connected : Bool) : Nil
+    def __opal_attach(
+      id : String,
+      cid : Int64,
+      connected : Bool,
+      @__opal_navigate : Proc(Navigation, Nil),
+    ) : Nil
       raise Error.new("LiveView component is already attached") if @__opal_attached
       @__opal_id = id
       @__opal_cid = cid
       @__opal_connected = connected
       @__opal_attached = true
+    end
+
+    # :nodoc:
+    def __opal_detach : Nil
+      @__opal_navigate = nil
     end
 
     # :nodoc:
@@ -62,6 +82,11 @@ module LF::LiveView
       else
         raise Error.new("Unsupported LiveView component render result")
       end
+    end
+
+    private def navigate(navigation : Navigation) : Nil
+      callback = @__opal_navigate || raise Error.new("LiveView component is not attached")
+      callback.call(navigation)
     end
   end
 end
