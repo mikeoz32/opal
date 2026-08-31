@@ -184,6 +184,12 @@ end
 The order is global → controller → action → parameter. Interceptors unwind in
 reverse order; filters search action → controller → global.
 
+For `@[LF::HTTP::Controller::WebSocket]` actions, global, controller, and action
+guards run before the HTTP upgrade, so the same direct annotations can reject
+the handshake with `403`. Pipes, interceptors, and filters retain their HTTP
+action semantics; use explicit WebSocket message validation inside the
+connection handler.
+
 Global policies are optional. With HTTP autoconfiguration, put their annotations
 on the `@[LF::Application]` class. A manually assembled standalone application
 can use a separate annotation owner only when it actually needs global policies:
@@ -288,12 +294,16 @@ A standalone server that exposes WebSocket controller routes needs both scope
 handlers, in this order:
 
 ```crystal
+connections = LF::HTTP::WebSocketConnectionRegistry.new
 server = HTTP::Server.new([
-  LF::HTTP::DI::WebSocketScopeHandler.new(root),
+  LF::HTTP::DI::WebSocketScopeHandler.new(root, "websocket", connections),
   LF::HTTP::DI::RequestScopeHandler.new(root),
   app,
 ])
 ```
+
+On shutdown, close the server, call `connections.shutdown(timeout_ms)`, and
+only then shut down the root container so active connection scopes exit first.
 
 ## LiveView
 
@@ -486,6 +496,8 @@ http:
 
 live_view:
   secret: replace-with-a-generated-production-secret
+  join_timeout_ms: 10000
+  idle_timeout_ms: 75000
 ```
 
 ```crystal
@@ -666,6 +678,10 @@ shards install
 crystal spec --no-color
 crystal run src/live_view_counter_example.cr
 ```
+
+Repository contributors can run the real-browser compatibility suite from the
+repository root with `npm ci`, `npx playwright install --with-deps chromium`,
+and `npm run test:live-view-browser`.
 
 ## Route Matching Rules
 

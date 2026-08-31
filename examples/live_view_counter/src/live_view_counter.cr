@@ -13,6 +13,8 @@ class CounterLive < LF::LiveView::View
   @count = 0
   @name = "friend"
   @draft_name = "friend"
+  @validation_count = 0
+  @empty_title = false
 
   def initialize(@counter_label : CounterLabel)
   end
@@ -32,14 +34,25 @@ class CounterLive < LF::LiveView::View
     when "increment_later"
       spawn do
         sleep 250.milliseconds
-        @count += 1
-        refresh
+        send_info("increment")
       end
     when "validate_name"
       @draft_name = string_value(value, "name")
+      @validation_count += 1
     when "save_name"
       @draft_name = string_value(value, "name")
       @name = @draft_name unless @draft_name.blank?
+    when "clear_title"
+      @empty_title = true
+    else
+      super
+    end
+  end
+
+  def handle_info(name : String, value : JSON::Any) : Nil
+    case name
+    when "increment"
+      @count += 1
     else
       super
     end
@@ -65,6 +78,7 @@ class CounterLive < LF::LiveView::View
         <output aria-live="polite">#{@count}</output>
         <button type="button" data-opal-click="increment" aria-label="Increment">+</button>
         <button type="button" data-opal-click="increment_later">+1 later</button>
+        <button type="button" data-opal-click="clear_title">Clear title</button>
       </div>
       <form data-opal-change="validate_name" data-opal-debounce="150" data-opal-submit="save_name">
         <label>
@@ -73,11 +87,12 @@ class CounterLive < LF::LiveView::View
         </label>
         <button type="submit">Save</button>
       </form>
+      <output data-testid="validation-count">#{@validation_count}</output>
     HTML
   end
 
   def title : String?
-    "Counter #{@count} · Opal"
+    @empty_title ? "" : "Counter #{@count} · Opal"
   end
 
   private def string_value(value : JSON::Any, key : String) : String

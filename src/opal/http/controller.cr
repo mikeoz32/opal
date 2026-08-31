@@ -401,6 +401,15 @@ module LF::HTTP::Controller
           {% for ann in method.annotations(LF::HTTP::Controller::WebSocket) %}
             {% path = ann[0] || ann[:path] || raise "Missing path in #{controller_type}##{method.name}" %}
             {% protocols = ann[:protocols] %}
+            {% websocket_action_guard_types = [] of ASTNode %}
+            {% for policy_annotation in method.annotations(LF::HTTP::UseGuards) %}
+              {% for policy in policy_annotation.args %}
+                {% unless policy.resolve.ancestors.includes?(LF::HTTP::Guard) %}
+                  {% raise "Invalid guard #{policy} on #{controller_type}##{method.name}: expected LF::HTTP::Guard" %}
+                {% end %}
+                {% websocket_action_guard_types << policy %}
+              {% end %}
+            {% end %}
             {% websocket_arguments = method.args.select { |argument| argument.restriction.stringify == "HTTP::WebSocket" } %}
             {% request_arguments = method.args.select { |argument| argument.name.stringify == "request" && argument.restriction.stringify == "HTTP::Request" } %}
 
@@ -424,10 +433,42 @@ module LF::HTTP::Controller
               {% end %}
             {% end %}
 
+            websocket_before_upgrade = ->(ctx : ::HTTP::Server::Context, route_params : Hash(String, String)) do
+              execution_context = LF::HTTP::ExecutionContext.new(
+                ctx,
+                route_params,
+                {{ controller_type.name.stringify }},
+                {{ method.name.stringify }}
+              )
+              scope = execution_context.dependency_scope
+              {% for policy in global_guard_types %}
+                unless scope.resolve({{ policy }}).can_activate(execution_context)
+                  raise LF::HTTP::Forbidden.new
+                end
+              {% end %}
+              {% for policy in controller_guard_types %}
+                unless scope.resolve({{ policy }}).can_activate(execution_context)
+                  raise LF::HTTP::Forbidden.new
+                end
+              {% end %}
+              {% for policy in websocket_action_guard_types %}
+                unless scope.resolve({{ policy }}).can_activate(execution_context)
+                  raise LF::HTTP::Forbidden.new
+                end
+              {% end %}
+            end
+
             {% if protocols %}
-              {{ router }}.ws_with_context({{ path }}, protocols: {{ protocols }}) do |websocket, route_params, ctx|
+              {{ router }}.ws_with_context(
+                {{ path }},
+                protocols: {{ protocols }},
+                before_upgrade: websocket_before_upgrade
+              ) do |websocket, route_params, ctx|
             {% else %}
-              {{ router }}.ws_with_context({{ path }}) do |websocket, route_params, ctx|
+              {{ router }}.ws_with_context(
+                {{ path }},
+                before_upgrade: websocket_before_upgrade
+              ) do |websocket, route_params, ctx|
             {% end %}
                 begin
                   scope = ctx.dependency_scope

@@ -73,6 +73,10 @@ Filters surround guard execution, interceptor execution, binding, controller
 invocation, and response rendering. An unhandled `LF::HTTP::Error` retains its
 status. Other unhandled exceptions retain the controller's existing 500 mapping.
 
+WebSocket controller actions reuse global, controller, and action guards during
+the HTTP handshake, before upgrade. The remaining policy types keep their HTTP
+request/response semantics and are not applied to WebSocket message loops.
+
 ### Input model
 
 Pipes operate on transport values before conversion:

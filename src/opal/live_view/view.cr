@@ -7,6 +7,14 @@ module LF::LiveView
   annotation Page
   end
 
+  struct Info
+    getter name : String
+    getter value : JSON::Any
+
+    def initialize(@name, @value = JSON::Any.new(nil))
+    end
+  end
+
   class MountContext
     getter request : ::HTTP::Request
     getter params : Hash(String, String)
@@ -23,7 +31,8 @@ module LF::LiveView
   end
 
   abstract class View
-    @refresh : Proc(Nil)?
+    @send_info : Proc(Info, Bool)?
+    @refresh : Proc(Bool)?
 
     def mount(context : MountContext) : Nil
     end
@@ -32,6 +41,10 @@ module LF::LiveView
 
     def handle_event(event : String, value : JSON::Any) : Nil
       raise UnknownEventError.new(event)
+    end
+
+    def handle_info(name : String, value : JSON::Any) : Nil
+      raise UnknownInfoError.new(name)
     end
 
     def title : String?
@@ -52,19 +65,31 @@ module LF::LiveView
       end
     end
 
-    # Schedules one coalesced render for state changed outside `handle_event`,
-    # for example by a subscription or timer. Events rerender automatically.
-    protected def refresh : Nil
-      @refresh.try(&.call)
+    # Enqueues an application message on the LiveView connection fiber. Use
+    # this from timers and subscriptions instead of mutating view state from
+    # their fibers directly.
+    protected def send_info(name : String, value = JSON::Any.new(nil)) : Bool
+      dispatcher = @send_info
+      return false unless dispatcher
+      dispatcher.call(Info.new(name, value))
+    end
+
+    # Schedules one coalesced render when state was changed by code already
+    # running on the LiveView connection fiber.
+    protected def refresh : Bool
+      @refresh.try(&.call) || false
     end
 
     # :nodoc:
-    def __opal_connect(&refresh : -> Nil) : Nil
-      @refresh = refresh
+    def __opal_connect(
+      @send_info : Proc(Info, Bool),
+      @refresh : Proc(Bool),
+    ) : Nil
     end
 
     # :nodoc:
     def __opal_disconnect : Nil
+      @send_info = nil
       @refresh = nil
     end
   end
@@ -80,6 +105,14 @@ module LF::LiveView
 
     def initialize(@event)
       super("Unknown LiveView event: #{event}")
+    end
+  end
+
+  class UnknownInfoError < Error
+    getter info : String
+
+    def initialize(@info)
+      super("Unknown LiveView info: #{info}")
     end
   end
 

@@ -18,6 +18,9 @@ reconnect. Opal serves a dependency-free ES module as the default client.
 5. Add click, change, submit, focus restoration, and reconnect browser runtime.
 6. Add Application autoconfiguration and request/WebSocket constructor DI.
 7. Add loopback protocol specs, a runnable counter example, and browser E2E.
+8. Add event references and client-side queuing so rapid events are not lost.
+9. Serialize timer/subscription updates through `send_info` and add join/idle timeouts.
+10. Apply application/view guards to disconnected and connected mounts.
 
 ## Deferred protocol work
 

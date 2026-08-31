@@ -9,6 +9,13 @@ class WebSocketControllerSpecService
   end
 end
 
+class WebSocketControllerSpecGuard < LF::HTTP::Guard
+  def can_activate(context : LF::HTTP::ExecutionContext) : Bool
+    context.request.headers["X-Test"]? == "yes"
+  end
+end
+
+@[LF::HTTP::UseGuards(WebSocketControllerSpecGuard)]
 class WebSocketControllerSpecController
   include LF::HTTP::Controller
   include LF::DI::Disposable
@@ -50,6 +57,9 @@ describe LF::HTTP::Controller do
     root.add_bean(name: "websocket_controller_spec_service", type: WebSocketControllerSpecService) do |_scope|
       WebSocketControllerSpecService.new("injected")
     end
+    root.add_bean(name: "websocket_controller_spec_guard", type: WebSocketControllerSpecGuard) do |_scope|
+      WebSocketControllerSpecGuard.new
+    end
 
     app = LF::HTTP::App.new do |router|
       WebSocketControllerSpecController.setup_routes(router, root)
@@ -67,6 +77,15 @@ describe LF::HTTP::Controller do
     end
     listening.receive
     Fiber.yield
+
+    denied = HTTP::Client.get(
+      "http://127.0.0.1:#{address.port}/controller-ws/7",
+      headers: HTTP::Headers{
+        "Connection" => "Upgrade",
+        "Upgrade"    => "websocket",
+      }
+    )
+    denied.status.should eq(HTTP::Status::FORBIDDEN)
 
     headers = HTTP::Headers{"X-Test" => "yes"}
     protocol = HTTP::WebSocket::Protocol.new(

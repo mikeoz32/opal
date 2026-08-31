@@ -478,7 +478,7 @@ module LF::HTTP::AutoConfig
           {% for controller in controllers %}
             {{ controller }}.setup_routes(router, application_context, {{ global_owner }})
           {% end %}
-          LF::LiveView::AutoConfig.mount(router, application_context)
+          LF::LiveView::AutoConfig.mount(router, application_context, {{ global_owner }})
         end
       end
     )

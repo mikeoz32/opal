@@ -9,36 +9,54 @@ export class OpalLiveView {
     this.version = 0;
     this.socket = null;
     this.reconnectAttempt = 0;
+    this.reconnectTimer = null;
+    this.connectionGeneration = 0;
     this.heartbeatRef = 0;
     this.lastHeartbeatAck = 0;
+    this.nextEventRef = 0;
+    this.eventQueue = [];
+    this.inFlightEvent = null;
     this.stopped = false;
     this.bindEvents();
   }
 
   connect() {
     if (this.stopped) return;
+    if (this.socket && [WebSocket.CONNECTING, WebSocket.OPEN].includes(this.socket.readyState)) return;
     const scheme = window.location.protocol === "https:" ? "wss:" : "ws:";
     const url = new URL(this.socketPath, `${scheme}//${window.location.host}`);
-    this.socket = new WebSocket(url);
+    const generation = ++this.connectionGeneration;
+    const socket = new WebSocket(url);
+    this.socket = socket;
     this.root.dataset.opalStatus = "connecting";
 
-    this.socket.addEventListener("open", () => {
-      this.reconnectAttempt = 0;
+    socket.addEventListener("open", () => {
+      if (!this.currentConnection(socket, generation)) return;
       this.lastHeartbeatAck = Date.now();
-      this.send({type: "join", protocol: 1, token: this.token});
+      if (!this.send({type: "join", protocol: 1, token: this.token})) {
+        socket.close(1001, "join send failed");
+        return;
+      }
       this.startHeartbeat();
     });
 
-    this.socket.addEventListener("message", event => this.onMessage(event));
-    this.socket.addEventListener("close", event => {
+    socket.addEventListener("message", event => {
+      if (this.currentConnection(socket, generation)) this.onMessage(event);
+    });
+    socket.addEventListener("close", event => {
+      if (!this.currentConnection(socket, generation)) return;
       this.stopHeartbeat();
       this.root.dataset.opalStatus = "disconnected";
-      if (!this.stopped && event.code !== 1008) this.scheduleReconnect();
+      this.failPendingEvents(event.code);
+      if (!this.stopped && this.shouldReconnect(event.code)) this.scheduleReconnect();
     });
   }
 
   disconnect() {
     this.stopped = true;
+    this.connectionGeneration += 1;
+    if (this.reconnectTimer) window.clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
     this.stopHeartbeat();
     if (this.socket) this.socket.close(1000, "page unload");
   }
@@ -55,36 +73,64 @@ export class OpalLiveView {
       const form = event.target.closest("form[data-opal-submit]");
       if (!form) return;
       event.preventDefault();
-      this.pushEvent(form.dataset.opalSubmit, this.formValue(form));
+      const value = this.formValue(form, event.submitter);
+      if (value) this.pushEvent(form.dataset.opalSubmit, value);
     });
 
-    const pushChange = event => {
-      const target = event.target;
+    const pushChange = target => {
       const owner = target.closest("[data-opal-change]") || target.form?.closest("[data-opal-change]");
       if (!owner || !this.root.contains(owner)) return;
       const value = owner instanceof HTMLFormElement ? this.formValue(owner) : this.eventValue(owner);
-      this.pushEvent(owner.dataset.opalChange, value);
+      if (value) this.pushEvent(owner.dataset.opalChange, value);
     };
-    this.root.addEventListener("change", pushChange);
+    this.root.addEventListener("change", event => {
+      const target = event.target;
+      const owner = target.closest("[data-opal-change]") || target.form?.closest("[data-opal-change]");
+      if (!owner || Object.prototype.hasOwnProperty.call(owner.dataset, "opalDebounce")) return;
+      pushChange(target);
+    });
     this.root.addEventListener("input", event => {
       const target = event.target;
       const owner = target.closest("[data-opal-change]") || target.form?.closest("[data-opal-change]");
-      if (!owner || !owner.dataset.opalDebounce) return;
+      if (!owner || !Object.prototype.hasOwnProperty.call(owner.dataset, "opalDebounce")) return;
       window.clearTimeout(owner.__opalDebounceTimer);
       owner.__opalDebounceTimer = window.setTimeout(
-        () => pushChange(event),
+        () => pushChange(target),
         Number(owner.dataset.opalDebounce) || 0,
       );
     });
   }
 
   pushEvent(event, value = {}) {
-    if (!event || !this.socket || this.socket.readyState !== WebSocket.OPEN) return false;
-    this.send({type: "event", event, value, version: this.version});
+    if (!event || this.root.dataset.opalStatus !== "connected") return false;
+    this.eventQueue.push({event, value, ref: ++this.nextEventRef});
+    this.flushEvents();
     return true;
   }
 
+  flushEvents() {
+    if (this.inFlightEvent || this.eventQueue.length === 0) return;
+    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;
+
+    const pending = this.eventQueue.shift();
+    this.inFlightEvent = pending;
+    if (!this.send({
+      type: "event",
+      event: pending.event,
+      value: pending.value,
+      version: this.version,
+      ref: pending.ref,
+    })) {
+      this.inFlightEvent = null;
+      this.eventQueue.unshift(pending);
+    }
+  }
+
   onMessage(event) {
+    if (typeof event.data !== "string") {
+      this.socket.close(1003, "text messages required");
+      return;
+    }
     let message;
     try {
       message = JSON.parse(event.data);
@@ -99,9 +145,20 @@ export class OpalLiveView {
         return;
       }
       this.applyRender(message);
+      this.reconnectAttempt = 0;
+      if (this.inFlightEvent && message.ref === this.inFlightEvent.ref) {
+        const pending = this.inFlightEvent;
+        this.inFlightEvent = null;
+        if (message.status === "stale") this.eventQueue.unshift(pending);
+      }
+      this.flushEvents();
     } else if (message.type === "heartbeat") {
-      this.lastHeartbeatAck = Date.now();
+      if (message.ref === this.heartbeatRef) this.lastHeartbeatAck = Date.now();
     } else if (message.type === "error") {
+      if (this.inFlightEvent && message.ref === this.inFlightEvent.ref) {
+        this.inFlightEvent = null;
+        this.flushEvents();
+      }
       this.root.dispatchEvent(new CustomEvent("opal:error", {detail: message}));
     }
   }
@@ -115,10 +172,11 @@ export class OpalLiveView {
       ? [active.selectionStart, active.selectionEnd]
       : null;
 
+    this.clearDebounceTimers();
     this.root.innerHTML = message.html;
     this.version = message.version;
     this.root.dataset.opalStatus = "connected";
-    if (message.title) document.title = message.title;
+    if (Object.prototype.hasOwnProperty.call(message, "title")) document.title = message.title;
 
     if (focusKey) {
       const escaped = CSS.escape(focusKey);
@@ -145,30 +203,46 @@ export class OpalLiveView {
     return value;
   }
 
-  formValue(form) {
+  formValue(form, submitter = null) {
     const value = {};
     for (const [name, item] of new FormData(form).entries()) {
+      if (item instanceof File) {
+        if (item.name === "" && item.size === 0) continue;
+        this.root.dispatchEvent(new CustomEvent("opal:error", {
+          detail: {type: "error", reason: "uploads_unsupported"},
+        }));
+        return null;
+      }
       if (Object.prototype.hasOwnProperty.call(value, name)) {
         value[name] = Array.isArray(value[name]) ? [...value[name], item] : [value[name], item];
       } else {
         value[name] = item;
       }
     }
+    if (submitter && submitter.name) value[submitter.name] = submitter.value;
     return value;
   }
 
   send(message) {
-    this.socket.send(JSON.stringify(message));
+    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return false;
+    try {
+      this.socket.send(JSON.stringify(message));
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   startHeartbeat() {
     this.stopHeartbeat();
     this.heartbeatTimer = window.setInterval(() => {
       if (Date.now() - this.lastHeartbeatAck > HEARTBEAT_INTERVAL * 2) {
-        this.socket.close(1001, "heartbeat timeout");
+        if (this.socket) this.socket.close(1001, "heartbeat timeout");
         return;
       }
-      this.send({type: "heartbeat", ref: ++this.heartbeatRef});
+      if (!this.send({type: "heartbeat", ref: ++this.heartbeatRef}) && this.socket) {
+        this.socket.close(1001, "heartbeat send failed");
+      }
     }, HEARTBEAT_INTERVAL);
   }
 
@@ -178,17 +252,47 @@ export class OpalLiveView {
   }
 
   scheduleReconnect() {
+    if (this.reconnectTimer) return;
     const delay = DEFAULT_RECONNECT_DELAYS[
       Math.min(this.reconnectAttempt, DEFAULT_RECONNECT_DELAYS.length - 1)
     ];
     this.reconnectAttempt += 1;
-    window.setTimeout(() => this.connect(), delay + Math.floor(Math.random() * 100));
+    this.reconnectTimer = window.setTimeout(() => {
+      this.reconnectTimer = null;
+      this.connect();
+    }, delay + Math.floor(Math.random() * 100));
+  }
+
+  currentConnection(socket, generation) {
+    return this.socket === socket && this.connectionGeneration === generation;
+  }
+
+  shouldReconnect(code) {
+    return ![1000, 1002, 1003, 1008, 1009].includes(code);
+  }
+
+  failPendingEvents(code) {
+    const pending = [this.inFlightEvent, ...this.eventQueue].filter(Boolean);
+    this.inFlightEvent = null;
+    this.eventQueue = [];
+    for (const event of pending) {
+      this.root.dispatchEvent(new CustomEvent("opal:event-error", {
+        detail: {event: event.event, ref: event.ref, code},
+      }));
+    }
+  }
+
+  clearDebounceTimers() {
+    for (const element of this.root.querySelectorAll("[data-opal-debounce]")) {
+      if (element.__opalDebounceTimer) window.clearTimeout(element.__opalDebounceTimer);
+    }
   }
 }
 
 export function connectAll(root = document) {
   return Array.from(root.querySelectorAll("[data-opal-live-root]"), element => {
     const liveView = new OpalLiveView(element);
+    Object.defineProperty(element, "__opalLiveView", {value: liveView, configurable: true});
     liveView.connect();
     return liveView;
   });

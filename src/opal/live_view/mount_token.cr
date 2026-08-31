@@ -36,8 +36,8 @@ module LF::LiveView
       end
     end
 
-    def sign(route : String, params : Hash(String, String), resource : String) : String
-      payload = Payload.new(route, params, resource, Time.utc.to_unix).to_json
+    def sign(route : String, params : Hash(String, String), resource : String, now = Time.utc) : String
+      payload = Payload.new(route, params, resource, now.to_unix_ms).to_json
       encoded = Base64.urlsafe_encode(payload, padding: false)
       "#{encoded}.#{signature(encoded)}"
     end
@@ -49,8 +49,8 @@ module LF::LiveView
       end
 
       payload = Payload.from_json(String.new(Base64.decode(encoded)))
-      age = now.to_unix - payload.issued_at
-      if age < -30 || age > @max_age.total_seconds
+      age_ms = now.to_unix_ms - payload.issued_at
+      if age_ms < -30_000 || age_ms > @max_age.total_milliseconds
         raise InvalidMountTokenError.new
       end
 

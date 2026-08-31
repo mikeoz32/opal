@@ -18,7 +18,7 @@ Open <http://127.0.0.1:8084/?start=2>. The example demonstrates:
 - query-parameter initialization;
 - click events and server-owned counter state;
 - debounced form changes and form submit;
-- a delayed server-side state change using `refresh`;
+- a delayed server-side state change using serialized `send_info`;
 - focus/value restoration across renders;
 - dynamic document titles and automatic reconnect;
 - HTML escaping for values received from the browser.

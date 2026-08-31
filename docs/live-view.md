@@ -73,6 +73,19 @@ itself. On reconnect, a fresh view is mounted from the signed original URL and
 current handshake request. Persist state that must survive reconnect in an
 application service or database.
 
+HTTP guards can be declared directly on the view. Application-level guards
+also apply. Opal evaluates them for both the disconnected and connected mount:
+
+```crystal
+@[LF::HTTP::UseGuards(AuthenticatedGuard)]
+@[LF::LiveView::Page("/projects/:project_id")]
+class ProjectLive < LF::LiveView::View
+end
+```
+
+Mount guards protect access to the page. Continue authorizing resource-specific
+operations inside `handle_event`; browser event payloads are untrusted input.
+
 ## Events and forms
 
 Click values use `data-opal-value-*`:
@@ -111,8 +124,8 @@ selection after a render when it can identify the element by `id` or `name`.
 
 ## Server-initiated updates
 
-Events rerender automatically. For state changed by a timer or subscription,
-call protected `refresh` after updating the view:
+Events rerender automatically. A timer or subscription must not mutate view
+state from its own fiber. Send an info message back to the connection fiber:
 
 ```crystal
 include LF::DI::Disposable
@@ -127,10 +140,18 @@ def mount(context : LF::LiveView::MountContext) : Nil
       when @stop.receive?
         break
       when timeout(1.second)
-        @clock = Time.local
-        refresh
+        send_info("tick", JSON::Any.new(Time.local.to_unix))
       end
     end
+  end
+end
+
+def handle_info(name : String, value : JSON::Any) : Nil
+  case name
+  when "tick"
+    @clock = Time.unix(value.as_i64)
+  else
+    super
   end
 end
 
@@ -139,9 +160,9 @@ def destroy : Nil
 end
 ```
 
-Refresh requests are coalesced and outbound renders remain serialized. Stop
-subscriptions and timers from `LF::DI::Disposable#destroy` when the WebSocket
-scope exits.
+Info callbacks, events, renders, and outbound writes are serialized on the
+connection fiber. Stop subscriptions and timers from
+`LF::DI::Disposable#destroy` when the WebSocket scope exits.
 
 ## Rendering safely
 
@@ -176,6 +197,8 @@ live_view:
   client_path: /_opal/live.js
   mount_token_max_age_ms: 86400000
   max_message_bytes: 65536
+  join_timeout_ms: 10000
+  idle_timeout_ms: 75000
   allowed_origins:
     - https://app.example.com
 ```
@@ -192,16 +215,29 @@ request scope handler:
 
 ```crystal
 root = LF::DI::DefaultContainer.new
+connections = LF::HTTP::WebSocketConnectionRegistry.new
 endpoint = LF::LiveView::Endpoint.new(ENV["LIVE_VIEW_SECRET"])
 endpoint.page("/counter", CounterLive) { |_scope| CounterLive.new }
 
 app = LF::HTTP::App.new { |router| endpoint.mount(router) }
 server = HTTP::Server.new([
-  LF::HTTP::DI::WebSocketScopeHandler.new(root),
+  LF::HTTP::DI::WebSocketScopeHandler.new(root, "websocket", connections),
   LF::HTTP::DI::RequestScopeHandler.new(root),
   app,
 ])
+
+begin
+  server.listen
+ensure
+  server.close unless server.closed?
+  connections.shutdown(5_000)
+  root.shutdown
+end
 ```
+
+Factories created directly by `Endpoint#page` are endpoint-owned and are
+destroyed after their disconnected or connected lifecycle when they implement
+`LF::DI::Disposable`. Autoconfigured views are container-owned instead.
 
 ## Current v1 boundary
 

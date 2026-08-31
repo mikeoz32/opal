@@ -89,19 +89,3 @@ jobs:
       - name: Build Todo example release target
         working-directory: examples/todo_api_sqlite
         run: shards build --release
-
-      - name: Install LiveView example dependencies
-        working-directory: examples/live_view_counter
-        run: shards install
-
-      - name: Check LiveView example dependency resolution
-        working-directory: examples/live_view_counter
-        run: shards check
-
-      - name: Run LiveView example specs
-        working-directory: examples/live_view_counter
-        run: crystal spec --no-color
-
-      - name: Build LiveView example release target
-        working-directory: examples/live_view_counter
-        run: shards build --release

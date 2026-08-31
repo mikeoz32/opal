@@ -33,7 +33,11 @@ The socket endpoint defaults to `/_opal/live`. Client messages are `join`,
 `event`, and `heartbeat`; server messages are `render`, `heartbeat`, and
 non-fatal `error`. Event messages carry the last applied render version. A
 stale event is not executed: the server sends its current render so the client
-can resynchronize. Join and render messages carry protocol version `1`; an
+can resynchronize and retry it. Every event also carries a monotonically
+increasing connection-local `ref`; its render or error response echoes that
+reference. The browser keeps one event in flight and queues later events until
+the reference is acknowledged, preventing rapid interactions from being
+silently dropped. Join and render messages carry protocol version `1`; an
 unsupported version closes the connection instead of silently changing
 semantics.
 
@@ -54,8 +58,10 @@ on the connection fiber. `render` returns trusted HTML for the root's contents;
 application values interpolated into it must use `LF::LiveView::HTML.escape`.
 `handle_event` mutates server state and the endpoint rerenders afterward.
 State changes originating from a subscription, timer, or other application
-fiber call protected `refresh`; signals are coalesced and all renders and
-outbound writes remain serialized on the connection fiber.
+fiber call protected `send_info`. `handle_info` executes the mutation on the
+connection fiber; events, info messages, renders, and outbound writes therefore
+remain serialized. `refresh` is reserved for coalescing a render requested by
+code already executing on the connection fiber.
 
 On transport reconnect, the server creates a new WebSocket scope and mounts a
 new view from the original signed path, route params, query params, and the new
@@ -76,7 +82,7 @@ The default client supports:
 - `data-opal-submit="event"` on forms;
 - `data-opal-value-*` values on event targets;
 - automatic heartbeat and bounded exponential reconnect;
-- `opal:render` and `opal:error` browser events.
+- `opal:render`, `opal:error`, and `opal:event-error` browser events.
 
 The form encoder preserves repeated names as arrays. File uploads, client
 hooks, nested stateful components, live navigation, and minimal DOM diffs are
@@ -95,12 +101,13 @@ proxies can set an explicit `live_view.allowed_origins` allowlist. This check is
 not a replacement for application authentication or authorization.
 
 Both disconnected and connected `mount` calls receive an `HTTP::Request`.
-Views must authenticate and authorize on each mount because parameters and
-client state are not authority. Tokens protect integrity, not confidentiality,
-and are escaped before insertion into HTML. Protocol and user-code failures use
-safe close reasons. Opal does not add tokens or event values to log metadata;
-application exception messages remain application-owned and must not embed
-secrets.
+Application-level and view-level `LF::HTTP::UseGuards` annotations execute for
+both mounts. Views must still authorize resource-specific events because
+parameters, event payloads, and client state are not authority. Tokens protect
+integrity, not confidentiality, and are escaped before insertion into HTML.
+Protocol and user-code failures use safe close reasons. Opal does not add tokens
+or event values to log metadata; application exception messages remain
+application-owned and must not embed secrets.
 
 ### Shutdown and limits
 
@@ -110,8 +117,11 @@ Away`, force-closes transports after the configured WebSocket timeout, and
 waits for the connection scope under the overall HTTP drain deadline.
 
 Inbound text messages are limited by `live_view.max_message_bytes` (64 KiB by
-default). Binary protocol messages are rejected. Heartbeats keep idle browser
-connections observable; application events remain ordered per connection.
+default). Binary protocol messages are rejected. A client must join within
+`live_view.join_timeout_ms` (10 seconds by default) and send traffic within
+`live_view.idle_timeout_ms` (75 seconds by default). Heartbeats keep idle
+browser connections observable; application events remain ordered per
+connection.
 
 ## Consequences
 

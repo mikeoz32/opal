@@ -1,0 +1,11 @@
+{
+  "name": "opal-browser-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:live-view-browser": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1"
+  }
+}

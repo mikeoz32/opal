@@ -3,6 +3,7 @@ require "json"
 require "log"
 require "uri"
 require "../di"
+require "../http/execution_pipeline"
 require "../http/router"
 require "./html"
 require "./mount_token"
@@ -18,16 +19,23 @@ module LF::LiveView
     private class Route
       getter name : String
       getter path : String
+      getter? managed_by_scope : Bool
 
       def initialize(
         @name,
         @path,
+        @managed_by_scope,
         @factory : Proc(LF::DI::Container, View),
+        @guards : Proc(LF::DI::Container, Array(LF::HTTP::Guard)),
       )
       end
 
       def build(scope : LF::DI::Container) : View
         @factory.call(scope)
+      end
+
+      def guards(scope : LF::DI::Container) : Array(LF::HTTP::Guard)
+        @guards.call(scope)
       end
     end
 
@@ -46,6 +54,8 @@ module LF::LiveView
       allowed_origins = [] of String,
       mount_token_max_age = 24.hours,
       @max_message_bytes = 64 * 1024,
+      @join_timeout = 10.seconds,
+      @idle_timeout = 75.seconds,
     )
       @tokens = MountToken.new(secret, mount_token_max_age)
       unless @socket_path.starts_with?('/') && @client_path.starts_with?('/')
@@ -56,6 +66,12 @@ module LF::LiveView
       end
       if @max_message_bytes <= 0
         raise ConfigurationError.new("LiveView max message size must be positive")
+      end
+      unless @join_timeout.positive?
+        raise ConfigurationError.new("LiveView join timeout must be positive")
+      end
+      unless @idle_timeout.positive?
+        raise ConfigurationError.new("LiveView idle timeout must be positive")
       end
       @allowed_origins = [] of String
       begin
@@ -69,6 +85,8 @@ module LF::LiveView
       path : String,
       view : T.class,
       name : String = T.name,
+      managed_by_scope : Bool = false,
+      guards : Proc(LF::DI::Container, Array(LF::HTTP::Guard))? = nil,
       &factory : LF::DI::Container -> T
     ) : Nil forall T
       raise ConfigurationError.new("LiveView routes are already mounted") if @mounted
@@ -80,7 +98,8 @@ module LF::LiveView
       end
 
       route_factory = ->(scope : LF::DI::Container) { factory.call(scope).as(View) }
-      @routes[name] = Route.new(name, path, route_factory)
+      guard_factory = guards || ->(_scope : LF::DI::Container) { [] of LF::HTTP::Guard }
+      @routes[name] = Route.new(name, path, managed_by_scope, route_factory, guard_factory)
       @paths << path
     end
 
@@ -124,12 +143,18 @@ module LF::LiveView
       scope = context.dependency_scope
       raise LF::HTTP::InternalServerError.new("DI context not initialized") unless scope
 
-      view = route.build(scope)
-      view.mount(MountContext.new(context.request, params, context.request.resource, false))
-      token = @tokens.sign(route.name, params, context.request.resource)
+      view : View? = nil
+      begin
+        authorize!(route, scope, context, params, "mount")
+        view = route.build(scope)
+        view.mount(MountContext.new(context.request, params, context.request.resource, false))
+        token = @tokens.sign(route.name, params, context.request.resource)
 
-      context.response.headers["Content-Type"] = "text/html; charset=utf-8"
-      context.response.print document(view, token)
+        context.response.headers["Content-Type"] = "text/html; charset=utf-8"
+        context.response.print document(view, token)
+      ensure
+        destroy_unmanaged(view, route)
+      end
     end
 
     private def document(view : View, token : String) : String
@@ -144,11 +169,50 @@ module LF::LiveView
 
     private def serve(websocket : ::HTTP::WebSocket, context : ::HTTP::Server::Context) : Nil
       route_name : String? = nil
+      connected_route : Route? = nil
       connected_view : View? = nil
+      updates : Channel(Info)? = nil
+      refreshes : Channel(Nil)? = nil
       reader_done : Channel(Nil)? = nil
       reader_finished : Channel(Nil)? = nil
       begin
-        join = parse_message(receive_text(websocket))
+        incoming_channel = Channel(String | Bytes).new(1)
+        done = Channel(Nil).new
+        finished = Channel(Nil).new(1)
+        reader_done = done
+        reader_finished = finished
+        spawn do
+          begin
+            while payload = websocket.receive?
+              select
+              when incoming_channel.send(payload)
+              when done.receive?
+                break
+              end
+            end
+          ensure
+            incoming_channel.close unless incoming_channel.closed?
+            finished.send(nil)
+          end
+        end
+
+        join_payload = select
+        when payload = incoming_channel.receive?
+          payload || raise ProtocolError.new("LiveView connection closed before join")
+        when timeout(@join_timeout)
+          close_socket(websocket, ::HTTP::WebSocket::CloseCode::PolicyViolation, "join timeout")
+          return
+        end
+        unless join_payload.is_a?(String)
+          close_socket(websocket, ::HTTP::WebSocket::CloseCode::UnsupportedData, "text messages required")
+          return
+        end
+        if join_payload.bytesize > @max_message_bytes
+          close_socket(websocket, ::HTTP::WebSocket::CloseCode::MessageTooBig, "message too large")
+          return
+        end
+
+        join = parse_message(join_payload)
         unless string(join, "type") == "join"
           raise ProtocolError.new("The first LiveView message must be join")
         end
@@ -159,46 +223,50 @@ module LF::LiveView
         mount = @tokens.verify(string(join, "token"))
         route_name = mount.route
         route = @routes[mount.route]? || raise InvalidMountTokenError.new
+        connected_route = route
         scope = context.dependency_scope
         raise LF::HTTP::InternalServerError.new("DI context not initialized") unless scope
 
+        authorize!(route, scope, context, mount.params, "connect")
         view = route.build(scope)
         connected_view = view
-        updates = Channel(Nil).new(1)
-        view.__opal_connect do
-          select
-          when updates.send(nil)
-          else
+        update_channel = Channel(Info).new(32)
+        refresh_channel = Channel(Nil).new(1)
+        updates = update_channel
+        refreshes = refresh_channel
+        send_info = ->(info : Info) do
+          begin
+            update_channel.send(info)
+            true
+          rescue Channel::ClosedError
+            false
           end
         end
+        request_refresh = -> do
+          select
+          when refresh_channel.send(nil)
+            true
+          else
+            false
+          end
+        end
+        view.__opal_connect(send_info, request_refresh)
         view.mount(MountContext.new(context.request, mount.params, mount.resource, true))
         version = 0_i64
         send_render(websocket, view, version)
 
-        incoming = Channel(String | Bytes).new(1)
-        done = Channel(Nil).new
-        finished = Channel(Nil).new(1)
-        reader_done = done
-        reader_finished = finished
-        spawn do
-          begin
-            while payload = websocket.receive?
-              select
-              when incoming.send(payload)
-              when done.receive?
-                break
-              end
-            end
-          ensure
-            incoming.close unless incoming.closed?
-            finished.send(nil)
-          end
-        end
-
+        idle_deadline = Time.instant + @idle_timeout
         loop do
+          remaining_idle = idle_deadline - Time.instant
+          unless remaining_idle.positive?
+            close_socket(websocket, ::HTTP::WebSocket::CloseCode::GoingAway, "idle timeout")
+            return
+          end
+
           select
-          when payload = incoming.receive?
+          when payload = incoming_channel.receive?
             break unless payload
+            idle_deadline = Time.instant + @idle_timeout
             unless payload.is_a?(String)
               close_socket(websocket, ::HTTP::WebSocket::CloseCode::UnsupportedData, "text messages required")
               return
@@ -213,9 +281,10 @@ module LF::LiveView
             when "heartbeat"
               send_heartbeat(websocket, message["ref"]?)
             when "event"
+              reference = integer(message, "ref")
               client_version = integer(message, "version")
               if client_version != version
-                send_render(websocket, view, version)
+                send_render(websocket, view, version, reference: reference, status: "stale")
                 next
               end
 
@@ -224,21 +293,35 @@ module LF::LiveView
               begin
                 view.handle_event(event, value)
               rescue error : UnknownEventError
-                send_error(websocket, "unknown_event")
+                send_error(websocket, "unknown_event", reference)
                 next
               rescue error : Exception
-                Log.error(exception: error) { "LiveView event failed: route=#{route.name} event=#{event}" }
+                Log.error(exception: error) { "LiveView event failed: route=#{route.name}" }
                 close_socket(websocket, ::HTTP::WebSocket::CloseCode::InternalServerError, "event failed")
                 return
               end
               version += 1
-              send_render(websocket, view, version)
+              send_render(websocket, view, version, reference: reference, status: "ok")
             else
               raise ProtocolError.new("Unsupported LiveView message type")
             end
-          when updates.receive
+          when info = update_channel.receive?
+            break unless info
+            begin
+              view.handle_info(info.name, info.value)
+            rescue error : Exception
+              Log.error(exception: error) { "LiveView info failed: route=#{route.name} info=#{info.name}" }
+              close_socket(websocket, ::HTTP::WebSocket::CloseCode::InternalServerError, "info failed")
+              return
+            end
             version += 1
             send_render(websocket, view, version)
+          when refresh_channel.receive
+            version += 1
+            send_render(websocket, view, version)
+          when timeout(remaining_idle)
+            close_socket(websocket, ::HTTP::WebSocket::CloseCode::GoingAway, "idle timeout")
+            return
           end
         end
       rescue error : InvalidMountTokenError
@@ -255,6 +338,8 @@ module LF::LiveView
         close_socket(websocket, ::HTTP::WebSocket::CloseCode::InternalServerError, "connection failed")
       ensure
         connected_view.try(&.__opal_disconnect)
+        updates.try { |channel| channel.close unless channel.closed? }
+        refreshes.try { |channel| channel.close unless channel.closed? }
         if completion = reader_done
           completion.close unless completion.closed?
         end
@@ -276,6 +361,11 @@ module LF::LiveView
             completion_signal.receive?
           end
         end
+        if view = connected_view
+          if route = connected_route
+            destroy_unmanaged(view, route)
+          end
+        end
       end
     end
 
@@ -286,16 +376,6 @@ module LF::LiveView
     ) : Nil
       websocket.close(code, message)
     rescue IO::Error
-    end
-
-    private def receive_text(websocket : ::HTTP::WebSocket) : String
-      payload = websocket.receive?
-      raise ProtocolError.new("LiveView connection closed before join") unless payload
-      raise ProtocolError.new("LiveView only accepts text messages") unless payload.is_a?(String)
-      if payload.bytesize > @max_message_bytes
-        raise ProtocolError.new("LiveView message is too large")
-      end
-      payload
     end
 
     private def parse_message(payload : String) : Hash(String, JSON::Any)
@@ -314,13 +394,26 @@ module LF::LiveView
       raise ProtocolError.new("LiveView message field '#{key}' must be an integer")
     end
 
-    private def send_render(websocket : ::HTTP::WebSocket, view : View, version : Int64) : Nil
+    private def send_render(
+      websocket : ::HTTP::WebSocket,
+      view : View,
+      version : Int64,
+      *,
+      reference : Int64? = nil,
+      status : String? = nil,
+    ) : Nil
       websocket.send(JSON.build do |json|
         json.object do
           json.field "type", "render"
           json.field "protocol", PROTOCOL_VERSION
           json.field "version", version
           json.field "html", view.render
+          if reference
+            json.field "ref", reference
+          end
+          if status
+            json.field "status", status
+          end
           if title = view.title
             json.field "title", title
           end
@@ -343,8 +436,37 @@ module LF::LiveView
       end)
     end
 
-    private def send_error(websocket : ::HTTP::WebSocket, reason : String) : Nil
-      websocket.send({type: "error", reason: reason}.to_json)
+    private def send_error(websocket : ::HTTP::WebSocket, reason : String, reference : Int64? = nil) : Nil
+      websocket.send(JSON.build do |json|
+        json.object do
+          json.field "type", "error"
+          json.field "reason", reason
+          if reference
+            json.field "ref", reference
+          end
+        end
+      end)
+    end
+
+    private def destroy_unmanaged(view : View?, route : Route) : Nil
+      return unless view
+      return if route.managed_by_scope?
+      view.as?(LF::DI::Disposable).try(&.destroy)
+    rescue error : Exception
+      Log.error(exception: error) { "LiveView cleanup failed: route=#{route.name}" }
+    end
+
+    private def authorize!(
+      route : Route,
+      scope : LF::DI::Container,
+      context : ::HTTP::Server::Context,
+      params : Hash(String, String),
+      action : String,
+    ) : Nil
+      execution_context = LF::HTTP::ExecutionContext.new(context, params, route.name, action)
+      route.guards(scope).each do |guard|
+        raise LF::HTTP::Forbidden.new unless guard.can_activate(execution_context)
+      end
     end
 
     private def verify_origin!(request : ::HTTP::Request) : Nil

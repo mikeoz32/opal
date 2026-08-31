@@ -96,9 +96,11 @@ Opal does not wrap the socket or serialize application writes. The close reason
 does not expose the exception message to the peer. Opal never attempts to write
 an HTTP error response after upgrade.
 
-Origin, authentication, and authorization that must reject a handshake run in
-ordinary HTTP middleware before the router. The optional `HTTP::Request` in a
-WebSocket action is for connection logic after upgrade, not handshake rejection.
+Origin policy that must reject a handshake can run in ordinary HTTP middleware
+before the router. Application-, controller-, and action-level
+`LF::HTTP::UseGuards` annotations also execute before upgrade and can return
+`403 Forbidden`. The optional `HTTP::Request` in a WebSocket action is for
+connection logic after upgrade, not handshake rejection.
 
 ## Compatibility and non-goals
 
