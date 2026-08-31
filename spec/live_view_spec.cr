@@ -205,6 +205,41 @@ class LiveViewSpecComponents < LF::LiveView::View
   end
 end
 
+class LiveViewSpecStreams < LF::LiveView::View
+  def mount(context : LF::LiveView::MountContext) : Nil
+    stream_reset("spec-stream")
+    stream_insert("spec-stream", "stream-1", item("stream-1", "First"))
+    stream_insert("spec-stream", "stream-2", item("stream-2", "Second"))
+  end
+
+  def handle_event(event : String, value : JSON::Any) : Nil
+    case event
+    when "prepend"
+      stream_insert("spec-stream", "stream-3", item("stream-3", "Third"), at: 0, limit: 2)
+    when "update"
+      stream_insert("spec-stream", "stream-1", item("stream-1", "First updated"))
+    when "delete"
+      stream_delete("spec-stream", "stream-2")
+    when "reset"
+      stream_reset("spec-stream")
+      stream_insert("spec-stream", "stream-9", item("stream-9", "Reset item"))
+    else
+      super
+    end
+  end
+
+  def render : LF::LiveView::Rendered
+    contents = stream_contents("spec-stream")
+    LF::LiveView::HTML.rendered(
+      %(<ul id="spec-stream" data-opal-stream>#{contents}</ul>)
+    )
+  end
+
+  private def item(id : String, label : String) : LF::LiveView::Rendered
+    LF::LiveView::HTML.rendered(%(<li id="#{id}" data-opal-key="#{id}">#{label}</li>))
+  end
+end
+
 private def live_view_spec_server(
   secret : String,
   *,
@@ -229,6 +264,7 @@ private def live_view_spec_server(
   endpoint.page("/disposable", LiveViewSpecDisposable) { |_scope| LiveViewSpecDisposable.new }
   endpoint.page("/failure", LiveViewSpecFailure) { |_scope| LiveViewSpecFailure.new }
   endpoint.page("/components", LiveViewSpecComponents) { |_scope| LiveViewSpecComponents.new }
+  endpoint.page("/streams", LiveViewSpecStreams) { |_scope| LiveViewSpecStreams.new }
   endpoint.page(
     "/guarded",
     LiveViewSpecCounter,
@@ -513,6 +549,99 @@ describe LF::LiveView do
       restored_target.should_not eq(right_target)
       LiveViewSpecComponent.mount_count.should eq(5)
       websocket.close
+    ensure
+      websocket.try(&.close)
+    end
+  end
+
+  it "sends ordered protocol-v2 stream insert, update, delete, and reset operations" do
+    live_view_spec_server("z" * 32) do |address|
+      response = HTTP::Client.get("http://#{address.address}:#{address.port}/streams")
+      response.body.should contain(%(<li id="stream-1" data-opal-key="stream-1">First</li>))
+      response.body.should contain(%(<li id="stream-2" data-opal-key="stream-2">Second</li>))
+      token = response.body.match(/data-opal-token="([^"]+)"/).not_nil![1]
+
+      websocket = HTTP::WebSocket.new(
+        "127.0.0.1",
+        "/_opal/live",
+        port: address.port,
+        headers: HTTP::Headers{"Origin" => "http://#{address.address}:#{address.port}"}
+      )
+      websocket.send({type: "join", protocol: 2, token: token}.to_json)
+      joined = JSON.parse(websocket.receive.as(String))
+      initial_streams = joined["streams"].as_a
+      initial_streams.map { |operation| operation["op"].as_s }.should eq(["reset", "insert", "insert"])
+      initial_streams[1]["id"].as_s.should eq("stream-1")
+      initial_streams[2]["id"].as_s.should eq("stream-2")
+
+      websocket.send({
+        type:    "event",
+        event:   "prepend",
+        value:   nil,
+        version: 0,
+        ref:     1,
+      }.to_json)
+      prepended = JSON.parse(websocket.receive.as(String))
+      insert = prepended["streams"].as_a.first
+      insert["op"].as_s.should eq("insert")
+      insert["id"].as_s.should eq("stream-3")
+      insert["at"].as_i.should eq(0)
+      insert["limit"].as_i.should eq(2)
+
+      websocket.send({
+        type:    "event",
+        event:   "update",
+        value:   nil,
+        version: 1,
+        ref:     2,
+      }.to_json)
+      updated = JSON.parse(websocket.receive.as(String))["streams"].as_a.first
+      updated["id"].as_s.should eq("stream-1")
+      updated["html"].as_s.should contain("First updated")
+
+      websocket.send({
+        type:    "event",
+        event:   "delete",
+        value:   nil,
+        version: 2,
+        ref:     3,
+      }.to_json)
+      deleted = JSON.parse(websocket.receive.as(String))["streams"].as_a.first
+      deleted["op"].as_s.should eq("delete")
+      deleted["id"].as_s.should eq("stream-2")
+
+      websocket.send({
+        type:    "event",
+        event:   "reset",
+        value:   nil,
+        version: 3,
+        ref:     4,
+      }.to_json)
+      reset = JSON.parse(websocket.receive.as(String))["streams"].as_a
+      reset.map { |operation| operation["op"].as_s }.should eq(["reset", "insert"])
+      reset.last["id"].as_s.should eq("stream-9")
+      websocket.close
+    ensure
+      websocket.try(&.close)
+    end
+  end
+
+  it "rejects streams for legacy protocol clients instead of sending partial state" do
+    live_view_spec_server("y" * 32) do |address|
+      response = HTTP::Client.get("http://#{address.address}:#{address.port}/streams")
+      token = response.body.match(/data-opal-token="([^"]+)"/).not_nil![1]
+      websocket = HTTP::WebSocket.new(
+        "127.0.0.1",
+        "/_opal/live",
+        port: address.port,
+        headers: HTTP::Headers{"Origin" => "http://#{address.address}:#{address.port}"}
+      )
+      close = Channel(HTTP::WebSocket::CloseCode).new(1)
+      websocket.on_close { |code, _reason| close.send(code) }
+
+      websocket.send({type: "join", protocol: 1, token: token}.to_json)
+      websocket.receive?.should be_nil
+      close.receive.should eq(HTTP::WebSocket::CloseCode::ProtocolError)
     ensure
       websocket.try(&.close)
     end

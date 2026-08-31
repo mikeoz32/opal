@@ -6,6 +6,7 @@ require "uri"
 require "./component"
 require "./html"
 require "./rendered"
+require "./stream"
 
 module LF::LiveView
   annotation Page
@@ -44,6 +45,7 @@ module LF::LiveView
     @rendered_components : Set(ComponentIdentity)?
     @next_component_cid = 0_i64
     @connected = false
+    @stream_operations = [] of StreamOperation
 
     def mount(context : MountContext) : Nil
     end
@@ -128,6 +130,75 @@ module LF::LiveView
       live_component(type, id, JSON.parse(assigns.to_json), &factory)
     end
 
+    # Queues an insert or update in a browser-owned stream container. New items
+    # are appended by default; `at: 0` prepends. A positive limit keeps the
+    # first N elements and a negative limit keeps the last N elements.
+    protected def stream_insert(
+      container_id : String,
+      item_id : String,
+      rendered : RenderResult,
+      *,
+      at : Int32 = -1,
+      limit : Int32? = nil,
+    ) : Nil
+      validate_stream_id(container_id, "container")
+      validate_stream_id(item_id, "item")
+      raise ArgumentError.new("LiveView stream insertion index must be -1 or greater") if at < -1
+      if limit.try(&.zero?)
+        raise ArgumentError.new("LiveView stream limit cannot be zero")
+      end
+
+      html = normalize_render(rendered).to_html
+      @stream_operations << StreamOperation.insert(container_id, item_id, html, at, limit)
+    end
+
+    # Queues removal of one direct child from a browser-owned stream container.
+    protected def stream_delete(container_id : String, item_id : String) : Nil
+      validate_stream_id(container_id, "container")
+      validate_stream_id(item_id, "item")
+      @stream_operations << StreamOperation.delete(container_id, item_id)
+    end
+
+    # Queues removal of every child in a browser-owned stream container.
+    protected def stream_reset(container_id : String) : Nil
+      validate_stream_id(container_id, "container")
+      @stream_operations << StreamOperation.reset(container_id)
+    end
+
+    # Renders the currently queued contents for the disconnected HTTP response.
+    # The same operations are later sent to a protocol-v2 client. Stream item
+    # markup is already trusted framework output and is not escaped again.
+    protected def stream_contents(container_id : String) : HTML::Safe
+      validate_stream_id(container_id, "container")
+      items = [] of Tuple(String, String)
+
+      @stream_operations.each do |operation|
+        next unless operation.container_id == container_id
+        case operation.operation
+        when "reset"
+          items.clear
+        when "delete"
+          item_id = operation.item_id.not_nil!
+          items.reject! { |item| item[0] == item_id }
+        when "insert"
+          item_id = operation.item_id.not_nil!
+          html = operation.html.not_nil!
+          if index = items.index { |item| item[0] == item_id }
+            items[index] = {item_id, html}
+          else
+            at = operation.at.not_nil!
+            index = at == -1 || at >= items.size ? items.size : at
+            items.insert(index, {item_id, html})
+          end
+          apply_stream_limit(items, operation.limit)
+        end
+      end
+
+      HTML.raw(String.build do |output|
+        items.each { |item| output << item[1] }
+      end)
+    end
+
     # :nodoc:
     def __opal_mount(context : MountContext) : Nil
       @connected = context.connected?
@@ -149,6 +220,7 @@ module LF::LiveView
       @components.clear
       @components_by_cid.clear
       @rendered_components = nil
+      @stream_operations.clear
       components.each { |component| destroy_component(component) }
     end
 
@@ -178,6 +250,18 @@ module LF::LiveView
       else
         handle_event(event, value)
       end
+    end
+
+    # :nodoc:
+    def __opal_take_stream_operations : Array(StreamOperation)
+      operations = @stream_operations
+      @stream_operations = [] of StreamOperation
+      operations
+    end
+
+    # :nodoc:
+    def __opal_clear_stream_operations : Nil
+      @stream_operations.clear
     end
 
     private def normalize_render(rendered : RenderResult) : Rendered
@@ -210,6 +294,26 @@ module LF::LiveView
     rescue error : Exception
       Log.error(exception: error) do
         "LiveView component cleanup failed: component=#{component.class.name}"
+      end
+    end
+
+    private def validate_stream_id(id : String, kind : String) : Nil
+      if id.empty?
+        raise ArgumentError.new("LiveView stream #{kind} id cannot be empty")
+      end
+    end
+
+    private def apply_stream_limit(items : Array(Tuple(String, String)), limit : Int32?) : Nil
+      return unless limit
+      if limit > 0
+        while items.size > limit
+          items.pop
+        end
+      else
+        keep = -limit.to_i64
+        while items.size > keep
+          items.shift
+        end
       end
     end
   end

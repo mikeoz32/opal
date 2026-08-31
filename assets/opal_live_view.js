@@ -187,6 +187,7 @@ export class OpalLiveView {
     }
 
     this.patchRoot(this.renderHTML(message));
+    this.applyStreams(message.streams);
     this.version = message.version;
     this.root.dataset.opalStatus = "connected";
     if (Object.prototype.hasOwnProperty.call(message, "title")) document.title = message.title;
@@ -287,9 +288,105 @@ export class OpalLiveView {
 
     const focused = document.activeElement === current;
     const controlState = focused ? this.controlState(current) : null;
+    const streamOwned = current.hasAttribute("data-opal-stream") && next.hasAttribute("data-opal-stream");
     this.morphAttributes(current, next);
-    this.morphChildren(current, next);
+    if (!streamOwned) this.morphChildren(current, next);
     this.syncControl(current, next, controlState);
+  }
+
+  applyStreams(operations) {
+    if (operations === undefined) return;
+    if (!Array.isArray(operations)) throw new Error("invalid stream operations");
+
+    const prepared = operations.map(operation => this.prepareStreamOperation(operation));
+    for (const operation of prepared) {
+      if (operation.op === "reset") {
+        operation.container.replaceChildren();
+      } else if (operation.op === "delete") {
+        this.streamChild(operation.container, operation.id)?.remove();
+      } else {
+        this.applyStreamInsert(operation);
+      }
+    }
+  }
+
+  prepareStreamOperation(operation) {
+    if (!operation || typeof operation !== "object" || Array.isArray(operation)) {
+      throw new Error("invalid stream operation");
+    }
+    if (typeof operation.container !== "string" || operation.container.length === 0) {
+      throw new Error("invalid stream container");
+    }
+
+    const container = document.getElementById(operation.container);
+    if (!container || !this.root.contains(container) || !container.hasAttribute("data-opal-stream")) {
+      throw new Error("missing stream container");
+    }
+
+    if (operation.op === "reset") return {op: "reset", container};
+    if (typeof operation.id !== "string" || operation.id.length === 0) {
+      throw new Error("invalid stream item id");
+    }
+    if (operation.op === "delete") return {op: "delete", container, id: operation.id};
+    if (operation.op !== "insert") throw new Error("unsupported stream operation");
+    if (
+      typeof operation.html !== "string" ||
+      !Number.isSafeInteger(operation.at) ||
+      operation.at < -1 ||
+      (
+        operation.limit !== undefined &&
+        (!Number.isSafeInteger(operation.limit) || operation.limit === 0)
+      )
+    ) {
+      throw new Error("invalid stream insertion");
+    }
+
+    const template = document.createElement("template");
+    template.innerHTML = operation.html;
+    if (template.content.childElementCount !== 1) throw new Error("stream item must have one root element");
+    for (const node of template.content.childNodes) {
+      if (node.nodeType === Node.TEXT_NODE && node.nodeValue.trim() !== "") {
+        throw new Error("stream item must have one root element");
+      }
+    }
+    const element = template.content.firstElementChild;
+    if (element.id !== operation.id) throw new Error("stream item id mismatch");
+
+    return {
+      op: "insert",
+      container,
+      id: operation.id,
+      element,
+      at: operation.at,
+      limit: operation.limit,
+    };
+  }
+
+  applyStreamInsert(operation) {
+    const existing = this.streamChild(operation.container, operation.id);
+    if (existing) {
+      if (this.sameNodeKind(existing, operation.element)) {
+        this.morphNode(existing, operation.element);
+      } else {
+        existing.replaceWith(operation.element);
+      }
+    } else {
+      const reference = operation.at === -1 ? null : operation.container.children.item(operation.at);
+      operation.container.insertBefore(operation.element, reference);
+    }
+
+    if (operation.limit === undefined) return;
+    const keep = Math.abs(operation.limit);
+    while (operation.container.children.length > keep) {
+      const child = operation.limit > 0
+        ? operation.container.lastElementChild
+        : operation.container.firstElementChild;
+      child.remove();
+    }
+  }
+
+  streamChild(container, id) {
+    return Array.from(container.children).find(child => child.id === id) || null;
   }
 
   morphAttributes(current, next) {

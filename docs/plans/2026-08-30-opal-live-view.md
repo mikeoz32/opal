@@ -24,10 +24,13 @@ reconnect. Opal serves a dependency-free ES module as the default client.
 11. Add protocol-v2 structural snapshots and dynamic-position diffs while
     retaining protocol-v1 and `String`-render compatibility.
 12. Morph compatible and keyed DOM nodes while preserving focused form state.
+13. Add connection-local stateful components and explicitly targeted events.
+14. Add protocol-v2 insert, update, delete, reset, position, and limit stream
+    operations with browser-owned DOM collections.
 
 ## Deferred protocol work
 
-- nested stateful components and component-targeted events;
+- nested components;
 - upload transport and progress;
 - live navigation and history patching;
 - opt-in JavaScript hooks;

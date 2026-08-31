@@ -251,6 +251,59 @@ forgets its state and calls `destroy` when the component includes
 `LF::DI::Disposable`; rendering that identity again creates a fresh instance.
 All remaining components are destroyed when their LiveView disconnects.
 
+## Streams
+
+Streams update large or frequently changing collections without retaining and
+rerendering the whole collection in the connected view. The browser owns the
+current children of a container with a unique `id` and `data-opal-stream`.
+Queue initial operations from `mount` and expose them to the disconnected HTML
+render with `stream_contents`:
+
+```crystal
+def mount(context : LF::LiveView::MountContext) : Nil
+  stream_reset("notifications")
+  @notifications.each do |notification|
+    id = "notification-#{notification.id}"
+    stream_insert("notifications", id, notification_item(id, notification))
+  end
+end
+
+def render : LF::LiveView::Rendered
+  notifications = stream_contents("notifications")
+  LF::LiveView::HTML.rendered(
+    %(<ul id="notifications" data-opal-stream>#{notifications}</ul>)
+  )
+end
+
+private def notification_item(id, notification) : LF::LiveView::Rendered
+  LF::LiveView::HTML.rendered(%(<li id="#{id}">#{notification.message}</li>))
+end
+```
+
+Each inserted item must have exactly one root element whose DOM `id` matches
+the item id passed to `stream_insert`. Queue mutations from `handle_event`,
+`handle_info`, or another serialized lifecycle callback:
+
+```crystal
+stream_insert("notifications", id, item)                 # append or update
+stream_insert("notifications", id, item, at: 0)          # prepend
+stream_insert("notifications", id, item, at: 0, limit: 20)
+stream_delete("notifications", id)
+stream_reset("notifications")
+```
+
+Inserting an existing id morphs that item in place and preserves its position.
+For new items, `at: -1` appends and a non-negative index inserts at that
+position. A positive `limit` retains the first N children; a negative limit
+retains the last N. Reset is useful when a fresh connected mount or reconnect
+must replace browser-owned collection state with a canonical snapshot.
+
+Do not also render ordinary dynamic children inside a stream container. Normal
+LiveView morphing deliberately preserves that container's children; only
+validated stream operations may insert, update, delete, or reset them. Streams
+are a protocol-v2 feature. A view that queues stream operations rejects a
+legacy protocol-v1 connection instead of sending an incomplete collection.
+
 The mount token and built-in document metadata are escaped by the endpoint.
 Opal does not add event values or tokens to log metadata. Do not put secrets in
 application exception messages.
@@ -326,7 +379,7 @@ template or legacy `String` render sends a complete v2 snapshot. The server
 continues accepting protocol-v1 clients and returns their complete `html`
 payloads.
 
-Protocol v2 provides connection-local stateful components and component-
-targeted events. It does not yet provide nested components, streams, upload
-transport, live navigation, or JavaScript hooks. These features can evolve
-under Opal's protocol without introducing a Phoenix dependency.
+Protocol v2 provides connection-local stateful components, component-targeted
+events, and browser-owned streams. It does not yet provide nested components,
+upload transport, live navigation, or JavaScript hooks. These features can
+evolve under Opal's protocol without introducing a Phoenix dependency.

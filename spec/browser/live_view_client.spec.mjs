@@ -79,6 +79,55 @@ test("keeps component state isolated and targets only its instance", async ({pag
   await expect(right).toHaveText("1");
 });
 
+test("applies bounded stream inserts and deletes without replacing retained items", async ({page}) => {
+  const first = page.locator("#activity-1");
+  await first.evaluate(element => { window.__opalFirstActivityNode = element; });
+
+  const prepend = page.getByRole("button", {name: "Prepend activity"});
+  await prepend.click();
+  await prepend.click();
+
+  await expect(page.locator("#activity-stream > li span")).toHaveText([
+    "Activity 4",
+    "Activity 3",
+    "Activity 1",
+  ]);
+  await expect(page.locator("#activity-2")).toHaveCount(0);
+  await expect.poll(
+    () => first.evaluate(element => element === window.__opalFirstActivityNode),
+  ).toBe(true);
+
+  const validationError = await page.locator("[data-opal-live-root]").evaluate(root => {
+    try {
+      root.__opalLiveView.applyStreams([
+        {op: "reset", container: "activity-stream"},
+        {
+          op: "insert",
+          container: "activity-stream",
+          id: "declared-id",
+          html: '<li id="different-id">invalid</li>',
+          at: -1,
+        },
+      ]);
+      return null;
+    } catch (error) {
+      return error.message;
+    }
+  });
+  expect(validationError).toBe("stream item id mismatch");
+  await expect(page.locator("#activity-stream > li span")).toHaveText([
+    "Activity 4",
+    "Activity 3",
+    "Activity 1",
+  ]);
+
+  await page.getByRole("button", {name: "Remove Activity 3"}).click();
+  await expect(page.locator("#activity-stream > li span")).toHaveText([
+    "Activity 4",
+    "Activity 1",
+  ]);
+});
+
 test("applies an explicitly empty document title", async ({page}) => {
   await page.getByRole("button", {name: "Clear title"}).click();
   await expect(page).toHaveTitle("");

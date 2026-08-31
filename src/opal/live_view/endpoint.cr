@@ -307,9 +307,11 @@ module LF::LiveView
               begin
                 view.__opal_handle_event(target, event, value)
               rescue error : UnknownEventError
+                view.__opal_clear_stream_operations
                 send_error(websocket, "unknown_event", reference)
                 next
               rescue error : UnknownComponentError
+                view.__opal_clear_stream_operations
                 send_error(websocket, "unknown_target", reference)
                 next
               rescue error : Exception
@@ -447,6 +449,10 @@ module LF::LiveView
       status : String? = nil,
     ) : Nil
       changes = previous.try { |old| rendered.diff(old) }
+      streams = view.__opal_take_stream_operations
+      if protocol == LEGACY_PROTOCOL_VERSION && !streams.empty?
+        raise ProtocolError.new("LiveView streams require protocol version 2")
+      end
       websocket.send(JSON.build do |json|
         json.object do
           json.field "type", "render"
@@ -474,6 +480,11 @@ module LF::LiveView
                   rendered.dynamics.to_json(json)
                 end
               end
+            end
+          end
+          unless streams.empty?
+            json.field "streams" do
+              streams.to_json(json)
             end
           end
           if reference

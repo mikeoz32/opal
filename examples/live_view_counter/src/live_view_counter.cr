@@ -49,6 +49,7 @@ class CounterLive < LF::LiveView::View
   @validation_count = 0
   @empty_title = false
   @items_reversed = false
+  @next_activity = 3
 
   def initialize(@counter_label : CounterLabel)
   end
@@ -57,6 +58,9 @@ class CounterLive < LF::LiveView::View
     if start = context.query_params["start"]?
       @count = start.to_i? || 0
     end
+    stream_reset("activity-stream")
+    stream_insert("activity-stream", "activity-1", activity_item(1))
+    stream_insert("activity-stream", "activity-2", activity_item(2))
   end
 
   def handle_event(event : String, value : JSON::Any) : Nil
@@ -80,6 +84,19 @@ class CounterLive < LF::LiveView::View
       @empty_title = true
     when "reverse_items"
       @items_reversed = !@items_reversed
+    when "prepend_activity"
+      sequence = @next_activity
+      @next_activity += 1
+      stream_insert(
+        "activity-stream",
+        "activity-#{sequence}",
+        activity_item(sequence),
+        at: 0,
+        limit: 3
+      )
+    when "delete_activity"
+      item_id = string_value(value, "id")
+      stream_delete("activity-stream", item_id) unless item_id.empty?
     else
       super
     end
@@ -101,6 +118,7 @@ class CounterLive < LF::LiveView::View
     right_component = live_component(CounterComponent, "right", {label: "Right"}) do
       CounterComponent.new
     end
+    activity_items = stream_contents("activity-stream")
     items = [
       {"first", "First keyed item"},
       {"second", "Second keyed item"},
@@ -123,6 +141,8 @@ class CounterLive < LF::LiveView::View
         output { min-width: 4ch; text-align: center; font-size: 2rem; }
         .components { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
         .components section { border: 1px solid currentColor; border-radius: .5rem; padding: 0 1rem; }
+        #activity-stream { padding: 0; list-style: none; }
+        #activity-stream li { display: flex; justify-content: space-between; align-items: center; margin: .5rem 0; }
         [data-opal-status="disconnected"]::before { content: "Reconnecting..."; color: #d97706; }
       </style>
       <h1>#{@counter_label.heading}</h1>
@@ -143,6 +163,11 @@ class CounterLive < LF::LiveView::View
       </form>
       <output id="validation-count" data-testid="validation-count">#{@validation_count}</output>
       <div class="components">#{left_component}#{right_component}</div>
+      <section>
+        <h2>Activity stream</h2>
+        <button type="button" data-opal-click="prepend_activity">Prepend activity</button>
+        <ul id="activity-stream" data-opal-stream>#{activity_items}</ul>
+      </section>
       <button type="button" data-opal-click="reverse_items">Reverse keyed items</button>
       <ul id="keyed-items">#{LF::LiveView::HTML.raw(items_markup)}</ul>
     HTML
@@ -156,6 +181,16 @@ class CounterLive < LF::LiveView::View
     value.as_h[key]?.try(&.as_s) || ""
   rescue TypeCastError
     ""
+  end
+
+  private def activity_item(sequence : Int32) : LF::LiveView::Rendered
+    id = "activity-#{sequence}"
+    LF::LiveView::HTML.rendered(<<-HTML)
+      <li id="#{id}" data-opal-key="#{id}">
+        <span>Activity #{sequence}</span>
+        <button type="button" data-opal-click="delete_activity" data-opal-value-id="#{id}" aria-label="Remove Activity #{sequence}">Remove</button>
+      </li>
+    HTML
   end
 end
 

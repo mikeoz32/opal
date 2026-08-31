@@ -22,6 +22,7 @@ Open <http://127.0.0.1:8084/?start=2>. The example demonstrates:
 - protocol-v2 structural diffs and focused input preservation;
 - keyed list reordering without recreating DOM nodes;
 - two stateful components with isolated state and targeted events;
+- bounded browser-owned stream insertion and deletion;
 - dynamic document titles and automatic reconnect;
 - automatic HTML escaping for structured template values.
 

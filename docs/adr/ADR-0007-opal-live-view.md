@@ -100,8 +100,16 @@ The form encoder preserves repeated names as arrays. Connection-local stateful
 components use `(component type, id)` identity, mount once, update before each
 render, and receive explicitly targeted events on the same connection fiber.
 Removed components are destroyed. File uploads, client hooks, nested
-components, streams, and live navigation are deferred. Their absence is an
-explicit protocol-v2 boundary, not Phoenix compatibility.
+components, and live navigation are deferred.
+
+Protocol-v2 stream operations address a marked container and carry ordered
+insert, delete, or reset mutations. The browser validates that inserts contain
+one root element with the declared DOM id, morphs updates in place, and applies
+optional position and size limits. Normal structural rendering preserves
+children of `data-opal-stream` containers so the connected view does not need
+to retain the collection. Protocol-v1 connections are rejected when a view
+queues streams rather than receiving an incomplete representation. These
+remaining boundaries are Opal protocol choices, not Phoenix compatibility.
 
 ### Security
 
@@ -153,4 +161,6 @@ connection.
 
 - [Phoenix LiveView lifecycle](https://github.com/phoenixframework/phoenix_live_view/blob/main/lib/phoenix_live_view.ex)
 - [Phoenix LiveView bindings](https://phoenix-live-view.hexdocs.pm/bindings.html)
+- [Phoenix stateful components](https://hexdocs.pm/phoenix_live_view/Phoenix.LiveComponent.html)
+- [Phoenix LiveView streams](https://hexdocs.pm/phoenix_live_view/Phoenix.LiveView.html#module-streams)
 - [Phoenix LiveView security model](https://phoenix-live-view.hexdocs.pm/security-model.html)
