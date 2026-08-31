@@ -21,10 +21,12 @@ reconnect. Opal serves a dependency-free ES module as the default client.
 8. Add event references and client-side queuing so rapid events are not lost.
 9. Serialize timer/subscription updates through `send_info` and add join/idle timeouts.
 10. Apply application/view guards to disconnected and connected mounts.
+11. Add protocol-v2 structural snapshots and dynamic-position diffs while
+    retaining protocol-v1 and `String`-render compatibility.
+12. Morph compatible and keyed DOM nodes while preserving focused form state.
 
 ## Deferred protocol work
 
-- negotiated structural DOM diffs;
 - nested stateful components and component-targeted events;
 - upload transport and progress;
 - live navigation and history patching;

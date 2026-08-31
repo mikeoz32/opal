@@ -19,9 +19,10 @@ Open <http://127.0.0.1:8084/?start=2>. The example demonstrates:
 - click events and server-owned counter state;
 - debounced form changes and form submit;
 - a delayed server-side state change using serialized `send_info`;
-- focus/value restoration across renders;
+- protocol-v2 structural diffs and focused input preservation;
+- keyed list reordering without recreating DOM nodes;
 - dynamic document titles and automatic reconnect;
-- HTML escaping for values received from the browser.
+- automatic HTML escaping for structured template values.
 
 The development secret in `config/application.yml` is intentionally local to
 the example. Generate and inject a private secret of at least 32 bytes in real

@@ -1,12 +1,15 @@
 const DEFAULT_RECONNECT_DELAYS = [100, 500, 1000, 2000, 5000];
 const HEARTBEAT_INTERVAL = 30000;
+const PROTOCOL_VERSION = 2;
 
 export class OpalLiveView {
   constructor(root) {
     this.root = root;
     this.token = root.dataset.opalToken;
     this.socketPath = root.dataset.opalSocket;
+    this.protocol = PROTOCOL_VERSION;
     this.version = 0;
+    this.rendered = null;
     this.socket = null;
     this.reconnectAttempt = 0;
     this.reconnectTimer = null;
@@ -33,7 +36,7 @@ export class OpalLiveView {
     socket.addEventListener("open", () => {
       if (!this.currentConnection(socket, generation)) return;
       this.lastHeartbeatAck = Date.now();
-      if (!this.send({type: "join", protocol: 1, token: this.token})) {
+      if (!this.send({type: "join", protocol: this.protocol, token: this.token})) {
         socket.close(1001, "join send failed");
         return;
       }
@@ -140,11 +143,16 @@ export class OpalLiveView {
     }
 
     if (message.type === "render") {
-      if (message.protocol !== 1) {
+      if (message.protocol !== this.protocol) {
         this.socket.close(1002, "unsupported protocol");
         return;
       }
-      this.applyRender(message);
+      try {
+        this.applyRender(message);
+      } catch (_) {
+        this.socket.close(1002, "invalid render");
+        return;
+      }
       this.reconnectAttempt = 0;
       if (this.inFlightEvent && message.ref === this.inFlightEvent.ref) {
         const pending = this.inFlightEvent;
@@ -164,31 +172,178 @@ export class OpalLiveView {
   }
 
   applyRender(message) {
-    const active = document.activeElement;
-    const focusKey = active && this.root.contains(active)
-      ? active.id || active.getAttribute("name")
-      : null;
-    const selection = active && "selectionStart" in active
-      ? [active.selectionStart, active.selectionEnd]
-      : null;
+    if (!Number.isSafeInteger(message.version) || message.version < 0) {
+      throw new Error("invalid render version");
+    }
 
-    this.clearDebounceTimers();
-    this.root.innerHTML = message.html;
+    this.patchRoot(this.renderHTML(message));
     this.version = message.version;
     this.root.dataset.opalStatus = "connected";
     if (Object.prototype.hasOwnProperty.call(message, "title")) document.title = message.title;
+    this.root.dispatchEvent(new CustomEvent("opal:render", {detail: message}));
+  }
 
-    if (focusKey) {
-      const escaped = CSS.escape(focusKey);
-      const next = this.root.querySelector(`#${escaped}, [name="${escaped}"]`);
-      if (next) {
-        next.focus({preventScroll: true});
-        if (selection && "setSelectionRange" in next) {
-          next.setSelectionRange(selection[0], selection[1]);
+  renderHTML(message) {
+    if (message.rendered) {
+      const {fingerprint, statics, dynamics} = message.rendered;
+      if (
+        typeof fingerprint !== "string" ||
+        !Array.isArray(statics) ||
+        !Array.isArray(dynamics) ||
+        statics.length !== dynamics.length + 1 ||
+        !statics.every(value => typeof value === "string") ||
+        !dynamics.every(value => typeof value === "string")
+      ) {
+        throw new Error("invalid rendered snapshot");
+      }
+      this.rendered = {fingerprint, statics: [...statics], dynamics: [...dynamics]};
+    } else if (message.diff) {
+      if (
+        !this.rendered ||
+        typeof message.fingerprint !== "string" ||
+        message.fingerprint !== this.rendered.fingerprint ||
+        typeof message.diff !== "object" ||
+        Array.isArray(message.diff)
+      ) {
+        throw new Error("invalid render diff");
+      }
+
+      const dynamics = [...this.rendered.dynamics];
+      for (const [position, value] of Object.entries(message.diff)) {
+        if (!/^(0|[1-9]\d*)$/.test(position) || typeof value !== "string") {
+          throw new Error("invalid dynamic position");
         }
+        const index = Number(position);
+        if (index >= dynamics.length) throw new Error("dynamic position out of bounds");
+        dynamics[index] = value;
+      }
+      this.rendered = {...this.rendered, dynamics};
+    } else {
+      throw new Error("missing rendered state");
+    }
+
+    return String.raw({raw: this.rendered.statics}, ...this.rendered.dynamics);
+  }
+
+  patchRoot(html) {
+    const template = document.createElement("template");
+    template.innerHTML = html;
+    this.morphChildren(this.root, template.content);
+  }
+
+  morphChildren(currentParent, nextParent) {
+    const keyed = new Map();
+    for (const child of currentParent.childNodes) {
+      const key = this.nodeKey(child);
+      if (!key) continue;
+      keyed.set(key, keyed.has(key) ? null : child);
+    }
+
+    const nextKeys = new Set();
+    let cursor = currentParent.firstChild;
+    for (const nextChild of Array.from(nextParent.childNodes)) {
+      const key = this.nodeKey(nextChild);
+      if (key && nextKeys.has(key)) throw new Error("duplicate DOM key");
+      if (key) nextKeys.add(key);
+
+      let current = key ? keyed.get(key) : null;
+      if (current && !this.sameNodeKind(current, nextChild)) current = null;
+      if (!current && !key && cursor && !this.nodeKey(cursor) && this.sameNodeKind(cursor, nextChild)) {
+        current = cursor;
+      }
+
+      if (current) {
+        if (current !== cursor) currentParent.insertBefore(current, cursor);
+        this.morphNode(current, nextChild);
+      } else {
+        current = nextChild.cloneNode(true);
+        currentParent.insertBefore(current, cursor);
+      }
+      cursor = current.nextSibling;
+    }
+
+    while (cursor) {
+      const next = cursor.nextSibling;
+      currentParent.removeChild(cursor);
+      cursor = next;
+    }
+  }
+
+  morphNode(current, next) {
+    if (current.nodeType !== Node.ELEMENT_NODE) {
+      if (current.nodeValue !== next.nodeValue) current.nodeValue = next.nodeValue;
+      return;
+    }
+
+    const focused = document.activeElement === current;
+    const controlState = focused ? this.controlState(current) : null;
+    this.morphAttributes(current, next);
+    this.morphChildren(current, next);
+    this.syncControl(current, next, controlState);
+  }
+
+  morphAttributes(current, next) {
+    for (const attribute of Array.from(current.attributes)) {
+      if (!next.hasAttribute(attribute.name)) current.removeAttribute(attribute.name);
+    }
+    for (const attribute of next.attributes) {
+      if (current.getAttribute(attribute.name) !== attribute.value) {
+        current.setAttribute(attribute.name, attribute.value);
       }
     }
-    this.root.dispatchEvent(new CustomEvent("opal:render", {detail: message}));
+  }
+
+  controlState(element) {
+    const state = {};
+    if ("value" in element) state.value = element.value;
+    if ("checked" in element) state.checked = element.checked;
+    if ("selectionStart" in element) {
+      state.selectionStart = element.selectionStart;
+      state.selectionEnd = element.selectionEnd;
+      state.selectionDirection = element.selectionDirection;
+    }
+    return state;
+  }
+
+  syncControl(current, next, preserved) {
+    if (preserved) {
+      if (Object.prototype.hasOwnProperty.call(preserved, "value")) current.value = preserved.value;
+      if (Object.prototype.hasOwnProperty.call(preserved, "checked")) current.checked = preserved.checked;
+      if (
+        preserved.selectionStart !== null &&
+        preserved.selectionStart !== undefined &&
+        "setSelectionRange" in current
+      ) {
+        current.setSelectionRange(
+          preserved.selectionStart,
+          preserved.selectionEnd,
+          preserved.selectionDirection,
+        );
+      }
+      return;
+    }
+
+    if (current instanceof HTMLInputElement) {
+      if (current.type !== "file") current.value = next.value;
+      current.checked = next.checked;
+    } else if (current instanceof HTMLTextAreaElement) {
+      current.value = next.value;
+    } else if (current instanceof HTMLSelectElement) {
+      current.value = next.value;
+    } else if (current instanceof HTMLOptionElement) {
+      current.selected = next.selected;
+    }
+  }
+
+  sameNodeKind(current, next) {
+    if (current.nodeType !== next.nodeType) return false;
+    if (current.nodeType !== Node.ELEMENT_NODE) return true;
+    return current.tagName === next.tagName && this.nodeKey(current) === this.nodeKey(next);
+  }
+
+  nodeKey(node) {
+    if (node.nodeType !== Node.ELEMENT_NODE) return null;
+    return node.getAttribute("data-opal-key") || node.id || null;
   }
 
   eventValue(element) {
@@ -282,11 +437,6 @@ export class OpalLiveView {
     }
   }
 
-  clearDebounceTimers() {
-    for (const element of this.root.querySelectorAll("[data-opal-debounce]")) {
-      if (element.__opalDebounceTimer) window.clearTimeout(element.__opalDebounceTimer);
-    }
-  }
 }
 
 export function connectAll(root = document) {

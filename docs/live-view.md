@@ -22,10 +22,10 @@ class CounterLive < LF::LiveView::View
     end
   end
 
-  def render : String
-    <<-HTML
+  def render : LF::LiveView::Rendered
+    LF::LiveView::HTML.rendered(<<-HTML)
       <button data-opal-click="decrement">-</button>
-      <output>#{@count}</output>
+      <output id="counter-value">#{@count}</output>
       <button data-opal-click="increment">+</button>
     HTML
   end
@@ -119,8 +119,9 @@ Forms serialize successful fields by name. Repeated names become arrays:
 ```
 
 `data-opal-change` reacts to `change`, or debounced `input` when
-`data-opal-debounce` is present. The client restores the active input and its
-selection after a render when it can identify the element by `id` or `name`.
+`data-opal-debounce` is present. Protocol v2 morphs matching DOM nodes instead
+of replacing the live root. Focused input values and selections remain
+browser-owned while the event is in flight.
 
 ## Server-initiated updates
 
@@ -166,11 +167,31 @@ connection fiber. Stop subscriptions and timers from
 
 ## Rendering safely
 
-`render` returns trusted HTML. Escape every untrusted value:
+Use `LF::LiveView::HTML.rendered` for structural rendering. Literal fragments
+become the stable template and interpolated values are escaped automatically:
 
 ```crystal
-title = LF::LiveView::HTML.escape(@todo.title)
-%(<li>#{title}</li>)
+def render : LF::LiveView::Rendered
+  LF::LiveView::HTML.rendered(%(<li id="todo-#{@todo.id}">#{@todo.title}</li>))
+end
+```
+
+When the template fingerprint stays the same, Opal sends only changed dynamic
+positions. Returning `String` remains supported, but it is an opaque
+compatibility render: any HTML change requires a complete snapshot.
+
+`HTML.raw` is the explicit escape hatch for framework- or application-owned
+markup. Never pass user-controlled HTML to it:
+
+```crystal
+LF::LiveView::HTML.rendered(%(<ul>#{LF::LiveView::HTML.raw(trusted_items)}</ul>))
+```
+
+The browser reuses compatible elements by position. Give elements stable `id`
+or `data-opal-key` values when identity must survive insertion or reordering:
+
+```html
+<li data-opal-key="todo-42">...</li>
 ```
 
 The mount token and built-in document metadata are escaped by the endpoint.
@@ -239,9 +260,16 @@ Factories created directly by `Endpoint#page` are endpoint-owned and are
 destroyed after their disconnected or connected lifecycle when they implement
 `LF::DI::Disposable`. Autoconfigured views are container-owned instead.
 
-## Current v1 boundary
+## Protocol compatibility and current boundary
 
-The first protocol intentionally uses complete root renders. It does not yet
-provide structural diffs, nested stateful components, upload transport, live
-navigation, or JavaScript hooks. These features can be added to Opal's protocol
-without introducing a Phoenix dependency.
+The built-in client negotiates protocol v2. The first connected render carries
+the template fingerprint, static fragments, and dynamic values. Later renders
+with the same fingerprint carry only changed dynamic positions; a changed
+template or legacy `String` render sends a complete v2 snapshot. The server
+continues accepting protocol-v1 clients and returns their complete `html`
+payloads.
+
+Protocol v2 does not yet provide nested stateful components, component-targeted
+events, streams, upload transport, live navigation, or JavaScript hooks. These
+features can evolve under Opal's protocol without introducing a Phoenix
+dependency.

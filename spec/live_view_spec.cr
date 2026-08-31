@@ -10,9 +10,11 @@ class LiveViewSpecCounter < LF::LiveView::View
     @connected = context.connected?
   end
 
-  def render : String
+  def render : LF::LiveView::Rendered
     connected = @connected ? "yes" : "no"
-    %(<button data-opal-click="increment">#{@count}</button><span>#{connected}</span>)
+    LF::LiveView::HTML.rendered(
+      %(<button id="spec-counter" data-opal-click="increment">#{@count}</button><span>#{connected}</span>)
+    )
   end
 
   def handle_event(event : String, value : JSON::Any) : Nil
@@ -170,6 +172,20 @@ describe LF::LiveView do
     LF::LiveView::HTML.escape(%(<Mike & "Opal">)).should eq("&lt;Mike &amp; &quot;Opal&quot;&gt;")
   end
 
+  it "renders escaped structural templates and diffs only changed dynamics" do
+    unsafe = %(<Mike & "Opal">)
+    initial = LF::LiveView::HTML.rendered(%(<p>#{unsafe}: #{1}</p>))
+    updated = LF::LiveView::HTML.rendered(%(<p>#{unsafe}: #{2}</p>))
+
+    initial.to_html.should eq("<p>&lt;Mike &amp; &quot;Opal&quot;&gt;: 1</p>")
+    initial.statics.size.should eq(3)
+    initial.dynamics.should eq(["&lt;Mike &amp; &quot;Opal&quot;&gt;", "1"])
+    updated.diff(initial).should eq({1 => "2"})
+    LF::LiveView::HTML.rendered(%(<section>#{unsafe}: #{2}</section>)).diff(initial).should be_nil
+    LF::LiveView::HTML.rendered(%(<p>#{LF::LiveView::HTML.raw("<em>trusted</em>")}</p>)).to_html
+      .should eq("<p><em>trusted</em></p>")
+  end
+
   it "signs mount state and rejects tampering and expired tokens" do
     tokens = LF::LiveView::MountToken.new("s" * 32, 1.hour)
     token = tokens.sign("Counter", {"id" => "7"}, "/counter?id=7")
@@ -274,6 +290,49 @@ describe LF::LiveView do
     end
   end
 
+  it "negotiates protocol v2 and sends only changed dynamic fragments" do
+    live_view_spec_server("d" * 32) do |address|
+      response = HTTP::Client.get("http://#{address.address}:#{address.port}/counter")
+      token = response.body.match(/data-opal-token="([^"]+)"/).not_nil![1]
+      headers = HTTP::Headers{"Origin" => "http://#{address.address}:#{address.port}"}
+      websocket = HTTP::WebSocket.new(
+        "127.0.0.1",
+        "/_opal/live",
+        port: address.port,
+        headers: headers
+      )
+
+      websocket.send({type: "join", protocol: 2, token: token}.to_json)
+      joined = JSON.parse(websocket.receive.as(String))
+      joined["protocol"].as_i64.should eq(2)
+      joined["version"].as_i64.should eq(0)
+      joined["html"]?.should be_nil
+      snapshot = joined["rendered"].as_h
+      snapshot["fingerprint"].as_s.should_not be_empty
+      snapshot["statics"].as_a.size.should eq(3)
+      snapshot["dynamics"].as_a.map(&.as_s).should eq(["0", "yes"])
+
+      websocket.send({
+        type:    "event",
+        event:   "increment",
+        value:   nil,
+        version: 0,
+        ref:     1,
+      }.to_json)
+      rendered = JSON.parse(websocket.receive.as(String))
+      rendered["protocol"].as_i64.should eq(2)
+      rendered["version"].as_i64.should eq(1)
+      rendered["rendered"]?.should be_nil
+      rendered["fingerprint"].as_s.should eq(snapshot["fingerprint"].as_s)
+      rendered["diff"].as_h.should eq({"0" => JSON::Any.new("1")})
+      rendered["ref"].as_i64.should eq(1)
+      rendered["status"].as_s.should eq("ok")
+      websocket.close
+    ensure
+      websocket.try(&.close)
+    end
+  end
+
   it "resynchronizes stale events without applying them" do
     live_view_spec_server("c" * 32) do |address|
       response = HTTP::Client.get("http://#{address.address}:#{address.port}/counter")
@@ -299,7 +358,7 @@ describe LF::LiveView do
     end
   end
 
-  it "serializes server-initiated refreshes on the connection" do
+  it "serializes server updates and snapshots changed opaque string renders in v2" do
     live_view_spec_server("g" * 32) do |address|
       response = HTTP::Client.get("http://#{address.address}:#{address.port}/push")
       token = response.body.match(/data-opal-token="([^"]+)"/).not_nil![1]
@@ -309,15 +368,17 @@ describe LF::LiveView do
         port: address.port,
         headers: HTTP::Headers{"Origin" => "http://#{address.address}:#{address.port}"}
       )
-      websocket.send({type: "join", protocol: 1, token: token}.to_json)
+      websocket.send({type: "join", protocol: 2, token: token}.to_json)
       initial = JSON.parse(websocket.receive.as(String))
       initial["version"].as_i64.should eq(0)
+      initial["rendered"].as_h["statics"].as_a.first.as_s.should contain(">0</output>")
 
       LiveViewSpecPush.wait_until_mounted.push(7)
 
       pushed = JSON.parse(websocket.receive.as(String))
       pushed["version"].as_i64.should eq(1)
-      pushed["html"].as_s.should contain(">7</output>")
+      pushed["diff"]?.should be_nil
+      pushed["rendered"].as_h["statics"].as_a.first.as_s.should contain(">7</output>")
       websocket.close
     ensure
       websocket.try(&.close)
@@ -489,7 +550,7 @@ describe LF::LiveView do
       close = Channel(HTTP::WebSocket::CloseCode).new(1)
       websocket.on_close { |code, _reason| close.send(code) }
 
-      websocket.send({type: "join", protocol: 2, token: token}.to_json)
+      websocket.send({type: "join", protocol: 3, token: token}.to_json)
       websocket.receive?.should be_nil
       close.receive.should eq(HTTP::WebSocket::CloseCode::ProtocolError)
     ensure

@@ -15,6 +15,7 @@ class CounterLive < LF::LiveView::View
   @draft_name = "friend"
   @validation_count = 0
   @empty_title = false
+  @items_reversed = false
 
   def initialize(@counter_label : CounterLabel)
   end
@@ -44,6 +45,8 @@ class CounterLive < LF::LiveView::View
       @name = @draft_name unless @draft_name.blank?
     when "clear_title"
       @empty_title = true
+    when "reverse_items"
+      @items_reversed = !@items_reversed
     else
       super
     end
@@ -58,11 +61,21 @@ class CounterLive < LF::LiveView::View
     end
   end
 
-  def render : String
-    name = LF::LiveView::HTML.escape(@name)
-    draft_name = LF::LiveView::HTML.escape(@draft_name)
-    heading = LF::LiveView::HTML.escape(@counter_label.heading)
-    <<-HTML
+  def render : LF::LiveView::Rendered
+    items = [
+      {"first", "First keyed item"},
+      {"second", "Second keyed item"},
+      {"third", "Third keyed item"},
+    ]
+    items.reverse! if @items_reversed
+    items_markup = String.build do |html|
+      items.each do |id, label|
+        html << %(<li id="item-#{LF::LiveView::HTML.escape(id)}" data-opal-key="#{LF::LiveView::HTML.escape(id)}">)
+        html << LF::LiveView::HTML.escape(label) << "</li>"
+      end
+    end
+
+    LF::LiveView::HTML.rendered(<<-HTML)
       <style>
         :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
         #opal-live-root { max-width: 34rem; margin: 5rem auto; padding: 2rem; }
@@ -71,11 +84,11 @@ class CounterLive < LF::LiveView::View
         output { min-width: 4ch; text-align: center; font-size: 2rem; }
         [data-opal-status="disconnected"]::before { content: "Reconnecting..."; color: #d97706; }
       </style>
-      <h1>#{heading}</h1>
-      <p>Hello, <strong>#{name}</strong>.</p>
+      <h1>#{@counter_label.heading}</h1>
+      <p>Hello, <strong>#{@name}</strong>.</p>
       <div class="counter">
         <button type="button" data-opal-click="decrement" aria-label="Decrement">−</button>
-        <output aria-live="polite">#{@count}</output>
+        <output id="counter-value" aria-live="polite">#{@count}</output>
         <button type="button" data-opal-click="increment" aria-label="Increment">+</button>
         <button type="button" data-opal-click="increment_later">+1 later</button>
         <button type="button" data-opal-click="clear_title">Clear title</button>
@@ -83,11 +96,13 @@ class CounterLive < LF::LiveView::View
       <form data-opal-change="validate_name" data-opal-debounce="150" data-opal-submit="save_name">
         <label>
           Name
-          <input id="name" name="name" value="#{draft_name}" autocomplete="off">
+          <input id="name" name="name" value="#{@draft_name}" autocomplete="off">
         </label>
         <button type="submit">Save</button>
       </form>
-      <output data-testid="validation-count">#{@validation_count}</output>
+      <output id="validation-count" data-testid="validation-count">#{@validation_count}</output>
+      <button type="button" data-opal-click="reverse_items">Reverse keyed items</button>
+      <ul id="keyed-items">#{LF::LiveView::HTML.raw(items_markup)}</ul>
     HTML
   end
 
