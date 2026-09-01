@@ -666,18 +666,17 @@ module LF::LiveView
       changes = previous.try { |old| rendered.diff(old) }
       if changes
         changes.each do |index, dynamic|
-          diff[index.to_s] = JSON::Any.new(dynamic)
+          diff[index.to_s] = dynamic_to_json(dynamic)
         end
       else
         diff["s"] = JSON::Any.new(rendered.statics.map { |static| JSON::Any.new(static) })
         rendered.dynamics.each_with_index do |dynamic, index|
-          diff[index.to_s] = JSON::Any.new(dynamic)
+          diff[index.to_s] = dynamic_to_json(dynamic)
         end
       end
 
-      # Stream state is rendered into the normal structural tree. We still
-      # drain the operation journal so connection-local memory remains bounded.
-      view.__opal_take_stream_operations
+      view.__opal_take_stream_operations(rendered.stream_container_ids)
+      rendered.commit_streams
       pushed_events = view.__opal_take_pushed_events
       unless pushed_events.empty?
         diff["e"] = JSON::Any.new(pushed_events.map do |event|
@@ -689,6 +688,14 @@ module LF::LiveView
         diff["t"] = JSON::Any.new(title)
       end
       JSON::Any.new(diff)
+    end
+
+    private def dynamic_to_json(dynamic : RenderedDynamic) : JSON::Any
+      case dynamic
+      when String        then JSON::Any.new(dynamic)
+      when StreamContent then dynamic.to_diff
+      else                    raise Error.new("Unsupported LiveView dynamic value")
+      end
     end
 
     private def send_join_reply(

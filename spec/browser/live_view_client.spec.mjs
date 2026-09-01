@@ -181,6 +181,7 @@ test("notifies hooks across disconnect and reconnect without remounting them", a
 
 test("applies bounded stream inserts and deletes without replacing retained items", async ({page}) => {
   const first = page.locator("#activity-1");
+  await expect(first).toHaveAttribute("data-phx-stream", "0");
   await first.evaluate(element => { window.__opalFirstActivityNode = element; });
 
   const prepend = page.getByRole("button", {name: "Prepend activity"});
@@ -193,6 +194,7 @@ test("applies bounded stream inserts and deletes without replacing retained item
     "Activity 1",
   ]);
   await expect(page.locator("#activity-2")).toHaveCount(0);
+  await expect(page.locator("#activity-4")).toHaveAttribute("data-phx-stream", "0");
   await expect.poll(
     () => first.evaluate(element => element === window.__opalFirstActivityNode),
   ).toBe(true);
