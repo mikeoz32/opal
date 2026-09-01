@@ -138,4 +138,57 @@ describe LF::LiveView::ConnectionRuntime do
   ensure
     runtime.try(&.disconnect)
   end
+
+  it "encodes update-only inserts and validates stream consumption" do
+    runtime = LF::LiveView::ConnectionRuntime.new
+    runtime.stream_reset("items")
+    runtime.stream_insert(
+      "items",
+      "item-1",
+      LF::LiveView::Rendered.opaque(%(<li id="item-1">first</li>))
+    )
+    runtime.stream_insert(
+      "items",
+      "item-2",
+      LF::LiveView::Rendered.opaque(%(<li id="item-2">second</li>))
+    )
+    initial = runtime.stream_contents("items")
+    initial.to_diff["stream"].as_a[3].as_bool.should be_true
+    runtime.take_stream_operations(["items"])
+    initial.commit!
+
+    runtime.stream_insert(
+      "items",
+      "item-missing",
+      LF::LiveView::Rendered.opaque(%(<li id="item-missing">missing</li>)),
+      limit: 1,
+      update_only: true
+    )
+    update = runtime.stream_contents("items")
+    update.value.should_not contain("item-missing")
+    update.value.should contain("item-1")
+    update.value.should contain("item-2")
+    metadata = update.to_diff["stream"].as_a[1].as_a.first.as_a
+    metadata[0].as_s.should eq("item-missing")
+    metadata[3].as_bool.should be_true
+
+    expect_raises(LF::LiveView::Error, "has pending operations but was not rendered") do
+      runtime.take_stream_operations([] of String)
+    end
+    runtime.take_stream_operations(["items"])
+
+    expect_raises(LF::LiveView::Error, "was rendered more than once") do
+      runtime.take_stream_operations(["items", "items"])
+    end
+
+    expect_raises(ArgumentError, "root id must match") do
+      runtime.stream_insert(
+        "items",
+        "declared-id",
+        LF::LiveView::Rendered.opaque(%(<li id="different-id">invalid</li>))
+      )
+    end
+  ensure
+    runtime.try(&.disconnect)
+  end
 end

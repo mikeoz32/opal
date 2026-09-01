@@ -269,7 +269,7 @@ describe "Phoenix LiveView protocol compatibility" do
     end
   end
 
-  it "retains stream state while sending normal Phoenix structural diffs" do
+  it "encodes native Phoenix stream comprehensions and operations" do
     live_view_spec_server("e" * 32) do |address|
       response = HTTP::Client.get("http://#{address.address}:#{address.port}/streams")
       websocket = phoenix_socket(
@@ -279,16 +279,43 @@ describe "Phoenix LiveView protocol compatibility" do
       joined = phoenix_response(
         phoenix_join(websocket, live_session(response.body), "http://#{address.address}:#{address.port}/streams")
       )["rendered"].as_h
-      joined["0"].as_s.should contain("stream-1")
-      joined["0"].as_s.should contain("stream-2")
+      stream = joined["0"].as_h
+      stream["s"].as_a.map(&.as_s).should eq(["", ""])
+      keyed = stream["k"].as_h
+      keyed["kc"].as_i.should eq(2)
+      keyed["0"]["0"].as_s.should contain("stream-1")
+      keyed["1"]["0"].as_s.should contain("stream-2")
+      metadata = stream["stream"].as_a
+      metadata[0].as_s.should eq("0")
+      metadata[1].as_a.map { |insert| insert.as_a[0].as_s }.should eq(["stream-1", "stream-2"])
+      metadata[2].as_a.should be_empty
+      metadata[3].as_bool.should be_true
 
       phoenix_send(websocket, "1", "2", "lv:opal-live-root", "event", {
         type: "click", event: "prepend", value: nil,
       })
-      contents = phoenix_response(phoenix_receive(websocket))["diff"]["0"].as_s
-      contents.should contain("stream-3")
-      contents.should contain("stream-1")
-      contents.should_not contain("stream-2")
+      stream = phoenix_response(phoenix_receive(websocket))["diff"]["0"].as_h
+      stream["k"]["kc"].as_i.should eq(1)
+      stream["k"]["0"]["0"].as_s.should contain("stream-3")
+      insert = stream["stream"].as_a[1].as_a.first.as_a
+      insert[0].as_s.should eq("stream-3")
+      insert[1].as_i.should eq(0)
+      insert[2].as_i.should eq(2)
+      insert[3].as_bool.should be_false
+
+      phoenix_send(websocket, "1", "3", "lv:opal-live-root", "event", {
+        type: "click", event: "delete", value: nil,
+      })
+      deleted = phoenix_response(phoenix_receive(websocket))["diff"]["0"].as_h
+      deleted["k"]["kc"].as_i.should eq(0)
+      deleted["stream"].as_a[2].as_a.map(&.as_s).should eq(["stream-2"])
+
+      phoenix_send(websocket, "1", "4", "lv:opal-live-root", "event", {
+        type: "click", event: "reset", value: nil,
+      })
+      reset = phoenix_response(phoenix_receive(websocket))["diff"]["0"].as_h
+      reset["k"]["0"]["0"].as_s.should contain("stream-9")
+      reset["stream"].as_a[3].as_bool.should be_true
       websocket.close
     ensure
       websocket.try(&.close)

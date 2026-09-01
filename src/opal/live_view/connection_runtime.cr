@@ -1,6 +1,7 @@
 require "json"
 require "log"
 require "set"
+require "html"
 require "../di"
 require "./client_event"
 require "./component"
@@ -192,6 +193,8 @@ module LF::LiveView
     @operations = [] of StreamOperation
     @items = {} of String => Array(Tuple(String, String))
     @committed_items = {} of String => Array(Tuple(String, String))
+    @references = {} of String => String
+    @next_reference = 0
 
     def insert(
       container_id : String,
@@ -199,23 +202,28 @@ module LF::LiveView
       html : String,
       at : Int32,
       limit : Int32?,
+      update_only : Bool,
     ) : Nil
       validate_id(container_id, "container")
       validate_id(item_id, "item")
+      validate_item_html(item_id, html)
       raise ArgumentError.new("LiveView stream insertion index must be -1 or greater") if at < -1
       if limit.try(&.zero?)
         raise ArgumentError.new("LiveView stream limit cannot be zero")
       end
 
       items = @items[container_id] ||= [] of Tuple(String, String)
+      changed = false
       if index = items.index { |item| item[0] == item_id }
         items[index] = {item_id, html}
-      else
+        changed = true
+      elsif !update_only
         index = at == -1 || at >= items.size ? items.size : at
         items.insert(index, {item_id, html})
+        changed = true
       end
-      apply_limit(items, limit)
-      @operations << StreamOperation.insert(container_id, item_id, html, at, limit)
+      apply_limit(items, limit) if changed
+      @operations << StreamOperation.insert(container_id, item_id, html, at, limit, update_only)
     end
 
     def delete(container_id : String, item_id : String) : Nil
@@ -228,19 +236,29 @@ module LF::LiveView
     def reset(container_id : String) : Nil
       validate_id(container_id, "container")
       @items[container_id] = [] of Tuple(String, String)
+      @operations.reject! { |operation| operation.container_id == container_id }
       @operations << StreamOperation.reset(container_id)
     end
 
-    def contents(container_id : String) : HTML::Safe
+    def contents(container_id : String) : StreamContent
       validate_id(container_id, "container")
       items = @items[container_id]? || [] of Tuple(String, String)
-
-      HTML.raw(String.build do |output|
+      html = String.build do |output|
         items.each { |item| output << item[1] }
-      end)
+      end
+      inserts, delete_ids, reset = native_operations(container_id)
+      StreamContent.new(
+        container_id,
+        reference_for(container_id),
+        html,
+        inserts,
+        delete_ids,
+        reset
+      )
     end
 
-    def take : Array(StreamOperation)
+    def take(consumed_containers : Array(String)? = nil) : Array(StreamOperation)
+      validate_consumed!(consumed_containers) if consumed_containers
       operations = @operations
       @operations = [] of StreamOperation
       @committed_items = duplicate_items(@items)
@@ -251,6 +269,8 @@ module LF::LiveView
       @operations.clear
       @items.clear
       @committed_items.clear
+      @references.clear
+      @next_reference = 0
     end
 
     def clear_operations : Nil
@@ -261,6 +281,79 @@ module LF::LiveView
     private def validate_id(id : String, kind : String) : Nil
       if id.empty?
         raise ArgumentError.new("LiveView stream #{kind} id cannot be empty")
+      end
+    end
+
+    private def validate_item_html(item_id : String, html : String) : Nil
+      root = html.match(
+        /\A\s*(?:<!--(?s:.*?)-->\s*)*<[A-Za-z][A-Za-z0-9:-]*(?:\s+(?:[^"'<>]|"[^"]*"|'[^']*')*)?\s*\/?>/
+      )
+      unless root
+        raise ArgumentError.new("LiveView stream item '#{item_id}' must render one root HTML element")
+      end
+      id = root[0].match(/\sid\s*=\s*(?:"([^"]*)"|'([^']*)')/)
+      rendered_id = id.try { |match| match[1]? || match[2]? }
+      unless rendered_id && ::HTML.unescape(rendered_id) == item_id
+        raise ArgumentError.new(
+          "LiveView stream item '#{item_id}' root id must match its stream id"
+        )
+      end
+    end
+
+    private def reference_for(container_id : String) : String
+      @references[container_id] ||= begin
+        reference = @next_reference.to_s
+        @next_reference += 1
+        reference
+      end
+    end
+
+    private def native_operations(
+      container_id : String,
+    ) : {Array(StreamInsert), Array(String), Bool}
+      operations = @operations.select { |operation| operation.container_id == container_id }
+      reset = operations.any? { |operation| operation.operation == "reset" }
+      committed_ids = Set(String).new(
+        (@committed_items[container_id]? || [] of Tuple(String, String)).map(&.[0])
+      )
+      inserts = [] of StreamInsert
+      delete_ids = [] of String
+
+      operations.each do |operation|
+        item_id = operation.item_id
+        case operation.operation
+        when "insert"
+          id = item_id.not_nil!
+          inserts.reject! { |insert| insert.item_id == id }
+          if !committed_ids.includes?(id)
+            delete_ids.delete(id)
+          end
+          inserts << StreamInsert.new(
+            id,
+            operation.html.not_nil!,
+            operation.at.not_nil!,
+            operation.limit,
+            operation.update_only?
+          )
+        when "delete"
+          id = item_id.not_nil!
+          inserts.reject! { |insert| insert.item_id == id }
+          delete_ids << id unless reset || delete_ids.includes?(id)
+        end
+      end
+
+      {inserts, delete_ids, reset}
+    end
+
+    private def validate_consumed!(consumed_containers : Array(String)) : Nil
+      duplicates = consumed_containers.group_by(&.itself).find { |_container, values| values.size > 1 }
+      if duplicate = duplicates
+        raise Error.new("LiveView stream '#{duplicate[0]}' was rendered more than once")
+      end
+
+      pending = @operations.map(&.container_id).uniq
+      if missing = pending.find { |container_id| !consumed_containers.includes?(container_id) }
+        raise Error.new("LiveView stream '#{missing}' has pending operations but was not rendered")
       end
     end
 
@@ -437,8 +530,16 @@ module LF::LiveView
       *,
       at : Int32 = -1,
       limit : Int32? = nil,
+      update_only : Bool = false,
     ) : Nil
-      @streams.insert(container_id, item_id, normalize_render(rendered).to_html, at, limit)
+      @streams.insert(
+        container_id,
+        item_id,
+        normalize_render(rendered).to_html,
+        at,
+        limit,
+        update_only
+      )
     end
 
     def stream_delete(container_id : String, item_id : String) : Nil
@@ -449,7 +550,7 @@ module LF::LiveView
       @streams.reset(container_id)
     end
 
-    def stream_contents(container_id : String) : HTML::Safe
+    def stream_contents(container_id : String) : StreamContent
       @streams.contents(container_id)
     end
 
@@ -488,8 +589,10 @@ module LF::LiveView
       @events.clear_pushed
     end
 
-    def take_stream_operations : Array(StreamOperation)
-      @streams.take
+    def take_stream_operations(
+      consumed_containers : Array(String)? = nil,
+    ) : Array(StreamOperation)
+      @streams.take(consumed_containers)
     end
 
     def clear_stream_operations : Nil

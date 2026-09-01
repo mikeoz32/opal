@@ -39,6 +39,10 @@ module LF::LiveView::HTML
     value.to_html
   end
 
+  def dynamic(value : LF::LiveView::StreamContent) : LF::LiveView::StreamContent
+    value
+  end
+
   def dynamic(value) : String
     escape(value)
   end
@@ -79,7 +83,7 @@ module LF::LiveView::HTML
         {% for dynamic in dynamics %}
           LF::LiveView::HTML.dynamic({{ dynamic }}),
         {% end %}
-      ] of String
+      ] of LF::LiveView::RenderedDynamic
     )
   end
 end
