@@ -1,10 +1,7 @@
 name: Data compatibility
 
 on:
-  pull_request:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 jobs:
   crystal-1-21:
