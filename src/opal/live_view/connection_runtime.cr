@@ -126,7 +126,9 @@ module LF::LiveView
       render_stack << component.myself
       begin
         component.update(assigns)
-        component.__opal_render.with_component_root(component.myself, "opal-live-root")
+        Rendered.component(
+          ComponentContent.new(component.myself, component.__opal_render, "opal-live-root")
+        )
       ensure
         render_stack.pop
       end

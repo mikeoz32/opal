@@ -206,7 +206,7 @@ describe "Phoenix LiveView protocol compatibility" do
     end
   end
 
-  it "routes component CIDs using upstream component ownership markers" do
+  it "routes CIDs and emits native component-only diffs" do
     live_view_spec_server("c" * 32) do |address|
       response = HTTP::Client.get("http://#{address.address}:#{address.port}/components")
       websocket = phoenix_socket(
@@ -216,19 +216,23 @@ describe "Phoenix LiveView protocol compatibility" do
       rendered = phoenix_response(
         phoenix_join(websocket, live_session(response.body), "http://#{address.address}:#{address.port}/components")
       )["rendered"].as_h
-      left = rendered["0"].as_s
-      right = rendered["1"].as_s
-      left_cid = left.match(/data-phx-component="(\d+)"/).not_nil![1].to_i64
-      right_cid = right.match(/data-phx-component="(\d+)"/).not_nil![1].to_i64
-      left.should contain(%(data-phx-view="opal-live-root"))
+      left_cid = rendered["0"].as_i64
+      right_cid = rendered["1"].as_i64
       left_cid.should_not eq(right_cid)
+      components = rendered["c"].as_h
+      components[left_cid.to_s]["r"].as_i.should eq(1)
+      components[right_cid.to_s]["r"].as_i.should eq(1)
 
       phoenix_send(websocket, "1", "2", "lv:opal-live-root", "event", {
         type: "click", event: "increment", value: nil, cid: left_cid,
       })
       diff = phoenix_response(phoenix_receive(websocket))["diff"].as_h
-      diff["0"].as_s.should contain("Left:1")
-      diff["0"].as_s.should_not contain("Right:1")
+      diff.has_key?("0").should be_false
+      component_diffs = diff["c"].as_h
+      component_diffs.keys.should eq([left_cid.to_s])
+      component_diffs[left_cid.to_s].as_h.values.any? do |value|
+        value.as_s? == "1"
+      end.should be_true
 
       phoenix_send(websocket, "1", "3", "lv:opal-live-root", "event", {
         type: "click", event: "increment", value: nil, cid: 999_999,

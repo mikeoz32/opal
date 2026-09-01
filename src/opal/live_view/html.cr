@@ -35,11 +35,15 @@ module LF::LiveView::HTML
     value.value
   end
 
-  def dynamic(value : LF::LiveView::Rendered) : String
-    value.to_html
+  def dynamic(value : LF::LiveView::Rendered) : LF::LiveView::RenderedDynamic
+    value.component_content? || value.to_html
   end
 
   def dynamic(value : LF::LiveView::StreamContent) : LF::LiveView::StreamContent
+    value
+  end
+
+  def dynamic(value : LF::LiveView::ComponentContent) : LF::LiveView::ComponentContent
     value
   end
 
