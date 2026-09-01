@@ -3,6 +3,38 @@ require "json"
 require "./stream"
 
 module LF::LiveView
+  alias ChildViewFactory = Proc(View)
+
+  # Native Phoenix child-LiveView container embedded in its parent render.
+  # The disconnected render carries initial HTML; the connected parent sends
+  # an empty container which the child joins on its own channel.
+  # :nodoc:
+  class ChildViewContent
+    getter id : String
+    getter parent_id : String
+    getter type_name : String
+    getter session_token : String
+
+    @html : String
+
+    def initialize(@id, @parent_id, @type_name, @session_token, @html)
+    end
+
+    def to_html : String
+      String.build do |html|
+        html << %(<div id=") << HTML.escape(@id)
+        html << %(" data-phx-session=") << HTML.escape(@session_token)
+        html << %(" data-phx-static="" data-phx-parent-id=")
+        html << HTML.escape(@parent_id) << %(">)
+        html << @html << "</div>"
+      end
+    end
+
+    def ==(other : self) : Bool
+      @id == other.@id && @parent_id == other.@parent_id && @type_name == other.@type_name
+    end
+  end
+
   # One stable-key entry in a native Phoenix keyed comprehension.
   # :nodoc:
   struct KeyedEntry
@@ -103,7 +135,7 @@ module LF::LiveView
     end
   end
 
-  alias RenderedDynamic = String | StreamContent | ComponentContent | KeyedContent
+  alias RenderedDynamic = String | StreamContent | ComponentContent | KeyedContent | ChildViewContent
 
   # A server-rendered template split into immutable static fragments and
   # escaped dynamic values. Matching fingerprints can be updated over the wire
@@ -164,6 +196,7 @@ module LF::LiveView
             when StreamContent    then dynamic.to_html
             when ComponentContent then dynamic.to_html
             when KeyedContent     then dynamic.to_html
+            when ChildViewContent then dynamic.to_html
             end
           end
         end

@@ -32,6 +32,7 @@ server contract:
 - keyed comprehensions plus native stream inserts, deletes, reset, position,
   and limit;
 - titles, hook replies, pushed browser events, and component-only `c` diffs;
+- nested child LiveViews multiplexed as independent channels on one socket;
 - `live_patch` and `live_redirect` with current-URL reconnect mounts.
 
 The client uses the supported `bindingPrefix: "data-opal-"`, preserving
@@ -57,6 +58,6 @@ upgrades deliberately. Asset generation is reproducible through
 `npm run build:live-view-client`; `npm run check:live-view-client` detects an
 out-of-date committed bundle.
 
-Shared template tables, nested child LiveViews, and same-socket navigation
-across page classes are outside the initial subset. Uploads are intentionally
-not planned. Unsupported channel events return an explicit error reply.
+Shared template tables and same-socket navigation across page classes are
+outside the initial subset. Uploads are intentionally not planned. Unsupported
+channel events return an explicit error reply.
