@@ -1,8 +1,10 @@
 # Opal LiveView
 
 Opal LiveView provides server-rendered, event-driven pages over Opal's native
-WebSocket layer. It has its own protocol and dependency-free browser client;
-projects do not install Phoenix packages or configure an npm build.
+WebSocket layer. The browser runtime is the pinned upstream Phoenix 1.8.13 and
+Phoenix LiveView 1.2.11 client, prebundled into the shard. Application projects
+do not install Phoenix, Elixir, Node.js, or configure an asset build for the
+default client.
 
 ## Minimal application
 
@@ -76,11 +78,11 @@ after every live patch. Route parameters are available through `params`; query
 parameters are available through `query_params`.
 
 Always repeat authentication and authorization in connected mount. The signed
-mount token makes route state tamper-evident; it does not grant access by
-itself. A successful live patch issues a refreshed token for the current URL,
-so reconnect mounts from the latest acknowledged route and query parameters.
-Persist other state that must survive reconnect in an application service or
-database.
+mount token makes the route identity tamper-evident; it does not grant access
+by itself. On connect and reconnect, Opal validates the browser's current URL
+against that signed route and derives current path/query parameters from the
+URL. Persist other state that must survive reconnect in an application service
+or database.
 
 HTTP guards can be declared directly on the view. Application-level guards
 also apply. Opal evaluates them for both the disconnected and connected mount:
@@ -128,9 +130,10 @@ Forms serialize successful fields by name. Repeated names become arrays:
 ```
 
 `data-opal-change` reacts to `change`, or debounced `input` when
-`data-opal-debounce` is present. Protocol v2 morphs matching DOM nodes instead
-of replacing the live root. Focused input values and selections remain
-browser-owned while the event is in flight.
+`data-opal-debounce` is present. These names are retained through LiveSocket's
+supported `bindingPrefix`; DOM patching, focused controls, debounce/throttle,
+loading states, reconnect, and form recovery are handled by upstream
+`phoenix_live_view`.
 
 ## JavaScript hooks and custom events
 
@@ -169,19 +172,17 @@ globalThis.OpalLiveViewHooks = {
 }
 ```
 
-Supported callbacks are `mounted`, `beforeUpdate(toEl)`, `updated`,
-`destroyed`, `disconnected`, and `reconnected`. Each hook instance exposes
-`el`, `liveView` (`liveSocket` is an alias), `pushEvent`, `pushEventTo`,
-`handleEvent`, and `removeHandleEvent`. Callback failures emit
-`opal:hook-error` on the live root and do not close the socket.
+Supported callbacks and hook APIs are the upstream Phoenix LiveView contract,
+including `mounted`, `beforeUpdate`, `updated`, `destroyed`, `disconnected`,
+`reconnected`, `pushEvent`, `pushEventTo`, `handleEvent`, and
+`removeHandleEvent`.
 
-`pushEvent` uses the same serialized operation queue as normal bindings. With
-no callback it returns a promise resolving to `{reply, ref}`; with a callback,
-the callback receives `(reply, ref)`. `pushEventTo` accepts a selector or DOM
-element and targets the owning stateful component when one exists:
+With no callback, `pushEvent` returns a promise resolving directly to the
+server reply; with a callback, the callback receives `(reply, ref)`.
+`pushEventTo` accepts a selector, DOM element, or component CID:
 
 ```javascript
-const {reply} = await this.pushEvent("lookup", {query: "opal"})
+const reply = await this.pushEvent("lookup", {query: "opal"})
 const results = await this.pushEventTo("#todo-42", "archive", {})
 ```
 
@@ -202,10 +203,9 @@ end
 ```
 
 Pushed events run after the associated DOM patch. Every active hook registered
-through `handleEvent` receives the event, and the browser also dispatches a
-window event named `opal:<event>`. Hook events, replies, and server-pushed
-events require protocol v2. A fresh-document navigation intentionally does not
-deliver queued events to hooks from the page being replaced.
+through `handleEvent` receives the event, and the browser also dispatches the
+standard window event `phx:<event>`. A fresh-document navigation intentionally
+does not deliver queued events to hooks from the page being replaced.
 
 ## Server-initiated updates
 
@@ -279,10 +279,10 @@ LF::LiveView::HTML.rendered(%(<ul>#{LF::LiveView::HTML.raw(trusted_items)}</ul>)
 ```
 
 The browser reuses compatible elements by position. Give elements stable `id`
-or `data-opal-key` values when identity must survive insertion or reordering:
+values when identity must survive insertion or reordering:
 
 ```html
-<li data-opal-key="todo-42">...</li>
+<li id="todo-42">...</li>
 ```
 
 ## Stateful components
@@ -310,14 +310,19 @@ class CounterComponent < LF::LiveView::Component
 
   def render : LF::LiveView::Rendered
     LF::LiveView::HTML.rendered(<<-HTML)
-      <section id="counter-#{id}" data-opal-target="#{myself}">
+      <section id="counter-#{id}">
         <span>#{@label}: #{@count}</span>
-        <button data-opal-click="increment">+</button>
+        <button data-opal-click="increment" data-opal-target="#{myself}">+</button>
       </section>
     HTML
   end
 end
 ```
+
+Opal adds the upstream `data-phx-component` and `data-phx-view` ownership
+markers to the component root. Put `data-opal-target="#{myself}"` on each
+binding that should dispatch to the component; targets are not inherited from
+an ancestor element.
 
 Components can render stateful children with the same protected helper. For
 example, every panel below owns an independent `CounterComponent` whose local
@@ -361,10 +366,9 @@ def render : LF::LiveView::Rendered
 end
 ```
 
-`data-opal-target="#{myself}"` may be placed on the event element or any
-ancestor inside the component. The browser sends the connection-local target
-with click, change, and submit events. Events without a target continue to run
-`View#handle_event`.
+Place `data-opal-target="#{myself}"` on each click, change, or submit binding
+that belongs to the component. Upstream LiveView does not inherit a target
+from an ancestor. Events without a target continue to run `View#handle_event`.
 
 A component disappears when the parent stops rendering its identity. Opal then
 forgets its state and calls `destroy` when the component includes
@@ -378,11 +382,11 @@ They may also call `push_event` and `reply` for hook interoperability.
 
 ## Streams
 
-Streams update large or frequently changing collections without retaining and
-rerendering the whole collection in the connected view. The browser owns the
-current children of a container with a unique `id` and `data-opal-stream`.
-Queue initial operations from `mount` and expose them to the disconnected HTML
-render with `stream_contents`:
+The stream API maintains large or frequently changing ordered collections in
+the connection runtime instead of application view fields. Give the container
+a unique `id`; `data-opal-stream` remains a descriptive compatibility marker.
+Queue initial operations from `mount` and expose the canonical collection with
+`stream_contents`:
 
 ```crystal
 def mount(context : LF::LiveView::MountContext) : Nil
@@ -421,29 +425,29 @@ Inserting an existing id morphs that item in place and preserves its position.
 For new items, `at: -1` appends and a non-negative index inserts at that
 position. A positive `limit` retains the first N children; a negative limit
 retains the last N. Reset is useful when a fresh connected mount or reconnect
-must replace browser-owned collection state with a canonical snapshot.
+must replace the collection with a canonical snapshot.
 
-Do not also render ordinary dynamic children inside a stream container. Normal
-LiveView morphing deliberately preserves that container's children; only
-validated stream operations may insert, update, delete, or reset them. Streams
-are a protocol-v2 feature. A view that queues stream operations rejects a
-legacy protocol-v1 connection instead of sending an incomplete collection.
+The connection runtime retains the canonical ordered collection and renders it
+through the normal Phoenix structural diff. Stable item `id` values let the
+upstream DOM patcher preserve retained nodes. Native Phoenix stream payloads
+and `phx-update="stream"` are not emitted yet.
 
 ## Live navigation
 
-Use `data-opal-patch` on a local link to change route or query parameters
-without remounting the current LiveView:
+Use the standard Phoenix live-link attributes to change route or query
+parameters without remounting the current LiveView:
 
 ```html
-<a href="/projects/42?tab=activity" data-opal-patch>Activity</a>
-<a href="/projects/42?tab=settings" data-opal-patch data-opal-replace>Settings</a>
+<a href="/projects/42?tab=activity"
+   data-phx-link="patch" data-phx-link-state="push">Activity</a>
+<a href="/projects/42?tab=settings"
+   data-phx-link="patch" data-phx-link-state="replace">Settings</a>
 ```
 
 The target path must match the current `@[Page]` route. Opal reruns route and
-application guards with action `"patch"`, calls `handle_params`, renders the
-minimal diff, refreshes the signed mount token, and only then commits
-`pushState` or `replaceState`. Browser back and forward use the same serialized
-patch path without creating additional history entries.
+application guards with action `"patch"`, calls `handle_params`, and replies
+with a Phoenix diff. Upstream LiveView commits `pushState` or `replaceState`
+only after the acknowledgement and owns browser back/forward handling.
 
 A view or stateful component can initiate the same operations from an event or
 info callback:
@@ -454,17 +458,17 @@ push_patch("/projects/42?tab=settings", replace: true)
 push_navigate("/projects")
 ```
 
-`push_navigate` and links marked `data-opal-navigate` perform a fresh document
-mount. Opal deliberately does not keep the current socket across page classes
-until it has an explicit, guardable equivalent of Phoenix `live_session`.
+`push_navigate` performs an upstream `live_redirect`. Ordinary local links
+perform a fresh document mount. Opal deliberately does not keep the current
+socket across page classes until it has an explicit, guardable equivalent of
+Phoenix `live_session`.
 External, scheme-relative, credential-bearing, fragment, and cross-route patch
 targets are never accepted as live patches. Ordinary links remain available
 for fragment and external navigation.
 
-Navigation is protocol-v2-only. `opal:navigate` fires after an acknowledged
-patch and immediately before a document navigation. A failed back/forward
-patch reloads the current document rather than leaving the URL and rendered
-state out of sync.
+The upstream client owns navigation events, pagehide/pageshow handling, BFCache
+restore, heartbeat, and reconnect. A reconnect sends the current browser URL,
+so path and query state cannot fall back to the original mount URL.
 
 The mount token and built-in document metadata are escaped by the endpoint.
 Opal does not add event values or tokens to log metadata. Do not put secrets in
@@ -480,6 +484,10 @@ def render_document(live_root : String, client_script : String) : String
   "<!doctype html><html><body><nav>My app</nav>#{live_root}#{client_script}</body></html>"
 end
 ```
+
+Phoenix leaves an existing title unchanged when a pushed title is blank unless
+the document title declares a default. Use `<title data-default="">...</title>`
+when an explicit empty `View#title` should clear it.
 
 ## Configuration
 
@@ -534,17 +542,15 @@ destroyed after their disconnected or connected lifecycle when they implement
 
 ## Protocol compatibility and current boundary
 
-The built-in client negotiates protocol v2. The first connected render carries
-the template fingerprint, static fragments, and dynamic values. Later renders
-with the same fingerprint carry only changed dynamic positions; a changed
-template or legacy `String` render sends a complete v2 snapshot. The server
-continues accepting protocol-v1 clients and returns their complete `html`
-payloads.
+The endpoint implements a tested subset of Phoenix Channels serializer v2 and
+Phoenix LiveView 1.2.11: `phx_join`, `phx_reply`, heartbeat, `event`,
+`live_patch`, `live_redirect`, pushed `diff`, structural statics/dynamics,
+titles, hook replies/events, and component CIDs. The independent Opal protocol
+and browser DOM runtime are removed.
 
-Protocol v2 provides connection-local stateful components, component-targeted
-events and replies, parent-scoped nested component trees, server-pushed hook
-events, opt-in JavaScript hook lifecycle, browser-owned streams, and
-acknowledged live patches with browser history. It does not yet provide
-same-socket navigation across page classes, upload transport, or persisted
-reconnect sessions. These features can evolve under Opal's protocol without
-introducing a Phoenix dependency.
+Current server gaps are uploads, native Phoenix stream payloads,
+comprehension/template tables, component-only `c` diffs, nested child
+LiveViews, and same-socket navigation across page classes. Unsupported channel
+events receive an error reply; they are not silently treated as implemented.
+Applications consume the bundled asset and therefore need no JavaScript build,
+while Opal's own release process pins and rebuilds the upstream npm packages.

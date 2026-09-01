@@ -125,7 +125,7 @@ module LF::LiveView
       render_stack << component.myself
       begin
         component.update(assigns)
-        component.__opal_render
+        component.__opal_render.with_component_root(component.myself, "opal-live-root")
       ensure
         render_stack.pop
       end
@@ -190,6 +190,8 @@ module LF::LiveView
 
   private class StreamState
     @operations = [] of StreamOperation
+    @items = {} of String => Array(Tuple(String, String))
+    @committed_items = {} of String => Array(Tuple(String, String))
 
     def insert(
       container_id : String,
@@ -205,45 +207,33 @@ module LF::LiveView
         raise ArgumentError.new("LiveView stream limit cannot be zero")
       end
 
+      items = @items[container_id] ||= [] of Tuple(String, String)
+      if index = items.index { |item| item[0] == item_id }
+        items[index] = {item_id, html}
+      else
+        index = at == -1 || at >= items.size ? items.size : at
+        items.insert(index, {item_id, html})
+      end
+      apply_limit(items, limit)
       @operations << StreamOperation.insert(container_id, item_id, html, at, limit)
     end
 
     def delete(container_id : String, item_id : String) : Nil
       validate_id(container_id, "container")
       validate_id(item_id, "item")
+      @items[container_id]?.try(&.reject! { |item| item[0] == item_id })
       @operations << StreamOperation.delete(container_id, item_id)
     end
 
     def reset(container_id : String) : Nil
       validate_id(container_id, "container")
+      @items[container_id] = [] of Tuple(String, String)
       @operations << StreamOperation.reset(container_id)
     end
 
     def contents(container_id : String) : HTML::Safe
       validate_id(container_id, "container")
-      items = [] of Tuple(String, String)
-
-      @operations.each do |operation|
-        next unless operation.container_id == container_id
-        case operation.operation
-        when "reset"
-          items.clear
-        when "delete"
-          item_id = operation.item_id.not_nil!
-          items.reject! { |item| item[0] == item_id }
-        when "insert"
-          item_id = operation.item_id.not_nil!
-          html = operation.html.not_nil!
-          if index = items.index { |item| item[0] == item_id }
-            items[index] = {item_id, html}
-          else
-            at = operation.at.not_nil!
-            index = at == -1 || at >= items.size ? items.size : at
-            items.insert(index, {item_id, html})
-          end
-          apply_limit(items, operation.limit)
-        end
-      end
+      items = @items[container_id]? || [] of Tuple(String, String)
 
       HTML.raw(String.build do |output|
         items.each { |item| output << item[1] }
@@ -253,11 +243,19 @@ module LF::LiveView
     def take : Array(StreamOperation)
       operations = @operations
       @operations = [] of StreamOperation
+      @committed_items = duplicate_items(@items)
       operations
     end
 
     def clear : Nil
       @operations.clear
+      @items.clear
+      @committed_items.clear
+    end
+
+    def clear_operations : Nil
+      @operations.clear
+      @items = duplicate_items(@committed_items)
     end
 
     private def validate_id(id : String, kind : String) : Nil
@@ -278,6 +276,12 @@ module LF::LiveView
           items.shift
         end
       end
+    end
+
+    private def duplicate_items(
+      source : Hash(String, Array(Tuple(String, String))),
+    ) : Hash(String, Array(Tuple(String, String)))
+      source.transform_values(&.dup)
     end
   end
 
@@ -489,7 +493,7 @@ module LF::LiveView
     end
 
     def clear_stream_operations : Nil
-      @streams.clear
+      @streams.clear_operations
     end
 
     private def normalize_render(rendered : RenderResult) : Rendered

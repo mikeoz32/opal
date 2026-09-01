@@ -1,7 +1,7 @@
 require "json"
 
 module LF::LiveView
-  # One ordered browser-side stream mutation carried by protocol v2.
+  # One ordered stream-state mutation retained by the connection runtime.
   struct StreamOperation
     getter operation : String
     getter container_id : String

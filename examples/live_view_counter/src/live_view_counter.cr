@@ -8,6 +8,15 @@ class CounterLabel
   end
 end
 
+class PlainPageController
+  include LF::HTTP::Controller
+
+  @[LF::HTTP::Controller::Get("/plain")]
+  def show : String
+    "Plain non-LiveView page"
+  end
+end
+
 class CounterDetailComponent < LF::LiveView::Component
   @count = 0
   @owner_id = "counter"
@@ -31,10 +40,10 @@ class CounterDetailComponent < LF::LiveView::Component
 
   def render : LF::LiveView::Rendered
     LF::LiveView::HTML.rendered(<<-HTML)
-      <section id="#{@owner_id}-nested-component" data-opal-key="#{@owner_id}-nested-component" data-opal-target="#{myself}">
+      <section id="#{@owner_id}-nested-component">
         <h3>#{@owner_label} nested component</h3>
         <p>Parent count: <output id="#{@owner_id}-nested-parent-value">#{@parent_count}</output></p>
-        <button type="button" data-opal-click="increment_nested_component" aria-label="Increment #{@owner_label} nested component">Nested +</button>
+        <button type="button" data-opal-click="increment_nested_component" data-opal-target="#{myself}" aria-label="Increment #{@owner_label} nested component">Nested +</button>
         <output id="#{@owner_id}-nested-component-value" aria-live="polite">#{@count}</output>
       </section>
     HTML
@@ -80,14 +89,14 @@ class CounterComponent < LF::LiveView::Component
              end
 
     LF::LiveView::HTML.rendered(<<-HTML)
-      <section id="component-#{id}" data-opal-key="component-#{id}" data-opal-target="#{myself}">
+      <section id="component-#{id}">
         <h2>#{@label} component</h2>
         <div class="counter">
-          <button type="button" data-opal-click="decrement_component" aria-label="Decrement #{@label} component">−</button>
+          <button type="button" data-opal-click="decrement_component" data-opal-target="#{myself}" aria-label="Decrement #{@label} component">−</button>
           <output id="#{id}-component-value" aria-live="polite">#{@count}</output>
-          <button type="button" data-opal-click="increment_component" aria-label="Increment #{@label} component">+</button>
+          <button type="button" data-opal-click="increment_component" data-opal-target="#{myself}" aria-label="Increment #{@label} component">+</button>
         </div>
-        <button type="button" data-opal-click="toggle_nested_component">Toggle #{@label} nested component</button>
+        <button type="button" data-opal-click="toggle_nested_component" data-opal-target="#{myself}">Toggle #{@label} nested component</button>
         #{nested}
       </section>
     HTML
@@ -216,7 +225,7 @@ class CounterLive < LF::LiveView::View
     items.reverse! if @items_reversed
     items_markup = String.build do |html|
       items.each do |id, label|
-        html << %(<li id="item-#{LF::LiveView::HTML.escape(id)}" data-opal-key="#{LF::LiveView::HTML.escape(id)}">)
+        html << %(<li id="item-#{LF::LiveView::HTML.escape(id)}">)
         html << LF::LiveView::HTML.escape(label) << "</li>"
       end
     end
@@ -232,16 +241,17 @@ class CounterLive < LF::LiveView::View
         .components section { border: 1px solid currentColor; border-radius: .5rem; padding: 0 1rem; }
         #activity-stream { padding: 0; list-style: none; }
         #activity-stream li { display: flex; justify-content: space-between; align-items: center; margin: .5rem 0; }
-        [data-opal-status="disconnected"]::before { content: "Reconnecting..."; color: #d97706; }
+        #opal-live-root.phx-loading::before { content: "Reconnecting..."; color: #d97706; }
       </style>
       <h1>#{@counter_label.heading}</h1>
       <p>Hello, <strong>#{@name}</strong>.</p>
       <nav aria-label="Live navigation">
-        <a id="previous-page" href="#{previous_page_path}" data-opal-patch data-opal-replace>Previous page</a>
-        <a id="next-page" href="#{next_page_path}" data-opal-patch>Next page</a>
+        <a id="previous-page" href="#{previous_page_path}" data-phx-link="patch" data-phx-link-state="replace">Previous page</a>
+        <a id="next-page" href="#{next_page_path}" data-phx-link="patch" data-phx-link-state="push">Next page</a>
         <button type="button" data-opal-click="next_page">Next page from server</button>
         <button type="button" data-opal-click="replace_page">Replace page from server</button>
-        <a href="/about" data-opal-navigate>About this example</a>
+        <a href="/about">About this example</a>
+        <a href="/plain">Plain page</a>
       </nav>
       <output id="page-value" data-testid="page-value">#{@page}</output>
       <div class="counter">
@@ -287,7 +297,7 @@ class CounterLive < LF::LiveView::View
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width,initial-scale=1">
           <link rel="icon" href="data:,">
-          <title>#{LF::LiveView::HTML.escape(title || "Opal LiveView")}</title>
+          <title data-default="">#{LF::LiveView::HTML.escape(title || "Opal LiveView")}</title>
         </head>
         <body>
           #{live_root}
@@ -310,9 +320,9 @@ class CounterLive < LF::LiveView::View
                     globalThis.__opalHookNotices.push(payload);
                   });
                   this.onPing = async () => {
-                    const result = await this.pushEvent("hook_ping", {message: "hello from hook"});
+                    const reply = await this.pushEvent("hook_ping", {message: "hello from hook"});
                     globalThis.__opalHookLog.push("reply");
-                    globalThis.__opalHookReplies.push(result);
+                    globalThis.__opalHookReplies.push(reply);
                   };
                   this.onComponentPing = async () => {
                     const results = await this.pushEventTo("#component-left", "hook_component");
@@ -360,7 +370,7 @@ class CounterLive < LF::LiveView::View
   private def activity_item(sequence : Int32) : LF::LiveView::Rendered
     id = "activity-#{sequence}"
     LF::LiveView::HTML.rendered(<<-HTML)
-      <li id="#{id}" data-opal-key="#{id}">
+      <li id="#{id}">
         <span>Activity #{sequence}</span>
         <button type="button" data-opal-click="delete_activity" data-opal-value-id="#{id}" aria-label="Remove Activity #{sequence}">Remove</button>
       </li>
@@ -374,7 +384,7 @@ class AboutLive < LF::LiveView::View
     LF::LiveView::HTML.rendered(<<-HTML)
       <h1>About Opal LiveView</h1>
       <p>This page was mounted through a fresh document navigation.</p>
-      <a href="/" data-opal-navigate>Back to counter</a>
+      <a href="/">Back to counter</a>
     HTML
   end
 

@@ -1,7 +1,8 @@
 # Opal LiveView Counter
 
-This example is a complete interactive page using Opal's own LiveView server
-and browser runtime. It has no Phoenix or npm dependency.
+This example is a complete interactive page using Opal's Crystal LiveView
+server and the prebundled upstream Phoenix LiveView browser runtime. The
+example application itself needs neither Elixir/Phoenix nor npm.
 
 From this directory:
 
@@ -19,8 +20,8 @@ Open <http://127.0.0.1:8084/?start=2>. The example demonstrates:
 - click events and server-owned counter state;
 - debounced form changes and form submit;
 - a delayed server-side state change using serialized `send_info`;
-- protocol-v2 structural diffs and focused input preservation;
-- keyed list reordering without recreating DOM nodes;
+- Phoenix structural diffs and upstream focused-input preservation;
+- stable-id list reordering without recreating DOM nodes;
 - parent-scoped nested stateful components with isolated state and deep targeted
   events;
 - bounded browser-owned stream insertion and deletion;

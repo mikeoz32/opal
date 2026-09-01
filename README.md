@@ -61,7 +61,7 @@ Opal exposes seven independent layers:
 
 7. `LF::LiveView`
    Server-owned interactive pages over Opal's native WebSocket transport, with
-   a built-in dependency-free browser client.
+   pinned Phoenix/LiveView browser packages prebundled into the shard.
 
 ## Basic Router
 
@@ -307,8 +307,10 @@ only then shut down the root container so active connection scopes exit first.
 
 ## LiveView
 
-Opal LiveView provides interactive server-rendered pages without Phoenix or an
-npm asset pipeline. A page owns state for one WebSocket connection:
+Opal LiveView provides interactive server-rendered pages with a prebundled
+upstream Phoenix LiveView browser runtime. Application projects need neither
+Elixir/Phoenix nor an npm asset pipeline. A page owns state for one WebSocket
+connection:
 
 ```crystal
 @[LF::LiveView::Page("/counter")]
@@ -684,7 +686,7 @@ crystal run src/live_view_counter_example.cr
 
 Repository contributors can run the real-browser compatibility suite from the
 repository root with `npm ci`, `npx playwright install --with-deps chromium`,
-and `npm run test:live-view-browser`.
+`npm run check:live-view-client`, and `npm run test:live-view-browser`.
 
 ## Route Matching Rules
 

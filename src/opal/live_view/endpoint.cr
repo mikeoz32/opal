@@ -12,11 +12,10 @@ require "./view"
 
 module LF::LiveView
   class Endpoint
-    PROTOCOL_VERSION        = 2
-    LEGACY_PROTOCOL_VERSION = 1
-    SOCKET_PATH             = "/_opal/live"
-    CLIENT_PATH             = "/_opal/live.js"
-    CLIENT_SOURCE           = {{ read_file("#{__DIR__}/../../../assets/opal_live_view.js") }}
+    LIVE_VIEW_VERSION = "1.2.11"
+    SOCKET_PATH       = "/_opal/live"
+    CLIENT_PATH       = "/_opal/live.js"
+    CLIENT_SOURCE     = {{ read_file("#{__DIR__}/../../../assets/opal_live_view.js") }}
 
     private class Route
       getter name : String
@@ -67,6 +66,17 @@ module LF::LiveView
       getter token : String?
 
       def initialize(@navigation, @token = nil)
+      end
+    end
+
+    private struct ChannelMessage
+      getter join_ref : String?
+      getter reference : String?
+      getter topic : String
+      getter event : String
+      getter payload : JSON::Any
+
+      def initialize(@join_ref, @reference, @topic, @event, @payload)
       end
     end
 
@@ -155,7 +165,7 @@ module LF::LiveView
       before_upgrade = ->(context : ::HTTP::Server::Context, _params : Hash(String, String)) do
         verify_origin!(context.request)
       end
-      router.ws_with_context(@socket_path, before_upgrade: before_upgrade) do |websocket, _params, context|
+      router.ws_with_context(websocket_path, before_upgrade: before_upgrade) do |websocket, _params, context|
         serve(websocket, context)
       end
     end
@@ -201,8 +211,8 @@ module LF::LiveView
 
     private def document(view : View, token : String) : String
       live_root = String.build do |html|
-        html << "<main id=\"opal-live-root\" data-opal-live-root data-opal-token=\""
-        html << HTML.escape(token) << "\" data-opal-socket=\""
+        html << "<main id=\"opal-live-root\" data-opal-live-root data-phx-main data-phx-session=\""
+        html << HTML.escape(token) << "\" data-phx-static=\"\" data-opal-socket=\""
         html << HTML.escape(@socket_path) << "\">" << view.__opal_render.to_html << "</main>"
       end
       client_script = %(<script type="module" src="#{HTML.escape(@client_path)}"></script>)
@@ -238,39 +248,44 @@ module LF::LiveView
           end
         end
 
-        join_payload = select
-        when payload = incoming_channel.receive?
-          payload || raise ProtocolError.new("LiveView connection closed before join")
-        when timeout(@join_timeout)
-          close_socket(websocket, ::HTTP::WebSocket::CloseCode::PolicyViolation, "join timeout")
-          return
-        end
-        unless join_payload.is_a?(String)
-          close_socket(websocket, ::HTTP::WebSocket::CloseCode::UnsupportedData, "text messages required")
-          return
-        end
-        if join_payload.bytesize > @max_message_bytes
-          close_socket(websocket, ::HTTP::WebSocket::CloseCode::MessageTooBig, "message too large")
-          return
+        join_deadline = Time.instant + @join_timeout
+        join = loop do
+          remaining_join = join_deadline - Time.instant
+          unless remaining_join.positive?
+            close_socket(websocket, ::HTTP::WebSocket::CloseCode::PolicyViolation, "join timeout")
+            return
+          end
+          candidate = select
+          when payload = incoming_channel.receive?
+            parse_text_message(payload || raise ProtocolError.new("LiveView connection closed before join"))
+          when timeout(remaining_join)
+            close_socket(websocket, ::HTTP::WebSocket::CloseCode::PolicyViolation, "join timeout")
+            return
+          end
+
+          if candidate.topic == "phoenix" && candidate.event == "heartbeat"
+            send_channel_reply(websocket, candidate, "ok", empty_json_object)
+          elsif candidate.event == "phx_leave"
+            send_channel_reply(websocket, candidate, "ok", empty_json_object)
+          elsif candidate.event == "phx_join" && candidate.topic.starts_with?("lv:") && candidate.reference
+            break candidate
+          else
+            raise ProtocolError.new("LiveView connection requires a phx_join message")
+          end
         end
 
-        join = parse_message(join_payload)
-        unless string(join, "type") == "join"
-          raise ProtocolError.new("The first LiveView message must be join")
-        end
-        protocol = integer(join, "protocol")
-        unless {LEGACY_PROTOCOL_VERSION, PROTOCOL_VERSION}.includes?(protocol)
-          raise ProtocolError.new("Unsupported LiveView protocol version")
-        end
-
-        mount = @tokens.verify(string(join, "token"))
+        join_data = join.payload.as_h
+        mount = @tokens.verify(json_string(join_data, "session"))
         route_name = mount.route
         route = @routes[mount.route]? || raise InvalidMountTokenError.new
         connected_route = route
+        resource = joined_resource(join_data["url"]?.try(&.as_s), mount.resource, context.request)
+        resource_uri = URI.parse(resource)
+        params = route.match_path(resource_uri.path) || raise InvalidMountTokenError.new
         scope = context.dependency_scope
         raise LF::HTTP::InternalServerError.new("DI context not initialized") unless scope
 
-        authorize!(route, scope, context, mount.params, "connect")
+        authorize!(route, scope, context, params, "connect")
         view = route.build(scope)
         connected_view = view
         update_channel = Channel(Info).new(32)
@@ -294,21 +309,12 @@ module LF::LiveView
           end
         end
         view.__opal_connect(send_info, request_refresh)
-        view.__opal_mount(MountContext.new(context.request, mount.params, mount.resource, true))
-        view.__opal_handle_params(ParamsContext.new(mount.params, mount.resource))
+        view.__opal_mount(MountContext.new(context.request, params, resource, true))
+        view.__opal_handle_params(ParamsContext.new(params, resource))
         navigation_result = apply_view_navigation(view, route, scope, context)
-        version = 0_i64
         rendered = view.__opal_render
-        send_render(
-          websocket,
-          view,
-          rendered,
-          nil,
-          protocol,
-          version,
-          navigation: navigation_result.try(&.navigation),
-          token: navigation_result.try(&.token)
-        )
+        join_diff = build_diff(view, rendered, nil)
+        send_join_reply(websocket, join, join_diff, navigation_result.try(&.navigation))
 
         idle_deadline = Time.instant + @idle_timeout
         loop do
@@ -322,101 +328,53 @@ module LF::LiveView
           when payload = incoming_channel.receive?
             break unless payload
             idle_deadline = Time.instant + @idle_timeout
-            unless payload.is_a?(String)
-              close_socket(websocket, ::HTTP::WebSocket::CloseCode::UnsupportedData, "text messages required")
-              return
+            message = parse_text_message(payload)
+
+            if message.topic == "phoenix" && message.event == "heartbeat"
+              send_channel_reply(websocket, message, "ok", empty_json_object)
+              next
             end
-            if payload.bytesize > @max_message_bytes
-              close_socket(websocket, ::HTTP::WebSocket::CloseCode::MessageTooBig, "message too large")
-              return
+            unless message.topic == join.topic && message.join_ref == join.join_ref
+              raise ProtocolError.new("LiveView channel topic or join reference changed")
             end
 
-            message = parse_message(payload)
-            case string(message, "type")
-            when "heartbeat"
-              send_heartbeat(websocket, message["ref"]?)
+            case message.event
             when "event"
-              reference = integer(message, "ref")
-              client_version = integer(message, "version")
-              if client_version != version
-                send_render(
-                  websocket,
-                  view,
-                  rendered,
-                  rendered,
-                  protocol,
-                  version,
-                  reference: reference,
-                  status: "stale"
-                )
-                next
-              end
-
-              event = string(message, "event")
-              value = message["value"]? || JSON::Any.new(nil)
-              target = optional_integer(message, "target")
+              reference = message.reference || raise ProtocolError.new("LiveView events require a reference")
+              event_payload = message.payload.as_h
+              event = json_string(event_payload, "event")
+              value = event_value(event_payload)
+              target = optional_json_integer(event_payload, "cid")
               begin
                 event_reply = view.__opal_handle_event(target, event, value)
               rescue error : UnknownEventError
-                view.__opal_clear_stream_operations
-                view.__opal_clear_navigation
-                view.__opal_clear_pushed_events
-                send_error(websocket, "unknown_event", reference)
+                clear_pending(view)
+                send_channel_error(websocket, message, "unknown_event")
                 next
               rescue error : UnknownComponentError
-                view.__opal_clear_stream_operations
-                view.__opal_clear_navigation
-                view.__opal_clear_pushed_events
-                send_error(websocket, "unknown_target", reference)
+                clear_pending(view)
+                send_channel_error(websocket, message, "unknown_target")
                 next
               rescue error : Exception
                 Log.error(exception: error) { "LiveView event failed: route=#{route.name}" }
                 close_socket(websocket, ::HTTP::WebSocket::CloseCode::InternalServerError, "event failed")
                 return
               end
-              navigation_result = apply_view_navigation(view, route, scope, context)
-              version += 1
+              navigation = apply_view_navigation(view, route, scope, context).try(&.navigation)
               next_rendered = view.__opal_render
-              send_render(
-                websocket,
-                view,
-                next_rendered,
-                rendered,
-                protocol,
-                version,
-                reference: reference,
-                status: "ok",
-                navigation: navigation_result.try(&.navigation),
-                token: navigation_result.try(&.token),
-                reply: event_reply
-              )
+              diff = build_diff(view, next_rendered, rendered, event_reply)
+              send_event_reply(websocket, message, diff, navigation)
               rendered = next_rendered
-            when "patch"
-              raise ProtocolError.new("LiveView navigation requires protocol version 2") if protocol == LEGACY_PROTOCOL_VERSION
-              reference = integer(message, "ref")
-              client_version = integer(message, "version")
-              if client_version != version
-                send_render(
-                  websocket,
-                  view,
-                  rendered,
-                  rendered,
-                  protocol,
-                  version,
-                  reference: reference,
-                  status: "stale"
-                )
-                next
-              end
-
+            when "live_patch"
+              message.reference || raise ProtocolError.new("LiveView patches require a reference")
               begin
-                requested = Navigation.patch(string(message, "to"), string(message, "history"))
-                navigation_result = apply_patch_navigation(view, route, scope, context, requested)
-              rescue error : InvalidNavigationError
-                view.__opal_clear_stream_operations
-                view.__opal_clear_navigation
-                view.__opal_clear_pushed_events
-                send_error(websocket, "invalid_navigation", reference)
+                patch_payload = message.payload.as_h
+                resource = joined_resource(json_string(patch_payload, "url"), "/", context.request)
+                requested = Navigation.patch(resource, "none")
+                apply_patch_navigation(view, route, scope, context, requested)
+              rescue error : InvalidNavigationError | ProtocolError
+                clear_pending(view)
+                send_channel_error(websocket, message, "invalid_navigation")
                 next
               rescue error : LF::HTTP::Forbidden
                 raise error
@@ -425,24 +383,15 @@ module LF::LiveView
                 close_socket(websocket, ::HTTP::WebSocket::CloseCode::InternalServerError, "navigation failed")
                 return
               end
-
-              version += 1
               next_rendered = view.__opal_render
-              send_render(
-                websocket,
-                view,
-                next_rendered,
-                rendered,
-                protocol,
-                version,
-                reference: reference,
-                status: "ok",
-                navigation: navigation_result.navigation,
-                token: navigation_result.token
-              )
+              diff = build_diff(view, next_rendered, rendered)
+              send_event_reply(websocket, message, diff)
               rendered = next_rendered
+            when "phx_leave"
+              send_channel_reply(websocket, message, "ok", empty_json_object)
+              return
             else
-              raise ProtocolError.new("Unsupported LiveView message type")
+              send_channel_error(websocket, message, "unsupported_event")
             end
           when info = update_channel.receive?
             break unless info
@@ -453,24 +402,16 @@ module LF::LiveView
               close_socket(websocket, ::HTTP::WebSocket::CloseCode::InternalServerError, "info failed")
               return
             end
-            navigation_result = apply_view_navigation(view, route, scope, context)
-            version += 1
+            navigation = apply_view_navigation(view, route, scope, context).try(&.navigation)
             next_rendered = view.__opal_render
-            send_render(
-              websocket,
-              view,
-              next_rendered,
-              rendered,
-              protocol,
-              version,
-              navigation: navigation_result.try(&.navigation),
-              token: navigation_result.try(&.token)
-            )
+            diff = build_diff(view, next_rendered, rendered)
+            send_navigation(websocket, join, navigation) if navigation
+            send_channel_push(websocket, join, "diff", diff) unless diff.as_h.empty?
             rendered = next_rendered
           when refresh_channel.receive
-            version += 1
             next_rendered = view.__opal_render
-            send_render(websocket, view, next_rendered, rendered, protocol, version)
+            diff = build_diff(view, next_rendered, rendered)
+            send_channel_push(websocket, join, "diff", diff) unless diff.as_h.empty?
             rendered = next_rendered
           when timeout(remaining_idle)
             close_socket(websocket, ::HTTP::WebSocket::CloseCode::GoingAway, "idle timeout")
@@ -483,7 +424,11 @@ module LF::LiveView
       rescue error : LF::HTTP::Forbidden
         Log.warn { "LiveView connected mount was forbidden: route=#{route_name || "unmounted"}" }
         close_socket(websocket, ::HTTP::WebSocket::CloseCode::PolicyViolation, "forbidden")
-      rescue error : ProtocolError | JSON::ParseException | JSON::SerializableError | TypeCastError | KeyError
+      rescue error : UnsupportedDataError
+        close_socket(websocket, ::HTTP::WebSocket::CloseCode::UnsupportedData, "text messages required")
+      rescue error : MessageTooBigError
+        close_socket(websocket, ::HTTP::WebSocket::CloseCode::MessageTooBig, "message too large")
+      rescue error : ProtocolError | JSON::ParseException | JSON::SerializableError | TypeCastError | KeyError | URI::Error
         Log.warn { "LiveView protocol error: route=#{route_name || "unmounted"}" }
         close_socket(websocket, ::HTTP::WebSocket::CloseCode::ProtocolError, "invalid message")
       rescue error : Exception
@@ -531,29 +476,111 @@ module LF::LiveView
     rescue IO::Error
     end
 
-    private def parse_message(payload : String) : Hash(String, JSON::Any)
-      JSON.parse(payload).as_h
+    private def websocket_path : String
+      "#{@socket_path.rstrip('/')}/websocket"
     end
 
-    private def string(message : Hash(String, JSON::Any), key : String) : String
+    private def parse_text_message(payload : String | Bytes) : ChannelMessage
+      unless payload.is_a?(String)
+        raise UnsupportedDataError.new("Phoenix LiveView requires JSON text messages")
+      end
+      if payload.bytesize > @max_message_bytes
+        raise MessageTooBigError.new("LiveView message is too large")
+      end
+
+      envelope = JSON.parse(payload).as_a
+      unless envelope.size == 5
+        raise ProtocolError.new("Phoenix channel messages must contain five fields")
+      end
+      ChannelMessage.new(
+        channel_reference(envelope[0]),
+        channel_reference(envelope[1]),
+        envelope[2].as_s,
+        envelope[3].as_s,
+        envelope[4]
+      )
+    rescue TypeCastError
+      raise ProtocolError.new("Invalid Phoenix channel message")
+    end
+
+    private def channel_reference(value : JSON::Any) : String?
+      return nil if value.raw.nil?
+      value.as_s
+    rescue TypeCastError
+      raise ProtocolError.new("Phoenix channel references must be strings or null")
+    end
+
+    private def json_string(message : Hash(String, JSON::Any), key : String) : String
       message[key].as_s
     rescue KeyError | TypeCastError
       raise ProtocolError.new("LiveView message field '#{key}' must be a string")
     end
 
-    private def integer(message : Hash(String, JSON::Any), key : String) : Int64
-      message[key].as_i64
-    rescue KeyError | TypeCastError
-      raise ProtocolError.new("LiveView message field '#{key}' must be an integer")
-    end
-
-    private def optional_integer(message : Hash(String, JSON::Any), key : String) : Int64?
+    private def optional_json_integer(message : Hash(String, JSON::Any), key : String) : Int64?
       value = message[key]?
       return nil unless value
       return nil if value.raw.nil?
       value.as_i64
     rescue TypeCastError
       raise ProtocolError.new("LiveView message field '#{key}' must be an integer or null")
+    end
+
+    private def joined_resource(
+      url : String?,
+      fallback : String,
+      request : ::HTTP::Request,
+    ) : String
+      uri = URI.parse(url || fallback)
+      if uri.scheme || uri.host
+        unless {"http", "https"}.includes?(uri.scheme) && uri.host
+          raise ProtocolError.new("LiveView join URL must be HTTP or HTTPS")
+        end
+        origin = "#{uri.scheme}://#{uri.host}"
+        origin += ":#{uri.port}" if uri.port
+        request_origin = request.headers["Origin"]? || raise ProtocolError.new("LiveView Origin is required")
+        unless normalize_origin(origin) == normalize_origin(request_origin)
+          raise ProtocolError.new("LiveView URL origin does not match the socket Origin")
+        end
+      end
+      if uri.user || uri.fragment
+        raise ProtocolError.new("LiveView join URL must not contain credentials or a fragment")
+      end
+      path = uri.path.empty? ? "/" : uri.path
+      raise ProtocolError.new("LiveView join URL must use an absolute path") unless path.starts_with?('/')
+      uri.query ? "#{path}?#{uri.query}" : path
+    end
+
+    private def event_value(payload : Hash(String, JSON::Any)) : JSON::Any
+      value = payload["value"]? || JSON::Any.new(nil)
+      value.as_s? ? decode_form_value(value.as_s) : value
+    end
+
+    private def decode_form_value(encoded : String) : JSON::Any
+      values = {} of String => Array(String)
+      URI::Params.parse(encoded).each do |key, value|
+        (values[key] ||= [] of String) << value
+      end
+      decoded = {} of String => JSON::Any
+      values.each do |key, entries|
+        decoded[key] = if entries.size == 1
+                         JSON::Any.new(entries.first)
+                       else
+                         JSON::Any.new(entries.map { |entry| JSON::Any.new(entry) })
+                       end
+      end
+      JSON::Any.new(decoded)
+    rescue URI::Error
+      raise ProtocolError.new("Invalid form event payload")
+    end
+
+    private def clear_pending(view : View) : Nil
+      view.__opal_clear_stream_operations
+      view.__opal_clear_navigation
+      view.__opal_clear_pushed_events
+    end
+
+    private def empty_json_object : JSON::Any
+      JSON::Any.new({} of String => JSON::Any)
     end
 
     private def apply_view_navigation(
@@ -629,116 +656,144 @@ module LF::LiveView
       raise InvalidNavigationError.new
     end
 
-    private def send_render(
-      websocket : ::HTTP::WebSocket,
+    private def build_diff(
       view : View,
       rendered : Rendered,
       previous : Rendered?,
-      protocol : Int64,
-      version : Int64,
-      *,
-      reference : Int64? = nil,
-      status : String? = nil,
-      navigation : Navigation? = nil,
-      token : String? = nil,
       reply : EventReply? = nil,
-    ) : Nil
+    ) : JSON::Any
+      diff = {} of String => JSON::Any
       changes = previous.try { |old| rendered.diff(old) }
-      streams = view.__opal_take_stream_operations
-      pushed_events = view.__opal_take_pushed_events
-      if protocol == LEGACY_PROTOCOL_VERSION && (!streams.empty? || navigation || !pushed_events.empty? || reply)
-        raise ProtocolError.new("LiveView streams, navigation, and custom events require protocol version 2")
+      if changes
+        changes.each do |index, dynamic|
+          diff[index.to_s] = JSON::Any.new(dynamic)
+        end
+      else
+        diff["s"] = JSON::Any.new(rendered.statics.map { |static| JSON::Any.new(static) })
+        rendered.dynamics.each_with_index do |dynamic, index|
+          diff[index.to_s] = JSON::Any.new(dynamic)
+        end
       end
+
+      # Stream state is rendered into the normal structural tree. We still
+      # drain the operation journal so connection-local memory remains bounded.
+      view.__opal_take_stream_operations
+      pushed_events = view.__opal_take_pushed_events
+      unless pushed_events.empty?
+        diff["e"] = JSON::Any.new(pushed_events.map do |event|
+          JSON::Any.new([JSON::Any.new(event.name), event.payload])
+        end)
+      end
+      diff["r"] = reply.value if reply
+      if title = view.title
+        diff["t"] = JSON::Any.new(title)
+      end
+      JSON::Any.new(diff)
+    end
+
+    private def send_join_reply(
+      websocket : ::HTTP::WebSocket,
+      join : ChannelMessage,
+      diff : JSON::Any,
+      navigation : Navigation?,
+    ) : Nil
+      if navigation && navigation.kind == "navigate"
+        response = {"live_redirect" => navigation_payload(navigation)}
+        send_channel_reply(websocket, join, "error", JSON::Any.new(response))
+        return
+      end
+
+      response = {
+        "rendered"         => diff,
+        "liveview_version" => JSON::Any.new(LIVE_VIEW_VERSION),
+      }
+      if navigation
+        response["live_patch"] = navigation_payload(navigation)
+      end
+      send_channel_reply(websocket, join, "ok", JSON::Any.new(response))
+    end
+
+    private def send_event_reply(
+      websocket : ::HTTP::WebSocket,
+      message : ChannelMessage,
+      diff : JSON::Any,
+      navigation : Navigation? = nil,
+    ) : Nil
+      response = {} of String => JSON::Any
+      response["diff"] = diff unless diff.as_h.empty?
+      if navigation
+        key = navigation.kind == "patch" ? "live_patch" : "live_redirect"
+        response[key] = navigation_payload(navigation)
+      end
+      send_channel_reply(websocket, message, "ok", JSON::Any.new(response))
+    end
+
+    private def send_channel_reply(
+      websocket : ::HTTP::WebSocket,
+      message : ChannelMessage,
+      status : String,
+      response : JSON::Any,
+    ) : Nil
       websocket.send(JSON.build do |json|
-        json.object do
-          json.field "type", "render"
-          json.field "protocol", protocol
-          json.field "version", version
-          if protocol == LEGACY_PROTOCOL_VERSION
-            json.field "html", rendered.to_html
-          elsif changes
-            json.field "fingerprint", rendered.fingerprint
-            json.field "diff" do
-              json.object do
-                changes.each do |index, dynamic|
-                  json.field index.to_s, dynamic
-                end
-              end
-            end
-          else
-            json.field "rendered" do
-              json.object do
-                json.field "fingerprint", rendered.fingerprint
-                json.field "statics" do
-                  rendered.statics.to_json(json)
-                end
-                json.field "dynamics" do
-                  rendered.dynamics.to_json(json)
-                end
-              end
-            end
-          end
-          unless streams.empty?
-            json.field "streams" do
-              streams.to_json(json)
-            end
-          end
-          unless pushed_events.empty?
-            json.field "events" do
-              pushed_events.to_json(json)
-            end
-          end
-          if navigation
-            json.field "navigation" do
-              navigation.to_json(json)
-            end
-          end
-          if token
-            json.field "token", token
-          end
-          if reply
-            json.field "reply" do
-              reply.value.to_json(json)
-            end
-          end
-          if reference
-            json.field "ref", reference
-          end
-          if status
+        json.array do
+          write_optional_string(json, message.join_ref)
+          write_optional_string(json, message.reference)
+          json.string(message.topic)
+          json.string("phx_reply")
+          json.object do
             json.field "status", status
-          end
-          if title = view.title
-            json.field "title", title
-          end
-        end
-      end)
-    end
-
-    private def send_heartbeat(websocket : ::HTTP::WebSocket, reference : JSON::Any?) : Nil
-      websocket.send(JSON.build do |json|
-        json.object do
-          json.field "type", "heartbeat"
-          json.field "ref" do
-            if reference
-              reference.to_json(json)
-            else
-              json.null
+            json.field "response" do
+              response.to_json(json)
             end
           end
         end
       end)
     end
 
-    private def send_error(websocket : ::HTTP::WebSocket, reason : String, reference : Int64? = nil) : Nil
+    private def send_channel_push(
+      websocket : ::HTTP::WebSocket,
+      channel : ChannelMessage,
+      event : String,
+      payload : JSON::Any,
+    ) : Nil
       websocket.send(JSON.build do |json|
-        json.object do
-          json.field "type", "error"
-          json.field "reason", reason
-          if reference
-            json.field "ref", reference
-          end
+        json.array do
+          write_optional_string(json, channel.join_ref)
+          json.null
+          json.string(channel.topic)
+          json.string(event)
+          payload.to_json(json)
         end
       end)
+    end
+
+    private def send_channel_error(
+      websocket : ::HTTP::WebSocket,
+      message : ChannelMessage,
+      reason : String,
+    ) : Nil
+      response = JSON::Any.new({"reason" => JSON::Any.new(reason)})
+      send_channel_reply(websocket, message, "error", response)
+    end
+
+    private def send_navigation(
+      websocket : ::HTTP::WebSocket,
+      channel : ChannelMessage,
+      navigation : Navigation,
+    ) : Nil
+      event = navigation.kind == "patch" ? "live_patch" : "live_redirect"
+      send_channel_push(websocket, channel, event, navigation_payload(navigation))
+    end
+
+    private def navigation_payload(navigation : Navigation) : JSON::Any
+      JSON::Any.new({
+        "to"   => JSON::Any.new(navigation.to),
+        "kind" => JSON::Any.new(navigation.history),
+      })
+    end
+
+    private def write_optional_string(json : JSON::Builder, value : String?) : Nil
+      value ? json.string(value) : json.null
     end
 
     private def destroy_unmanaged(view : View?, route : Route) : Nil

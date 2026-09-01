@@ -1,6 +1,6 @@
 # ADR-0007: Opal LiveView
 
-- Status: Accepted
+- Status: Superseded by ADR-0009
 - Date: 2026-08-30
 - Deciders: Opal maintainers
 - Extends: ADR-0004 and ADR-0006

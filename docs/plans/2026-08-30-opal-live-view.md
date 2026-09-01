@@ -1,5 +1,8 @@
 # Opal LiveView Implementation Plan
 
+> Historical plan. ADR-0009 supersedes its independent browser runtime and
+> wire-protocol direction with the pinned Phoenix LiveView client contract.
+
 **Goal:** Deliver an Opal-owned server-rendered interactive page runtime above
 native WebSocket routes, with no Phoenix server or JavaScript dependency.
 
