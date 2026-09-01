@@ -69,6 +69,20 @@ connection fiber; events, info messages, renders, and outbound writes therefore
 remain serialized. `refresh` is reserved for coalescing a render requested by
 code already executing on the connection fiber.
 
+Each view composes one `LF::LiveView::ConnectionRuntime`. The runtime, rather
+than the application view, owns connection infrastructure: the component tree,
+stream operations, pending navigation, pushed browser events, event replies,
+and `send_info`/refresh dispatchers. These concerns are isolated into runtime
+subsystems and are cleared together at disconnect. `View` remains the
+application callback and protected helper facade.
+
+`ConnectionRuntime` is deliberately not an `ApplicationExtension`.
+Application extensions have application lifetime and may be shared by every
+request and socket, while this state belongs to exactly one disconnected render
+or WebSocket connection. The HTTP extension owns route and endpoint startup;
+the per-view runtime is the composition boundary for later connection-scoped
+features such as uploads and live sessions.
+
 On transport reconnect, the server creates a new WebSocket scope and mounts a
 new view from the latest signed path, route params, query params, and the new
 handshake request. Successful patches refresh that signed state. Ephemeral
@@ -192,6 +206,9 @@ connection.
 - Parent-scoped component identities allow reusable nested component trees
   without collisions between separate parent instances. Recursive identities
   and excessive nesting fail the render instead of growing without bound.
+- A dedicated connection runtime keeps transport-adjacent queues and component
+  registries out of application views without sharing mutable session state
+  through an application-wide extension.
 
 ## References
 

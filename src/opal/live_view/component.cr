@@ -1,6 +1,7 @@
 require "json"
 require "../di"
 require "./client_event"
+require "./error"
 require "./navigation"
 require "./rendered"
 

@@ -249,6 +249,13 @@ Info callbacks, events, renders, and outbound writes are serialized on the
 connection fiber. Stop subscriptions and timers from
 `LF::DI::Disposable#destroy` when the WebSocket scope exits.
 
+Each disconnected or connected view has its own internal
+`LF::LiveView::ConnectionRuntime`. It owns component, stream, navigation, and
+client-event infrastructure for that lifecycle; application `View` subclasses
+contain only their page state and callbacks. The runtime is connection-scoped,
+not an application-wide extension, so mutable state is never shared between
+separate sockets.
+
 ## Rendering safely
 
 Use `LF::LiveView::HTML.rendered` for structural rendering. Literal fragments

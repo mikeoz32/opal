@@ -1,6 +1,7 @@
 require "base64"
 require "json"
 require "openssl/hmac"
+require "./error"
 
 module LF::LiveView
   struct Mount
