@@ -8,9 +8,43 @@ class CounterLabel
   end
 end
 
+class CounterDetailComponent < LF::LiveView::Component
+  @count = 0
+  @owner_id = "counter"
+  @owner_label = "Counter"
+  @parent_count = 0
+
+  def update(assigns : JSON::Any) : Nil
+    values = assigns.as_h
+    @owner_id = values["owner_id"].as_s
+    @owner_label = values["owner_label"].as_s
+    @parent_count = values["parent_count"].as_i.to_i
+  end
+
+  def handle_event(event : String, value : JSON::Any) : Nil
+    if event == "increment_nested_component"
+      @count += 1
+    else
+      super
+    end
+  end
+
+  def render : LF::LiveView::Rendered
+    LF::LiveView::HTML.rendered(<<-HTML)
+      <section id="#{@owner_id}-nested-component" data-opal-key="#{@owner_id}-nested-component" data-opal-target="#{myself}">
+        <h3>#{@owner_label} nested component</h3>
+        <p>Parent count: <output id="#{@owner_id}-nested-parent-value">#{@parent_count}</output></p>
+        <button type="button" data-opal-click="increment_nested_component" aria-label="Increment #{@owner_label} nested component">Nested +</button>
+        <output id="#{@owner_id}-nested-component-value" aria-live="polite">#{@count}</output>
+      </section>
+    HTML
+  end
+end
+
 class CounterComponent < LF::LiveView::Component
   @count = 0
   @label = "Counter"
+  @show_nested = true
 
   def update(assigns : JSON::Any) : Nil
     @label = assigns.as_h["label"].as_s
@@ -25,12 +59,26 @@ class CounterComponent < LF::LiveView::Component
     when "hook_component"
       push_event("component_notice", {id: id, count: @count})
       reply({id: id, count: @count})
+    when "toggle_nested_component"
+      @show_nested = !@show_nested
     else
       super
     end
   end
 
   def render : LF::LiveView::Rendered
+    nested = if @show_nested
+               live_component(
+                 CounterDetailComponent,
+                 "details",
+                 {owner_id: id, owner_label: @label, parent_count: @count}
+               ) do
+                 CounterDetailComponent.new
+               end
+             else
+               LF::LiveView::Rendered.opaque("")
+             end
+
     LF::LiveView::HTML.rendered(<<-HTML)
       <section id="component-#{id}" data-opal-key="component-#{id}" data-opal-target="#{myself}">
         <h2>#{@label} component</h2>
@@ -39,6 +87,8 @@ class CounterComponent < LF::LiveView::Component
           <output id="#{id}-component-value" aria-live="polite">#{@count}</output>
           <button type="button" data-opal-click="increment_component" aria-label="Increment #{@label} component">+</button>
         </div>
+        <button type="button" data-opal-click="toggle_nested_component">Toggle #{@label} nested component</button>
+        #{nested}
       </section>
     HTML
   end

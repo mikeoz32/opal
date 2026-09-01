@@ -45,13 +45,19 @@ module LF::LiveView
   end
 
   abstract class View
-    alias ComponentIdentity = Tuple(String, String)
+    ROOT_COMPONENT_CID  = 0_i64
+    MAX_COMPONENT_DEPTH =    32
+
+    alias ComponentIdentity = Tuple(Int64, String, String)
 
     @send_info : Proc(Info, Bool)?
     @refresh : Proc(Bool)?
     @components = {} of ComponentIdentity => Component
     @components_by_cid = {} of Int64 => Component
+    @component_identities_by_cid = {} of Int64 => ComponentIdentity
+    @component_children = {} of Int64 => Set(ComponentIdentity)
     @rendered_components : Set(ComponentIdentity)?
+    @component_render_stack : Array(Int64)?
     @next_component_cid = 0_i64
     @connected = false
     @stream_operations = [] of StreamOperation
@@ -150,23 +156,8 @@ module LF::LiveView
       assigns : JSON::Any = JSON::Any.new(nil),
       &factory : -> T
     ) : Rendered forall T
-      rendered_components = @rendered_components
-      raise Error.new("LiveView components can only be rendered from View#render") unless rendered_components
-
-      identity = {T.name, id}
-      if rendered_components.includes?(identity)
-        raise DuplicateComponentError.new(T.name)
-      end
-
-      component = if existing = @components[identity]?
-                    existing.as(T)
-                  else
-                    create_component(identity, factory.call)
-                  end
-
-      rendered_components << identity
-      component.update(assigns)
-      component.__opal_render
+      component_factory = -> { factory.call.as(Component) }
+      render_component(ROOT_COMPONENT_CID, T.name, id, assigns, component_factory)
     end
 
     protected def live_component(
@@ -264,34 +255,45 @@ module LF::LiveView
     def __opal_disconnect : Nil
       @send_info = nil
       @refresh = nil
-      components = @components.values
-      @components.clear
-      @components_by_cid.clear
       @rendered_components = nil
+      @component_render_stack = nil
       @stream_operations.clear
       @navigation = nil
       @pushed_events.clear
       @event_reply = nil
       @handling_event = false
-      components.each { |component| destroy_component(component) }
+      root_identities = @component_children[ROOT_COMPONENT_CID]?.try(&.to_a) || [] of ComponentIdentity
+      root_identities.each { |identity| destroy_component_tree(identity) }
+      @components.keys.each { |identity| destroy_component_tree(identity) }
+      @components_by_cid.clear
+      @component_identities_by_cid.clear
+      @component_children.clear
     end
 
     # :nodoc:
     def __opal_render : Rendered
-      rendered_components = Set(ComponentIdentity).new
-      @rendered_components = rendered_components
-      rendered = normalize_render(render)
-
-      stale = @components.keys.reject { |identity| rendered_components.includes?(identity) }
-      stale.each do |identity|
-        if component = @components.delete(identity)
-          @components_by_cid.delete(component.myself)
-          destroy_component(component)
+      existing_components = @components.keys.to_set
+      begin
+        if @rendered_components || @component_render_stack
+          raise Error.new("LiveView render callbacks cannot be nested")
         end
+
+        rendered_components = Set(ComponentIdentity).new
+        @rendered_components = rendered_components
+        @component_render_stack = [ROOT_COMPONENT_CID]
+        rendered = normalize_render(render)
+
+        stale = @components.keys.reject { |identity| rendered_components.includes?(identity) }
+        stale.each { |identity| destroy_component_tree(identity) }
+        rendered
+      rescue error
+        created = @components.keys.reject { |identity| existing_components.includes?(identity) }
+        created.each { |identity| destroy_component_tree(identity) }
+        raise error
+      ensure
+        @rendered_components = nil
+        @component_render_stack = nil
       end
-      rendered
-    ensure
-      @rendered_components = nil
     end
 
     # :nodoc:
@@ -389,15 +391,58 @@ module LF::LiveView
       @event_reply = EventReply.new(value)
     end
 
-    private def create_component(identity : ComponentIdentity, component : T) : T forall T
+    private def render_component(
+      parent_cid : Int64,
+      type_name : String,
+      id : String,
+      assigns : JSON::Any,
+      factory : Component::Factory,
+    ) : Rendered
+      rendered_components = @rendered_components
+      render_stack = @component_render_stack
+      unless rendered_components && render_stack && render_stack.last? == parent_cid
+        raise Error.new("LiveView components can only be rendered from their active parent render")
+      end
+
+      if render_stack.size - 1 >= MAX_COMPONENT_DEPTH
+        raise ComponentNestingError.new(MAX_COMPONENT_DEPTH)
+      end
+
+      render_stack.skip(1).each do |ancestor_cid|
+        next unless ancestor = @component_identities_by_cid[ancestor_cid]?
+        if ancestor[1] == type_name && ancestor[2] == id
+          raise RecursiveComponentError.new(type_name, id)
+        end
+      end
+
+      identity = {parent_cid, type_name, id}
+      if rendered_components.includes?(identity)
+        raise DuplicateComponentError.new(type_name)
+      end
+
+      component = @components[identity]? || create_component(identity, factory.call)
+      rendered_components << identity
+      render_stack << component.myself
+      begin
+        component.update(assigns)
+        component.__opal_render
+      ensure
+        render_stack.pop
+      end
+    end
+
+    private def create_component(identity : ComponentIdentity, component : Component) : Component
       @next_component_cid += 1
+      component_cid = @next_component_cid
+      render_component = ->(type_name : String, id : String, assigns : JSON::Any, factory : Component::Factory) { render_component(component_cid, type_name, id, assigns, factory) }
       navigate = ->(navigation : Navigation) { queue_navigation(navigation) }
       push_event = ->(event : PushedEvent) { queue_pushed_event(event) }
       reply = ->(value : JSON::Any) { queue_event_reply(value) }
       component.__opal_attach(
-        identity[1],
-        @next_component_cid,
+        identity[2],
+        component_cid,
         @connected,
+        render_component,
         navigate,
         push_event,
         reply
@@ -410,7 +455,27 @@ module LF::LiveView
       end
       @components[identity] = component
       @components_by_cid[component.myself] = component
+      @component_identities_by_cid[component.myself] = identity
+      children = @component_children[identity[0]] ||= Set(ComponentIdentity).new
+      children << identity
       component
+    end
+
+    private def destroy_component_tree(identity : ComponentIdentity) : Nil
+      component = @components[identity]?
+      return unless component
+
+      component_cid = component.myself
+      children = @component_children.delete(component_cid).try(&.to_a) || [] of ComponentIdentity
+      children.each { |child_identity| destroy_component_tree(child_identity) }
+      @components.delete(identity)
+      @components_by_cid.delete(component_cid)
+      @component_identities_by_cid.delete(component_cid)
+      if siblings = @component_children[identity[0]]?
+        siblings.delete(identity)
+        @component_children.delete(identity[0]) if siblings.empty?
+      end
+      destroy_component(component)
     end
 
     private def destroy_component(component : Component) : Nil
@@ -474,6 +539,18 @@ module LF::LiveView
   class DuplicateComponentError < Error
     def initialize(type : String)
       super("Duplicate LiveView component identity for #{type}")
+    end
+  end
+
+  class RecursiveComponentError < Error
+    def initialize(type : String, id : String)
+      super("Recursive LiveView component identity for #{type}: #{id}")
+    end
+  end
+
+  class ComponentNestingError < Error
+    def initialize(max_depth : Int32)
+      super("LiveView components cannot be nested deeper than #{max_depth} levels")
     end
   end
 
