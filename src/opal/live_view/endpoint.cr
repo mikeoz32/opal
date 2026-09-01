@@ -690,13 +690,15 @@ module LF::LiveView
       diff = {} of String => JSON::Any
       changes = previous.try { |old| rendered.diff(old) }
       if changes
+        previous_dynamics = previous.try(&.dynamics)
         changes.each do |index, dynamic|
-          diff[index.to_s] = dynamic_to_json(dynamic)
+          old_dynamic = previous_dynamics.try { |dynamics| dynamics[index]? }
+          diff[index.to_s] = dynamic_to_json(dynamic, old_dynamic)
         end
       else
         diff["s"] = JSON::Any.new(rendered.statics.map { |static| JSON::Any.new(static) })
         rendered.dynamics.each_with_index do |dynamic, index|
-          diff[index.to_s] = dynamic_to_json(dynamic)
+          diff[index.to_s] = dynamic_to_json(dynamic, nil)
         end
         diff["r"] = JSON::Any.new(1_i64) if component_root
       end
@@ -724,12 +726,76 @@ module LF::LiveView
       diffs
     end
 
-    private def dynamic_to_json(dynamic : RenderedDynamic) : JSON::Any
+    private def dynamic_to_json(
+      dynamic : RenderedDynamic,
+      previous : RenderedDynamic?,
+    ) : JSON::Any
       case dynamic
       when String           then JSON::Any.new(dynamic)
       when StreamContent    then dynamic.to_diff
       when ComponentContent then JSON::Any.new(dynamic.cid)
+      when KeyedContent     then keyed_to_json(dynamic, previous.as?(KeyedContent))
       else                       raise Error.new("Unsupported LiveView dynamic value")
+      end
+    end
+
+    private def keyed_to_json(
+      content : KeyedContent,
+      previous : KeyedContent?,
+    ) : JSON::Any
+      full = previous.nil? || previous.fingerprint != content.fingerprint
+      previous_entries = previous.try(&.entries) || [] of KeyedEntry
+      previous_by_key = {} of String => {Int32, Rendered}
+      previous_entries.each_with_index do |entry, index|
+        previous_by_key[entry.key] = {index, entry.rendered}
+      end
+
+      keyed = {"kc" => JSON::Any.new(content.entries.size.to_i64)}
+      moved = false
+      content.entries.each_with_index do |entry, index|
+        if !full && (old = previous_by_key[entry.key]?)
+          previous_index, previous_rendered = old
+          entry_diff = keyed_entry_diff(entry.rendered, previous_rendered)
+          if previous_index == index
+            unless entry_diff.empty?
+              keyed[index.to_s] = JSON::Any.new(entry_diff)
+            end
+          else
+            moved = true
+            keyed[index.to_s] = if entry_diff.empty?
+                                  JSON::Any.new(previous_index.to_i64)
+                                else
+                                  JSON::Any.new([
+                                    JSON::Any.new(previous_index.to_i64),
+                                    JSON::Any.new(entry_diff),
+                                  ])
+                                end
+          end
+        else
+          keyed[index.to_s] = JSON::Any.new(keyed_entry_diff(entry.rendered, nil))
+        end
+      end
+      keyed["km"] = JSON::Any.new(true) if moved
+
+      diff = {"k" => JSON::Any.new(keyed)}
+      if full
+        diff["s"] = JSON::Any.new(content.statics.map { |static| JSON::Any.new(static) })
+      end
+      JSON::Any.new(diff)
+    end
+
+    private def keyed_entry_diff(
+      rendered : Rendered,
+      previous : Rendered?,
+    ) : Hash(String, JSON::Any)
+      changes = previous.try { |old| rendered.diff(old) }
+      dynamics = changes || rendered.dynamics.each_with_index.to_h do |dynamic, index|
+        {index, dynamic}
+      end
+      previous_dynamics = previous.try(&.dynamics)
+      dynamics.each_with_object({} of String => JSON::Any) do |(index, dynamic), diff|
+        old_dynamic = previous_dynamics.try { |values| values[index]? }
+        diff[index.to_s] = dynamic_to_json(dynamic, old_dynamic)
       end
     end
 
