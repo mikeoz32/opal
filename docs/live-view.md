@@ -387,6 +387,37 @@ Components may also call protected `push_patch` and `push_navigate` from their
 event callbacks; navigation is serialized through their parent connection.
 They may also call `push_event` and `reply` for hook interoperability.
 
+## Keyed comprehensions
+
+Use `HTML.keyed` for an application-owned collection whose retained entries
+should move or update without being resent or recreated. Return a stable key
+and one `Rendered` item from the block:
+
+```crystal
+rows = LF::LiveView::HTML.keyed(@projects) do |project|
+  {
+    project.id,
+    LF::LiveView::HTML.rendered(
+      %(<li id="project-#{project.id}">#{project.name}</li>)
+    ),
+  }
+end
+
+LF::LiveView::HTML.rendered(%(<ul id="projects">#{rows}</ul>))
+```
+
+Every item must use the same static template and every key must be unique in
+that render. Keys are server-side identities and do not replace useful DOM
+ids. Connected updates use Phoenix's native `s`/`k`/`kc` representation:
+unchanged entries are referenced by their previous index, `km` marks a move,
+and moved entries with changed dynamics carry `[previous_index, diff]`.
+Additions send only the new entry dynamics, removals reduce `kc`, and an empty
+collection is valid.
+
+Use keyed comprehensions when the application owns the whole current list.
+Use streams when mutations should be queued as inserts/deletes and the server
+should not resend retained entries at all.
+
 ## Streams
 
 The stream API maintains large or frequently changing ordered collections in
@@ -560,10 +591,9 @@ Phoenix LiveView 1.2.11: `phx_join`, `phx_reply`, heartbeat, `event`,
 titles, hook replies/events, and component CIDs. The independent Opal protocol
 and browser DOM runtime are removed.
 
-Current server gaps are uploads, general application-facing
-comprehension/template tables, nested child LiveViews, and same-socket
-navigation across page classes. Uploads are intentionally outside the current
-roadmap. Unsupported channel events receive an error reply; they are not
-silently treated as implemented.
+Current server gaps are shared template tables, nested child LiveViews, and
+same-socket navigation across page classes. Uploads are intentionally outside
+the current roadmap. Unsupported channel events receive an error reply; they
+are not silently treated as implemented.
 Applications consume the bundled asset and therefore need no JavaScript build,
 while Opal's own release process pins and rebuilds the upstream npm packages.
