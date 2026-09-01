@@ -12,10 +12,11 @@ require "./view"
 
 module LF::LiveView
   class Endpoint
-    LIVE_VIEW_VERSION = "1.2.11"
-    SOCKET_PATH       = "/_opal/live"
-    CLIENT_PATH       = "/_opal/live.js"
-    CLIENT_SOURCE     = {{ read_file("#{__DIR__}/../../../assets/opal_live_view.js") }}
+    LIVE_VIEW_VERSION    = "1.2.11"
+    SOCKET_PATH          = "/_opal/live"
+    CLIENT_PATH          = "/_opal/live.js"
+    MAX_CHILD_VIEW_DEPTH = 32
+    CLIENT_SOURCE        = {{ read_file("#{__DIR__}/../../../assets/opal_live_view.js") }}
 
     private class Route
       getter name : String
@@ -77,6 +78,74 @@ module LF::LiveView
       getter payload : JSON::Any
 
       def initialize(@join_ref, @reference, @topic, @event, @payload)
+      end
+    end
+
+    private struct ChannelUpdate
+      getter topic : String
+      getter info : Info?
+
+      def initialize(@topic, @info = nil)
+      end
+    end
+
+    private class ChannelFailure < Exception
+      getter close_reason : String
+
+      def initialize(@close_reason)
+        super(@close_reason)
+      end
+    end
+
+    private class ChildRegistration
+      getter type_name : String
+      getter id : String
+      getter parent_id : String
+      getter parent_topic : String
+      getter session : JSON::Any
+      getter resource : String
+      getter depth : Int32
+      getter factory : ChildViewFactory
+
+      def initialize(
+        @type_name,
+        @id,
+        @parent_id,
+        @parent_topic,
+        @session,
+        @resource,
+        @depth,
+        @factory,
+      )
+      end
+    end
+
+    private class ConnectedChannel
+      getter join : ChannelMessage
+      getter route : Route
+      getter view : View
+      getter type_name : String
+      getter view_id : String
+      getter parent_topic : String?
+      getter resource : String
+      getter depth : Int32
+      property rendered : Rendered?
+
+      def initialize(
+        @join,
+        @route,
+        @view,
+        @type_name,
+        @view_id,
+        @parent_topic,
+        @resource,
+        @depth,
+        @rendered = nil,
+      )
+      end
+
+      def root? : Bool
+        @parent_topic.nil?
       end
     end
 
@@ -188,6 +257,15 @@ module LF::LiveView
       begin
         authorize!(route, scope, context, params, "mount")
         view = route.build(scope)
+        configure_disconnected_child_views(
+          view,
+          "opal-live-root",
+          context.request,
+          params,
+          context.request.resource,
+          Set(String).new(["opal-live-root"]),
+          0
+        )
         view.__opal_mount(MountContext.new(context.request, params, context.request.resource, false))
         view.__opal_handle_params(ParamsContext.new(params, context.request.resource))
         if navigation = view.__opal_take_navigation
@@ -221,14 +299,18 @@ module LF::LiveView
 
     private def serve(websocket : ::HTTP::WebSocket, context : ::HTTP::Server::Context) : Nil
       route_name : String? = nil
-      connected_route : Route? = nil
-      connected_view : View? = nil
-      updates : Channel(Info)? = nil
-      refreshes : Channel(Nil)? = nil
+      updates : Channel(ChannelUpdate)? = nil
       reader_done : Channel(Nil)? = nil
       reader_finished : Channel(Nil)? = nil
+      channels = {} of String => ConnectedChannel
+      registrations = {} of String => ChildRegistration
       begin
+        scope = context.dependency_scope
+        raise LF::HTTP::InternalServerError.new("DI context not initialized") unless scope
+
         incoming_channel = Channel(String | Bytes).new(1)
+        update_channel = Channel(ChannelUpdate).new(64)
+        updates = update_channel
         done = Channel(Nil).new
         finished = Channel(Nil).new(1)
         reader_done = done
@@ -249,172 +331,119 @@ module LF::LiveView
         end
 
         join_deadline = Time.instant + @join_timeout
-        join = loop do
-          remaining_join = join_deadline - Time.instant
-          unless remaining_join.positive?
-            close_socket(websocket, ::HTTP::WebSocket::CloseCode::PolicyViolation, "join timeout")
-            return
-          end
-          candidate = select
-          when payload = incoming_channel.receive?
-            parse_text_message(payload || raise ProtocolError.new("LiveView connection closed before join"))
-          when timeout(remaining_join)
-            close_socket(websocket, ::HTTP::WebSocket::CloseCode::PolicyViolation, "join timeout")
-            return
-          end
-
-          if candidate.topic == "phoenix" && candidate.event == "heartbeat"
-            send_channel_reply(websocket, candidate, "ok", empty_json_object)
-          elsif candidate.event == "phx_leave"
-            send_channel_reply(websocket, candidate, "ok", empty_json_object)
-          elsif candidate.event == "phx_join" && candidate.topic.starts_with?("lv:") && candidate.reference
-            break candidate
-          else
-            raise ProtocolError.new("LiveView connection requires a phx_join message")
-          end
-        end
-
-        join_data = join.payload.as_h
-        mount = @tokens.verify(json_string(join_data, "session"))
-        route_name = mount.route
-        route = @routes[mount.route]? || raise InvalidMountTokenError.new
-        connected_route = route
-        resource = joined_resource(join_data["url"]?.try(&.as_s), mount.resource, context.request)
-        resource_uri = URI.parse(resource)
-        params = route.match_path(resource_uri.path) || raise InvalidMountTokenError.new
-        scope = context.dependency_scope
-        raise LF::HTTP::InternalServerError.new("DI context not initialized") unless scope
-
-        authorize!(route, scope, context, params, "connect")
-        view = route.build(scope)
-        connected_view = view
-        update_channel = Channel(Info).new(32)
-        refresh_channel = Channel(Nil).new(1)
-        updates = update_channel
-        refreshes = refresh_channel
-        send_info = ->(info : Info) do
-          begin
-            update_channel.send(info)
-            true
-          rescue Channel::ClosedError
-            false
-          end
-        end
-        request_refresh = -> do
-          select
-          when refresh_channel.send(nil)
-            true
-          else
-            false
-          end
-        end
-        view.__opal_connect(send_info, request_refresh)
-        view.__opal_mount(MountContext.new(context.request, params, resource, true))
-        view.__opal_handle_params(ParamsContext.new(params, resource))
-        navigation_result = apply_view_navigation(view, route, scope, context)
-        rendered = view.__opal_render
-        join_diff = build_diff(view, rendered, nil)
-        send_join_reply(websocket, join, join_diff, navigation_result.try(&.navigation))
-
+        root_joined = false
         idle_deadline = Time.instant + @idle_timeout
         loop do
-          remaining_idle = idle_deadline - Time.instant
-          unless remaining_idle.positive?
-            close_socket(websocket, ::HTTP::WebSocket::CloseCode::GoingAway, "idle timeout")
+          deadline = root_joined ? idle_deadline : join_deadline
+          remaining = deadline - Time.instant
+          unless remaining.positive?
+            reason = root_joined ? "idle timeout" : "join timeout"
+            code = root_joined ? ::HTTP::WebSocket::CloseCode::GoingAway : ::HTTP::WebSocket::CloseCode::PolicyViolation
+            close_socket(websocket, code, reason)
             return
           end
 
           select
           when payload = incoming_channel.receive?
             break unless payload
-            idle_deadline = Time.instant + @idle_timeout
             message = parse_text_message(payload)
 
             if message.topic == "phoenix" && message.event == "heartbeat"
               send_channel_reply(websocket, message, "ok", empty_json_object)
+              idle_deadline = Time.instant + @idle_timeout if root_joined
               next
-            end
-            unless message.topic == join.topic && message.join_ref == join.join_ref
-              raise ProtocolError.new("LiveView channel topic or join reference changed")
             end
 
             case message.event
-            when "event"
-              reference = message.reference || raise ProtocolError.new("LiveView events require a reference")
-              event_payload = message.payload.as_h
-              event = json_string(event_payload, "event")
-              value = event_value(event_payload)
-              target = optional_json_integer(event_payload, "cid")
-              begin
-                event_reply = view.__opal_handle_event(target, event, value)
-              rescue error : UnknownEventError
-                clear_pending(view)
-                send_channel_error(websocket, message, "unknown_event")
-                next
-              rescue error : UnknownComponentError
-                clear_pending(view)
-                send_channel_error(websocket, message, "unknown_target")
-                next
-              rescue error : Exception
-                Log.error(exception: error) { "LiveView event failed: route=#{route.name}" }
-                close_socket(websocket, ::HTTP::WebSocket::CloseCode::InternalServerError, "event failed")
-                return
+            when "phx_join"
+              unless message.topic.starts_with?("lv:") && message.reference
+                raise ProtocolError.new("Invalid LiveView channel join")
               end
-              navigation = apply_view_navigation(view, route, scope, context).try(&.navigation)
-              next_rendered = view.__opal_render
-              diff = build_diff(view, next_rendered, rendered, event_reply)
-              send_event_reply(websocket, message, diff, navigation)
-              rendered = next_rendered
-            when "live_patch"
-              message.reference || raise ProtocolError.new("LiveView patches require a reference")
-              begin
-                patch_payload = message.payload.as_h
-                resource = joined_resource(json_string(patch_payload, "url"), "/", context.request)
-                requested = Navigation.patch(resource, "none")
-                apply_patch_navigation(view, route, scope, context, requested)
-              rescue error : InvalidNavigationError | ProtocolError
-                clear_pending(view)
-                send_channel_error(websocket, message, "invalid_navigation")
+              if channels.has_key?(message.topic)
+                send_channel_error(websocket, message, "already_joined")
                 next
-              rescue error : LF::HTTP::Forbidden
+              end
+              begin
+                channel = join_connected_channel(
+                  websocket,
+                  message,
+                  context,
+                  scope,
+                  channels,
+                  registrations,
+                  update_channel
+                )
+              rescue error : InvalidMountTokenError
+                if root_joined
+                  send_channel_error(websocket, message, "invalid_mount")
+                  next
+                end
+                raise error
+              rescue error : InvalidNavigationError
+                if root_joined
+                  send_channel_error(websocket, message, "invalid_navigation")
+                  next
+                end
+                raise error
+              rescue error : ProtocolError | JSON::ParseException | JSON::SerializableError | TypeCastError | KeyError
                 raise error
               rescue error : Exception
-                Log.error(exception: error) { "LiveView navigation failed: route=#{route.name}" }
-                close_socket(websocket, ::HTTP::WebSocket::CloseCode::InternalServerError, "navigation failed")
-                return
+                if root_joined
+                  Log.error(exception: error) { "Child LiveView mount failed: topic=#{message.topic}" }
+                  send_channel_error(websocket, message, "mount_failed")
+                  next
+                end
+                raise error
               end
-              next_rendered = view.__opal_render
-              diff = build_diff(view, next_rendered, rendered)
-              send_event_reply(websocket, message, diff)
-              rendered = next_rendered
+              channels[message.topic] = channel
+              if channel.root?
+                if root_joined
+                  raise ProtocolError.new("A LiveView socket can have only one root channel")
+                end
+                root_joined = true
+                route_name = channel.route.name
+              end
+              idle_deadline = Time.instant + @idle_timeout
             when "phx_leave"
               send_channel_reply(websocket, message, "ok", empty_json_object)
-              return
+              if channel = channels[message.topic]?
+                unless message.join_ref == channel.join.join_ref
+                  raise ProtocolError.new("LiveView channel join reference changed")
+                end
+                root = channel.root?
+                disconnect_channel_tree(message.topic, channels, registrations)
+                return if root
+              end
             else
-              send_channel_error(websocket, message, "unsupported_event")
+              channel = channels[message.topic]? || begin
+                send_channel_error(websocket, message, "unknown_topic")
+                next
+              end
+              unless message.join_ref == channel.join.join_ref
+                raise ProtocolError.new("LiveView channel join reference changed")
+              end
+              idle_deadline = Time.instant + @idle_timeout
+              begin
+                handle_channel_message(websocket, message, channel, scope, context)
+              rescue error : ChannelFailure
+                raise error if channel.root?
+                crash_child_channel(websocket, channel, channels, registrations)
+              end
             end
-          when info = update_channel.receive?
-            break unless info
-            begin
-              view.handle_info(info.name, info.value)
-            rescue error : Exception
-              Log.error(exception: error) { "LiveView info failed: route=#{route.name} info=#{info.name}" }
-              close_socket(websocket, ::HTTP::WebSocket::CloseCode::InternalServerError, "info failed")
-              return
+          when update = update_channel.receive?
+            break unless update
+            if channel = channels[update.topic]?
+              begin
+                handle_channel_update(websocket, channel, update, scope, context)
+              rescue error : ChannelFailure
+                raise error if channel.root?
+                crash_child_channel(websocket, channel, channels, registrations)
+              end
             end
-            navigation = apply_view_navigation(view, route, scope, context).try(&.navigation)
-            next_rendered = view.__opal_render
-            diff = build_diff(view, next_rendered, rendered)
-            send_navigation(websocket, join, navigation) if navigation
-            send_channel_push(websocket, join, "diff", diff) unless diff.as_h.empty?
-            rendered = next_rendered
-          when refresh_channel.receive
-            next_rendered = view.__opal_render
-            diff = build_diff(view, next_rendered, rendered)
-            send_channel_push(websocket, join, "diff", diff) unless diff.as_h.empty?
-            rendered = next_rendered
-          when timeout(remaining_idle)
-            close_socket(websocket, ::HTTP::WebSocket::CloseCode::GoingAway, "idle timeout")
+          when timeout(remaining)
+            reason = root_joined ? "idle timeout" : "join timeout"
+            code = root_joined ? ::HTTP::WebSocket::CloseCode::GoingAway : ::HTTP::WebSocket::CloseCode::PolicyViolation
+            close_socket(websocket, code, reason)
             return
           end
         end
@@ -428,6 +457,12 @@ module LF::LiveView
         close_socket(websocket, ::HTTP::WebSocket::CloseCode::UnsupportedData, "text messages required")
       rescue error : MessageTooBigError
         close_socket(websocket, ::HTTP::WebSocket::CloseCode::MessageTooBig, "message too large")
+      rescue error : ChannelFailure
+        close_socket(
+          websocket,
+          ::HTTP::WebSocket::CloseCode::InternalServerError,
+          error.close_reason
+        )
       rescue error : ProtocolError | JSON::ParseException | JSON::SerializableError | TypeCastError | KeyError | URI::Error
         Log.warn { "LiveView protocol error: route=#{route_name || "unmounted"}" }
         close_socket(websocket, ::HTTP::WebSocket::CloseCode::ProtocolError, "invalid message")
@@ -435,9 +470,10 @@ module LF::LiveView
         Log.error(exception: error) { "LiveView connection failed: route=#{route_name || "unmounted"}" }
         close_socket(websocket, ::HTTP::WebSocket::CloseCode::InternalServerError, "connection failed")
       ensure
-        connected_view.try(&.__opal_disconnect)
+        channels.values.sort_by(&.depth).reverse_each { |channel| disconnect_channel(channel) }
+        channels.clear
+        registrations.clear
         updates.try { |channel| channel.close unless channel.closed? }
-        refreshes.try { |channel| channel.close unless channel.closed? }
         if completion = reader_done
           completion.close unless completion.closed?
         end
@@ -459,12 +495,403 @@ module LF::LiveView
             completion_signal.receive?
           end
         end
-        if view = connected_view
-          if route = connected_route
-            destroy_unmanaged(view, route)
-          end
+      end
+    end
+
+    private def join_connected_channel(
+      websocket : ::HTTP::WebSocket,
+      join : ChannelMessage,
+      context : ::HTTP::Server::Context,
+      scope : LF::DI::Container,
+      channels : Hash(String, ConnectedChannel),
+      registrations : Hash(String, ChildRegistration),
+      updates : Channel(ChannelUpdate),
+    ) : ConnectedChannel
+      join_data = join.payload.as_h
+      token = json_string(join_data, "session")
+      view : View? = nil
+      channel : ConnectedChannel? = nil
+
+      if channels.empty?
+        raise InvalidMountTokenError.new unless join.topic == "lv:opal-live-root"
+        mount = @tokens.verify(token)
+        route = @routes[mount.route]? || raise InvalidMountTokenError.new
+        resource = joined_resource(join_data["url"]?.try(&.as_s), mount.resource, context.request)
+        resource_uri = URI.parse(resource)
+        params = route.match_path(resource_uri.path) || raise InvalidMountTokenError.new
+        authorize!(route, scope, context, params, "connect")
+        view = route.build(scope)
+        channel = ConnectedChannel.new(
+          join,
+          route,
+          view,
+          view.class.name,
+          "opal-live-root",
+          nil,
+          resource,
+          0
+        )
+        connect_view(view, channel, updates, channels, registrations)
+        view.__opal_mount(MountContext.new(context.request, params, resource, true))
+        view.__opal_handle_params(ParamsContext.new(params, resource))
+      else
+        mount = @tokens.verify_child(token)
+        unless join.topic == "lv:#{mount.id}"
+          raise InvalidMountTokenError.new
+        end
+        registration = registrations[mount.id]? || raise InvalidMountTokenError.new
+        unless registration.type_name == mount.type_name &&
+               registration.parent_id == mount.parent_id &&
+               registration.parent_topic == mount.parent_topic &&
+               registration.resource == mount.resource &&
+               registration.depth == mount.depth &&
+               channels.has_key?(mount.parent_topic)
+          raise InvalidMountTokenError.new
+        end
+        route = channels[mount.parent_topic].route
+        view = registration.factory.call
+        channel = ConnectedChannel.new(
+          join,
+          route,
+          view,
+          mount.type_name,
+          mount.id,
+          mount.parent_topic,
+          mount.resource,
+          mount.depth
+        )
+        connect_view(view, channel, updates, channels, registrations)
+        view.__opal_mount(MountContext.new(
+          context.request,
+          {} of String => String,
+          mount.resource,
+          true,
+          mount.session,
+          mount.parent_id,
+          mount.id
+        ))
+      end
+
+      navigation = apply_channel_navigation(channel, scope, context).try(&.navigation)
+      rendered = view.__opal_render
+      channel.rendered = rendered
+      send_join_reply(websocket, join, build_diff(view, rendered, nil), navigation)
+      channel
+    rescue error
+      registrations.reject! { |_id, registration| registration.parent_topic == join.topic }
+      if connected = channel
+        disconnect_channel(connected)
+      elsif instance = view
+        instance.__opal_disconnect
+        destroy_nested_view(instance, join.topic)
+      end
+      raise error
+    end
+
+    private def connect_view(
+      view : View,
+      channel : ConnectedChannel,
+      updates : Channel(ChannelUpdate),
+      channels : Hash(String, ConnectedChannel),
+      registrations : Hash(String, ChildRegistration),
+    ) : Nil
+      topic = channel.join.topic
+      send_info = ->(info : Info) do
+        begin
+          updates.send(ChannelUpdate.new(topic, info))
+          true
+        rescue Channel::ClosedError
+          false
         end
       end
+      request_refresh = -> do
+        begin
+          select
+          when updates.send(ChannelUpdate.new(topic))
+            true
+          else
+            false
+          end
+        rescue Channel::ClosedError
+          false
+        end
+      end
+      view.__opal_connect(send_info, request_refresh)
+      configure_connected_child_views(view, channel, channels, registrations)
+    end
+
+    private def configure_connected_child_views(
+      view : View,
+      channel : ConnectedChannel,
+      channels : Hash(String, ConnectedChannel),
+      registrations : Hash(String, ChildRegistration),
+    ) : Nil
+      parent_topic = channel.join.topic
+      parent_id = channel.view_id
+      renderer = ->(type_name : String, id : String, session : JSON::Any, factory : ChildViewFactory) do
+        depth = channel.depth + 1
+        if depth > MAX_CHILD_VIEW_DEPTH
+          raise ChildViewNestingError.new(MAX_CHILD_VIEW_DEPTH)
+        end
+        if registration = registrations[id]?
+          unless registration.parent_topic == parent_topic && registration.type_name == type_name
+            raise DuplicateChildViewError.new(id)
+          end
+        end
+        if active = channels["lv:#{id}"]?
+          unless active.parent_topic == parent_topic && active.type_name == type_name
+            raise DuplicateChildViewError.new(id)
+          end
+        end
+
+        registration = ChildRegistration.new(
+          type_name,
+          id,
+          parent_id,
+          parent_topic,
+          session,
+          channel.resource,
+          depth,
+          factory
+        )
+        registrations[id] = registration
+        token = @tokens.sign_child(
+          type_name,
+          id,
+          parent_id,
+          parent_topic,
+          session,
+          channel.resource,
+          depth
+        )
+        ChildViewContent.new(id, parent_id, type_name, token, "")
+      end
+      finish = ->(rendered_ids : Set(String)) do
+        stale = registrations.values.select do |registration|
+          registration.parent_topic == parent_topic && !rendered_ids.includes?(registration.id)
+        end
+        stale.each { |registration| registrations.delete(registration.id) }
+      end
+      view.__opal_configure_child_views(renderer, finish)
+    end
+
+    private def configure_disconnected_child_views(
+      view : View,
+      parent_id : String,
+      request : ::HTTP::Request,
+      params : Hash(String, String),
+      resource : String,
+      all_ids : Set(String),
+      depth : Int32,
+    ) : Nil
+      renderer = ->(type_name : String, id : String, session : JSON::Any, factory : ChildViewFactory) do
+        child_depth = depth + 1
+        if child_depth > MAX_CHILD_VIEW_DEPTH
+          raise ChildViewNestingError.new(MAX_CHILD_VIEW_DEPTH)
+        end
+        unless all_ids.add?(id)
+          raise DuplicateChildViewError.new(id)
+        end
+
+        child = factory.call
+        begin
+          configure_disconnected_child_views(
+            child,
+            id,
+            request,
+            {} of String => String,
+            resource,
+            all_ids,
+            child_depth
+          )
+          child.__opal_mount(MountContext.new(
+            request,
+            {} of String => String,
+            resource,
+            false,
+            session,
+            parent_id,
+            id
+          ))
+          rendered = child.__opal_render
+          if child.__opal_take_navigation
+            raise InvalidNavigationError.new
+          end
+          ChildViewContent.new(id, parent_id, type_name, "", rendered.to_html)
+        ensure
+          child.__opal_disconnect
+          destroy_nested_view(child, "disconnected:#{id}")
+        end
+      end
+      finish = ->(_rendered_ids : Set(String)) { }
+      view.__opal_configure_child_views(renderer, finish)
+    end
+
+    private def disconnect_channel_tree(
+      topic : String,
+      channels : Hash(String, ConnectedChannel),
+      registrations : Hash(String, ChildRegistration),
+    ) : Nil
+      children = channels.values.select(&.parent_topic.==(topic)).map(&.join.topic)
+      children.each { |child_topic| disconnect_channel_tree(child_topic, channels, registrations) }
+      registrations.reject! { |_id, registration| registration.parent_topic == topic }
+      if channel = channels.delete(topic)
+        disconnect_channel(channel)
+      end
+    end
+
+    private def disconnect_channel(channel : ConnectedChannel) : Nil
+      channel.view.__opal_disconnect
+      if channel.root?
+        destroy_unmanaged(channel.view, channel.route)
+      else
+        destroy_nested_view(channel.view, channel.join.topic)
+      end
+    end
+
+    private def crash_child_channel(
+      websocket : ::HTTP::WebSocket,
+      channel : ConnectedChannel,
+      channels : Hash(String, ConnectedChannel),
+      registrations : Hash(String, ChildRegistration),
+    ) : Nil
+      send_channel_push(websocket, channel.join, "phx_error", empty_json_object)
+      disconnect_channel_tree(channel.join.topic, channels, registrations)
+    end
+
+    private def destroy_nested_view(view : View?, identity : String) : Nil
+      return unless view
+      if disposable = view.as?(LF::DI::Disposable)
+        disposable.destroy
+      end
+    rescue error : Exception
+      Log.error(exception: error) { "Child LiveView cleanup failed: identity=#{identity}" }
+    end
+
+    private def apply_channel_navigation(
+      channel : ConnectedChannel,
+      scope : LF::DI::Container,
+      context : ::HTTP::Server::Context,
+    ) : NavigationResult?
+      return apply_view_navigation(channel.view, channel.route, scope, context) if channel.root?
+
+      navigation = channel.view.__opal_take_navigation
+      return nil unless navigation
+      if navigation.kind == "patch"
+        raise InvalidNavigationError.new
+      end
+      normalized, _uri = normalize_navigation(navigation)
+      NavigationResult.new(normalized)
+    end
+
+    private def handle_channel_message(
+      websocket : ::HTTP::WebSocket,
+      message : ChannelMessage,
+      channel : ConnectedChannel,
+      scope : LF::DI::Container,
+      context : ::HTTP::Server::Context,
+    ) : Nil
+      view = channel.view
+      rendered = channel.rendered || raise ProtocolError.new("LiveView channel is not rendered")
+      case message.event
+      when "event"
+        reference = message.reference || raise ProtocolError.new("LiveView events require a reference")
+        event_payload = message.payload.as_h
+        event = json_string(event_payload, "event")
+        value = event_value(event_payload)
+        target = optional_json_integer(event_payload, "cid")
+        begin
+          event_reply = view.__opal_handle_event(target, event, value)
+        rescue error : UnknownEventError
+          clear_pending(view)
+          send_channel_error(websocket, message, "unknown_event")
+          return
+        rescue error : UnknownComponentError
+          clear_pending(view)
+          send_channel_error(websocket, message, "unknown_target")
+          return
+        rescue error : Exception
+          Log.error(exception: error) { "LiveView event failed: route=#{channel.route.name}" }
+          raise ChannelFailure.new("event failed")
+        end
+        begin
+          navigation = apply_channel_navigation(channel, scope, context).try(&.navigation)
+        rescue error : InvalidNavigationError
+          clear_pending(view)
+          send_channel_error(websocket, message, "invalid_navigation")
+          return
+        end
+        next_rendered = view.__opal_render
+        diff = build_diff(view, next_rendered, rendered, event_reply)
+        send_event_reply(websocket, message, diff, navigation)
+        channel.rendered = next_rendered
+      when "live_patch"
+        unless channel.root?
+          clear_pending(view)
+          send_channel_error(websocket, message, "invalid_navigation")
+          return
+        end
+        message.reference || raise ProtocolError.new("LiveView patches require a reference")
+        begin
+          patch_payload = message.payload.as_h
+          resource = joined_resource(json_string(patch_payload, "url"), "/", context.request)
+          requested = Navigation.patch(resource, "none")
+          apply_patch_navigation(view, channel.route, scope, context, requested)
+        rescue error : InvalidNavigationError | ProtocolError
+          clear_pending(view)
+          send_channel_error(websocket, message, "invalid_navigation")
+          return
+        rescue error : LF::HTTP::Forbidden
+          raise error
+        rescue error : Exception
+          Log.error(exception: error) { "LiveView navigation failed: route=#{channel.route.name}" }
+          raise ChannelFailure.new("navigation failed")
+        end
+        next_rendered = view.__opal_render
+        diff = build_diff(view, next_rendered, rendered)
+        send_event_reply(websocket, message, diff)
+        channel.rendered = next_rendered
+      else
+        send_channel_error(websocket, message, "unsupported_event")
+      end
+    rescue error : ChannelFailure | ProtocolError | LF::HTTP::Forbidden | JSON::ParseException | JSON::SerializableError | TypeCastError | KeyError
+      raise error
+    rescue error : Exception
+      Log.error(exception: error) { "LiveView event render failed: route=#{channel.route.name}" }
+      raise ChannelFailure.new("event failed")
+    end
+
+    private def handle_channel_update(
+      websocket : ::HTTP::WebSocket,
+      channel : ConnectedChannel,
+      update : ChannelUpdate,
+      scope : LF::DI::Container,
+      context : ::HTTP::Server::Context,
+    ) : Nil
+      view = channel.view
+      rendered = channel.rendered || return
+      if info = update.info
+        begin
+          view.handle_info(info.name, info.value)
+        rescue error : Exception
+          Log.error(exception: error) do
+            "LiveView info failed: route=#{channel.route.name} info=#{info.name}"
+          end
+          raise ChannelFailure.new("info failed")
+        end
+      end
+      navigation = apply_channel_navigation(channel, scope, context).try(&.navigation)
+      next_rendered = view.__opal_render
+      diff = build_diff(view, next_rendered, rendered)
+      send_navigation(websocket, channel.join, navigation) if navigation
+      send_channel_push(websocket, channel.join, "diff", diff) unless diff.as_h.empty?
+      channel.rendered = next_rendered
+    rescue error : ChannelFailure | ProtocolError | LF::HTTP::Forbidden | JSON::ParseException | JSON::SerializableError | TypeCastError | KeyError
+      raise error
+    rescue error : Exception
+      Log.error(exception: error) { "LiveView update render failed: route=#{channel.route.name}" }
+      reason = update.info ? "info failed" : "refresh failed"
+      raise ChannelFailure.new(reason)
     end
 
     private def close_socket(
@@ -735,6 +1162,7 @@ module LF::LiveView
       when StreamContent    then dynamic.to_diff
       when ComponentContent then JSON::Any.new(dynamic.cid)
       when KeyedContent     then keyed_to_json(dynamic, previous.as?(KeyedContent))
+      when ChildViewContent then JSON::Any.new(dynamic.to_html)
       else                       raise Error.new("Unsupported LiveView dynamic value")
       end
     end
@@ -907,7 +1335,9 @@ module LF::LiveView
     private def destroy_unmanaged(view : View?, route : Route) : Nil
       return unless view
       return if route.managed_by_scope?
-      view.as?(LF::DI::Disposable).try(&.destroy)
+      if disposable = view.as?(LF::DI::Disposable)
+        disposable.destroy
+      end
     rescue error : Exception
       Log.error(exception: error) { "LiveView cleanup failed: route=#{route.name}" }
     end

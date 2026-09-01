@@ -36,6 +36,7 @@ module LF::LiveView
 
     def initialize(
       @connected : Proc(Bool),
+      @render_child_view : Component::ChildViewRenderer,
       @navigate : Proc(Navigation, Nil),
       @push_event : Proc(PushedEvent, Nil),
       @reply : Proc(JSON::Any, Nil),
@@ -145,6 +146,7 @@ module LF::LiveView
         component_cid,
         @connected.call,
         render_child,
+        @render_child_view,
         @navigate,
         @push_event,
         @reply
@@ -183,7 +185,9 @@ module LF::LiveView
 
     private def destroy_component(component : Component) : Nil
       component.__opal_detach
-      component.as?(LF::DI::Disposable).try(&.destroy)
+      if disposable = component.as?(LF::DI::Disposable)
+        disposable.destroy
+      end
     rescue error : Exception
       Log.error(exception: error) do
         "LiveView component cleanup failed: component=#{component.class.name}"
@@ -461,6 +465,8 @@ module LF::LiveView
     ROOT_COMPONENT_CID  = ComponentTree::ROOT_CID
     MAX_COMPONENT_DEPTH = ComponentTree::MAX_DEPTH
 
+    alias ChildViewRenderer = Proc(String, String, JSON::Any, ChildViewFactory, ChildViewContent)
+
     @send_info : Proc(Info, Bool)?
     @refresh : Proc(Bool)?
     @connected = false
@@ -468,13 +474,17 @@ module LF::LiveView
     @streams = StreamState.new
     @navigation = NavigationState.new
     @events = ClientEventState.new
+    @render_child_view : ChildViewRenderer?
+    @finish_child_views : Proc(Set(String), Nil)?
+    @rendered_child_ids : Set(String)?
 
     def initialize
       connected = -> { @connected }
       navigate = ->(navigation : Navigation) { @navigation.queue(navigation) }
       push_event = ->(event : PushedEvent) { @events.push(event) }
       reply = ->(value : JSON::Any) { @events.reply(value) }
-      @components = ComponentTree.new(connected, navigate, push_event, reply)
+      render_child_view = ->(type_name : String, id : String, session : JSON::Any, factory : ChildViewFactory) { render_child_view(type_name, id, session, factory) }
+      @components = ComponentTree.new(connected, render_child_view, navigate, push_event, reply)
     end
 
     def prepare_mount(connected : Bool) : Nil
@@ -494,6 +504,9 @@ module LF::LiveView
       @streams.clear
       @navigation.clear
       @events.clear
+      @render_child_view = nil
+      @finish_child_views = nil
+      @rendered_child_ids = nil
     end
 
     def send_info(info : Info) : Bool
@@ -523,6 +536,31 @@ module LF::LiveView
       factory : Component::Factory,
     ) : Rendered
       @components.render_root(type_name, id, assigns, factory)
+    end
+
+    def configure_child_views(
+      @render_child_view : ChildViewRenderer,
+      @finish_child_views : Proc(Set(String), Nil),
+    ) : Nil
+    end
+
+    def render_child_view(
+      type_name : String,
+      id : String,
+      session : JSON::Any,
+      factory : ChildViewFactory,
+    ) : ChildViewContent
+      rendered = @rendered_child_ids || raise Error.new(
+        "Child LiveViews can only be rendered from an active LiveView render"
+      )
+      if id.empty?
+        raise ArgumentError.new("Child LiveView id cannot be empty")
+      end
+      unless rendered.add?(id)
+        raise DuplicateChildViewError.new(id)
+      end
+      renderer = @render_child_view || raise Error.new("Child LiveView rendering is not configured")
+      renderer.call(type_name, id, session, factory)
     end
 
     def stream_insert(
@@ -557,7 +595,16 @@ module LF::LiveView
     end
 
     def render(& : -> RenderResult) : Rendered
-      @components.render { normalize_render(yield) }
+      if @rendered_child_ids
+        raise Error.new("LiveView render callbacks cannot be nested")
+      end
+      child_ids = Set(String).new
+      @rendered_child_ids = child_ids
+      result = @components.render { normalize_render(yield) }
+      @finish_child_views.try(&.call(child_ids))
+      result
+    ensure
+      @rendered_child_ids = nil
     end
 
     def handle_event(
