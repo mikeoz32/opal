@@ -17,6 +17,106 @@ class PlainPageController
   end
 end
 
+class NestedGrandchildLive < LF::LiveView::View
+  @count = 0
+  @label = "Grandchild"
+
+  def mount(context : LF::LiveView::MountContext) : Nil
+    @label = context.session.as_h["label"].as_s
+  end
+
+  def handle_event(event : String, value : JSON::Any) : Nil
+    if event == "increment_nested_grandchild"
+      @count += 1
+    else
+      super
+    end
+  end
+
+  def render : LF::LiveView::Rendered
+    LF::LiveView::HTML.rendered(<<-HTML)
+      <section>
+        <h3>#{@label} LiveView</h3>
+        <button type="button" data-opal-click="increment_nested_grandchild">Increment nested grandchild LiveView</button>
+        <output id="nested-grandchild-value">#{@count}</output>
+      </section>
+    HTML
+  end
+end
+
+class NestedChildLive < LF::LiveView::View
+  @count = 0
+  @label = "Child"
+
+  def mount(context : LF::LiveView::MountContext) : Nil
+    @label = context.session.as_h["label"].as_s
+  end
+
+  def handle_event(event : String, value : JSON::Any) : Nil
+    case event
+    when "increment_nested_child"
+      @count += 1
+    when "crash_nested_child"
+      raise "nested child failure"
+    else
+      super
+    end
+  end
+
+  def render : LF::LiveView::Rendered
+    grandchild = live_view(
+      NestedGrandchildLive,
+      "nested-grandchild-live",
+      {label: "Grandchild"}
+    ) { NestedGrandchildLive.new }
+    LF::LiveView::HTML.rendered(<<-HTML)
+      <section>
+        <h2>#{@label} LiveView</h2>
+        <button type="button" data-opal-click="increment_nested_child">Increment nested child LiveView</button>
+        <button type="button" data-opal-click="crash_nested_child">Crash nested child LiveView</button>
+        <output id="nested-child-value">#{@count}</output>
+        #{grandchild}
+      </section>
+    HTML
+  end
+end
+
+@[LF::LiveView::Page("/nested")]
+class NestedLivePage < LF::LiveView::View
+  @count = 0
+  @show_child = true
+
+  def handle_event(event : String, value : JSON::Any) : Nil
+    case event
+    when "increment_nested_parent"
+      @count += 1
+    when "toggle_nested_child"
+      @show_child = !@show_child
+    else
+      super
+    end
+  end
+
+  def render : LF::LiveView::Rendered
+    child = if @show_child
+              live_view(NestedChildLive, "nested-child-live", {label: "Child"}) do
+                NestedChildLive.new
+              end
+            else
+              ""
+            end
+    LF::LiveView::HTML.rendered(<<-HTML)
+      <main>
+        <h1>Nested LiveViews</h1>
+        <button type="button" data-opal-click="increment_nested_parent">Increment nested parent LiveView</button>
+        <output id="nested-parent-value">#{@count}</output>
+        <button type="button" data-opal-click="toggle_nested_child">Toggle nested child LiveView</button>
+        #{child}
+      </main>
+    HTML
+  end
+end
+
 class CounterDetailComponent < LF::LiveView::Component
   @count = 0
   @owner_id = "counter"
