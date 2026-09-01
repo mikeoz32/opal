@@ -33,6 +33,8 @@ reconnect. Opal serves a dependency-free ES module as the default client.
     targeted client events with replies, and server-pushed application events.
 17. Add parent-scoped nested stateful components, bounded render trees, deep
     event targeting, and recursive child-first cleanup.
+18. Extract connection-owned component, stream, navigation, client-event, and
+    dispatcher state from application views into a per-view runtime boundary.
 
 ## Deferred protocol work
 

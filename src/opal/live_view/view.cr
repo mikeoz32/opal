@@ -1,25 +1,11 @@
 require "http/request"
 require "json"
-require "log"
-require "set"
 require "uri"
-require "./client_event"
-require "./component"
+require "./connection_runtime"
 require "./html"
-require "./navigation"
-require "./rendered"
-require "./stream"
 
 module LF::LiveView
   annotation Page
-  end
-
-  struct Info
-    getter name : String
-    getter value : JSON::Any
-
-    def initialize(@name, @value = JSON::Any.new(nil))
-    end
   end
 
   class ParamsContext
@@ -45,26 +31,10 @@ module LF::LiveView
   end
 
   abstract class View
-    ROOT_COMPONENT_CID  = 0_i64
-    MAX_COMPONENT_DEPTH =    32
+    ROOT_COMPONENT_CID  = ConnectionRuntime::ROOT_COMPONENT_CID
+    MAX_COMPONENT_DEPTH = ConnectionRuntime::MAX_COMPONENT_DEPTH
 
-    alias ComponentIdentity = Tuple(Int64, String, String)
-
-    @send_info : Proc(Info, Bool)?
-    @refresh : Proc(Bool)?
-    @components = {} of ComponentIdentity => Component
-    @components_by_cid = {} of Int64 => Component
-    @component_identities_by_cid = {} of Int64 => ComponentIdentity
-    @component_children = {} of Int64 => Set(ComponentIdentity)
-    @rendered_components : Set(ComponentIdentity)?
-    @component_render_stack : Array(Int64)?
-    @next_component_cid = 0_i64
-    @connected = false
-    @stream_operations = [] of StreamOperation
-    @navigation : Navigation?
-    @pushed_events = [] of PushedEvent
-    @event_reply : EventReply?
-    @handling_event = false
+    @runtime = ConnectionRuntime.new
 
     def mount(context : MountContext) : Nil
     end
@@ -106,31 +76,29 @@ module LF::LiveView
     # this from timers and subscriptions instead of mutating view state from
     # their fibers directly.
     protected def send_info(name : String, value = JSON::Any.new(nil)) : Bool
-      dispatcher = @send_info
-      return false unless dispatcher
-      dispatcher.call(Info.new(name, value))
+      @runtime.send_info(Info.new(name, value))
     end
 
     # Schedules one coalesced render when state was changed by code already
     # running on the LiveView connection fiber.
     protected def refresh : Bool
-      @refresh.try(&.call) || false
+      @runtime.refresh
     end
 
     # Changes the URL inside this LiveView without remounting it.
     protected def push_patch(to : String, *, replace : Bool = false) : Nil
-      queue_navigation(Navigation.patch(to, replace: replace))
+      @runtime.navigate(Navigation.patch(to, replace: replace))
     end
 
     # Navigates through a fresh HTTP mount. Opal does not yet define
     # cross-view live sessions, so this intentionally replaces the document.
     protected def push_navigate(to : String, *, replace : Bool = false) : Nil
-      queue_navigation(Navigation.navigate(to, replace: replace))
+      @runtime.navigate(Navigation.navigate(to, replace: replace))
     end
 
     # Delivers an application event to browser hooks after the next DOM patch.
     protected def push_event(name : String, payload : JSON::Any = JSON::Any.new(nil)) : Nil
-      queue_pushed_event(PushedEvent.new(name, payload))
+      @runtime.push_event(PushedEvent.new(name, payload))
     end
 
     protected def push_event(name : String, payload) : Nil
@@ -140,7 +108,7 @@ module LF::LiveView
     # Replies to the client event currently being handled. At most one reply
     # may be produced by an event callback.
     protected def reply(value : JSON::Any = JSON::Any.new(nil)) : Nil
-      queue_event_reply(value)
+      @runtime.reply(value)
     end
 
     protected def reply(value) : Nil
@@ -157,7 +125,7 @@ module LF::LiveView
       &factory : -> T
     ) : Rendered forall T
       component_factory = -> { factory.call.as(Component) }
-      render_component(ROOT_COMPONENT_CID, T.name, id, assigns, component_factory)
+      @runtime.render_component(T.name, id, assigns, component_factory)
     end
 
     protected def live_component(
@@ -180,141 +148,53 @@ module LF::LiveView
       at : Int32 = -1,
       limit : Int32? = nil,
     ) : Nil
-      validate_stream_id(container_id, "container")
-      validate_stream_id(item_id, "item")
-      raise ArgumentError.new("LiveView stream insertion index must be -1 or greater") if at < -1
-      if limit.try(&.zero?)
-        raise ArgumentError.new("LiveView stream limit cannot be zero")
-      end
-
-      html = normalize_render(rendered).to_html
-      @stream_operations << StreamOperation.insert(container_id, item_id, html, at, limit)
+      @runtime.stream_insert(container_id, item_id, rendered, at: at, limit: limit)
     end
 
     # Queues removal of one direct child from a browser-owned stream container.
     protected def stream_delete(container_id : String, item_id : String) : Nil
-      validate_stream_id(container_id, "container")
-      validate_stream_id(item_id, "item")
-      @stream_operations << StreamOperation.delete(container_id, item_id)
+      @runtime.stream_delete(container_id, item_id)
     end
 
     # Queues removal of every child in a browser-owned stream container.
     protected def stream_reset(container_id : String) : Nil
-      validate_stream_id(container_id, "container")
-      @stream_operations << StreamOperation.reset(container_id)
+      @runtime.stream_reset(container_id)
     end
 
     # Renders the currently queued contents for the disconnected HTTP response.
     # The same operations are later sent to a protocol-v2 client. Stream item
     # markup is already trusted framework output and is not escaped again.
     protected def stream_contents(container_id : String) : HTML::Safe
-      validate_stream_id(container_id, "container")
-      items = [] of Tuple(String, String)
-
-      @stream_operations.each do |operation|
-        next unless operation.container_id == container_id
-        case operation.operation
-        when "reset"
-          items.clear
-        when "delete"
-          item_id = operation.item_id.not_nil!
-          items.reject! { |item| item[0] == item_id }
-        when "insert"
-          item_id = operation.item_id.not_nil!
-          html = operation.html.not_nil!
-          if index = items.index { |item| item[0] == item_id }
-            items[index] = {item_id, html}
-          else
-            at = operation.at.not_nil!
-            index = at == -1 || at >= items.size ? items.size : at
-            items.insert(index, {item_id, html})
-          end
-          apply_stream_limit(items, operation.limit)
-        end
-      end
-
-      HTML.raw(String.build do |output|
-        items.each { |item| output << item[1] }
-      end)
+      @runtime.stream_contents(container_id)
     end
 
     # :nodoc:
     def __opal_mount(context : MountContext) : Nil
-      @connected = context.connected?
+      @runtime.prepare_mount(context.connected?)
       mount(context)
     end
 
     # :nodoc:
     def __opal_connect(
-      @send_info : Proc(Info, Bool),
-      @refresh : Proc(Bool),
+      send_info : Proc(Info, Bool),
+      refresh : Proc(Bool),
     ) : Nil
+      @runtime.connect(send_info, refresh)
     end
 
     # :nodoc:
     def __opal_disconnect : Nil
-      @send_info = nil
-      @refresh = nil
-      @rendered_components = nil
-      @component_render_stack = nil
-      @stream_operations.clear
-      @navigation = nil
-      @pushed_events.clear
-      @event_reply = nil
-      @handling_event = false
-      root_identities = @component_children[ROOT_COMPONENT_CID]?.try(&.to_a) || [] of ComponentIdentity
-      root_identities.each { |identity| destroy_component_tree(identity) }
-      @components.keys.each { |identity| destroy_component_tree(identity) }
-      @components_by_cid.clear
-      @component_identities_by_cid.clear
-      @component_children.clear
+      @runtime.disconnect
     end
 
     # :nodoc:
     def __opal_render : Rendered
-      existing_components = @components.keys.to_set
-      begin
-        if @rendered_components || @component_render_stack
-          raise Error.new("LiveView render callbacks cannot be nested")
-        end
-
-        rendered_components = Set(ComponentIdentity).new
-        @rendered_components = rendered_components
-        @component_render_stack = [ROOT_COMPONENT_CID]
-        rendered = normalize_render(render)
-
-        stale = @components.keys.reject { |identity| rendered_components.includes?(identity) }
-        stale.each { |identity| destroy_component_tree(identity) }
-        rendered
-      rescue error
-        created = @components.keys.reject { |identity| existing_components.includes?(identity) }
-        created.each { |identity| destroy_component_tree(identity) }
-        raise error
-      ensure
-        @rendered_components = nil
-        @component_render_stack = nil
-      end
+      @runtime.render { render }
     end
 
     # :nodoc:
     def __opal_handle_event(target : Int64?, event : String, value : JSON::Any) : EventReply?
-      raise Error.new("LiveView event callbacks cannot be nested") if @handling_event
-      @handling_event = true
-      @event_reply = nil
-      result : EventReply? = nil
-      begin
-        if cid = target
-          component = @components_by_cid[cid]? || raise UnknownComponentError.new
-          component.handle_event(event, value)
-        else
-          handle_event(event, value)
-        end
-        result = @event_reply
-      ensure
-        @event_reply = nil
-        @handling_event = false
-      end
-      result
+      @runtime.handle_event(target, event, value) { handle_event(event, value) }
     end
 
     # :nodoc:
@@ -324,257 +204,32 @@ module LF::LiveView
 
     # :nodoc:
     def __opal_take_navigation : Navigation?
-      navigation = @navigation
-      @navigation = nil
-      navigation
+      @runtime.take_navigation
     end
 
     # :nodoc:
     def __opal_clear_navigation : Nil
-      @navigation = nil
+      @runtime.clear_navigation
     end
 
     # :nodoc:
     def __opal_take_pushed_events : Array(PushedEvent)
-      events = @pushed_events
-      @pushed_events = [] of PushedEvent
-      events
+      @runtime.take_pushed_events
     end
 
     # :nodoc:
     def __opal_clear_pushed_events : Nil
-      @pushed_events.clear
+      @runtime.clear_pushed_events
     end
 
     # :nodoc:
     def __opal_take_stream_operations : Array(StreamOperation)
-      operations = @stream_operations
-      @stream_operations = [] of StreamOperation
-      operations
+      @runtime.take_stream_operations
     end
 
     # :nodoc:
     def __opal_clear_stream_operations : Nil
-      @stream_operations.clear
+      @runtime.clear_stream_operations
     end
-
-    private def normalize_render(rendered : RenderResult) : Rendered
-      case rendered
-      when Rendered
-        rendered
-      when String
-        Rendered.opaque(rendered)
-      else
-        raise Error.new("Unsupported LiveView render result")
-      end
-    end
-
-    private def queue_navigation(navigation : Navigation) : Nil
-      if @navigation
-        raise DuplicateNavigationError.new
-      end
-      @navigation = navigation
-    end
-
-    private def queue_pushed_event(event : PushedEvent) : Nil
-      raise ArgumentError.new("LiveView pushed event name cannot be empty") if event.name.empty?
-      @pushed_events << event
-    end
-
-    private def queue_event_reply(value : JSON::Any) : Nil
-      unless @handling_event
-        raise EventReplyError.new("LiveView replies are only valid inside an event callback")
-      end
-      if @event_reply
-        raise EventReplyError.new("A LiveView event callback can reply only once")
-      end
-      @event_reply = EventReply.new(value)
-    end
-
-    private def render_component(
-      parent_cid : Int64,
-      type_name : String,
-      id : String,
-      assigns : JSON::Any,
-      factory : Component::Factory,
-    ) : Rendered
-      rendered_components = @rendered_components
-      render_stack = @component_render_stack
-      unless rendered_components && render_stack && render_stack.last? == parent_cid
-        raise Error.new("LiveView components can only be rendered from their active parent render")
-      end
-
-      if render_stack.size - 1 >= MAX_COMPONENT_DEPTH
-        raise ComponentNestingError.new(MAX_COMPONENT_DEPTH)
-      end
-
-      render_stack.skip(1).each do |ancestor_cid|
-        next unless ancestor = @component_identities_by_cid[ancestor_cid]?
-        if ancestor[1] == type_name && ancestor[2] == id
-          raise RecursiveComponentError.new(type_name, id)
-        end
-      end
-
-      identity = {parent_cid, type_name, id}
-      if rendered_components.includes?(identity)
-        raise DuplicateComponentError.new(type_name)
-      end
-
-      component = @components[identity]? || create_component(identity, factory.call)
-      rendered_components << identity
-      render_stack << component.myself
-      begin
-        component.update(assigns)
-        component.__opal_render
-      ensure
-        render_stack.pop
-      end
-    end
-
-    private def create_component(identity : ComponentIdentity, component : Component) : Component
-      @next_component_cid += 1
-      component_cid = @next_component_cid
-      render_component = ->(type_name : String, id : String, assigns : JSON::Any, factory : Component::Factory) { render_component(component_cid, type_name, id, assigns, factory) }
-      navigate = ->(navigation : Navigation) { queue_navigation(navigation) }
-      push_event = ->(event : PushedEvent) { queue_pushed_event(event) }
-      reply = ->(value : JSON::Any) { queue_event_reply(value) }
-      component.__opal_attach(
-        identity[2],
-        component_cid,
-        @connected,
-        render_component,
-        navigate,
-        push_event,
-        reply
-      )
-      begin
-        component.mount
-      rescue error
-        destroy_component(component)
-        raise error
-      end
-      @components[identity] = component
-      @components_by_cid[component.myself] = component
-      @component_identities_by_cid[component.myself] = identity
-      children = @component_children[identity[0]] ||= Set(ComponentIdentity).new
-      children << identity
-      component
-    end
-
-    private def destroy_component_tree(identity : ComponentIdentity) : Nil
-      component = @components[identity]?
-      return unless component
-
-      component_cid = component.myself
-      children = @component_children.delete(component_cid).try(&.to_a) || [] of ComponentIdentity
-      children.each { |child_identity| destroy_component_tree(child_identity) }
-      @components.delete(identity)
-      @components_by_cid.delete(component_cid)
-      @component_identities_by_cid.delete(component_cid)
-      if siblings = @component_children[identity[0]]?
-        siblings.delete(identity)
-        @component_children.delete(identity[0]) if siblings.empty?
-      end
-      destroy_component(component)
-    end
-
-    private def destroy_component(component : Component) : Nil
-      component.__opal_detach
-      component.as?(LF::DI::Disposable).try(&.destroy)
-    rescue error : Exception
-      Log.error(exception: error) do
-        "LiveView component cleanup failed: component=#{component.class.name}"
-      end
-    end
-
-    private def validate_stream_id(id : String, kind : String) : Nil
-      if id.empty?
-        raise ArgumentError.new("LiveView stream #{kind} id cannot be empty")
-      end
-    end
-
-    private def apply_stream_limit(items : Array(Tuple(String, String)), limit : Int32?) : Nil
-      return unless limit
-      if limit > 0
-        while items.size > limit
-          items.pop
-        end
-      else
-        keep = -limit.to_i64
-        while items.size > keep
-          items.shift
-        end
-      end
-    end
-  end
-
-  class Error < Exception
-  end
-
-  class ConfigurationError < Error
-  end
-
-  class UnknownEventError < Error
-    getter event : String
-
-    def initialize(@event)
-      super("Unknown LiveView event: #{event}")
-    end
-  end
-
-  class UnknownInfoError < Error
-    getter info : String
-
-    def initialize(@info)
-      super("Unknown LiveView info: #{info}")
-    end
-  end
-
-  class UnknownComponentError < Error
-    def initialize
-      super("Unknown LiveView component target")
-    end
-  end
-
-  class DuplicateComponentError < Error
-    def initialize(type : String)
-      super("Duplicate LiveView component identity for #{type}")
-    end
-  end
-
-  class RecursiveComponentError < Error
-    def initialize(type : String, id : String)
-      super("Recursive LiveView component identity for #{type}: #{id}")
-    end
-  end
-
-  class ComponentNestingError < Error
-    def initialize(max_depth : Int32)
-      super("LiveView components cannot be nested deeper than #{max_depth} levels")
-    end
-  end
-
-  class DuplicateNavigationError < Error
-    def initialize
-      super("A LiveView callback can request only one navigation")
-    end
-  end
-
-  class EventReplyError < Error
-  end
-
-  class InvalidNavigationError < Error
-    def initialize
-      super("Invalid LiveView navigation")
-    end
-  end
-
-  class InvalidMountTokenError < Error
-    def initialize
-      super("Invalid LiveView mount token")
-    end
-  end
-
-  class ProtocolError < Error
   end
 end
