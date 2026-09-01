@@ -324,6 +324,13 @@ markers to the component root. Put `data-opal-target="#{myself}"` on each
 binding that should dispatch to the component; targets are not inherited from
 an ancestor element.
 
+Connected renders use Phoenix's native top-level `c` component table. The
+parent tree carries only the numeric CID, while changed component dynamics are
+sent independently. A targeted component event therefore patches only that
+component root; unchanged siblings and the parent DOM are not serialized or
+morphed. New and nested components receive full rooted component entries, and
+subsequent renders send only their changed dynamic positions.
+
 Components can render stateful children with the same protected helper. For
 example, every panel below owns an independent `CounterComponent` whose local
 id is `"counter"`:
@@ -553,10 +560,10 @@ Phoenix LiveView 1.2.11: `phx_join`, `phx_reply`, heartbeat, `event`,
 titles, hook replies/events, and component CIDs. The independent Opal protocol
 and browser DOM runtime are removed.
 
-Current server gaps are uploads, general comprehension/template tables,
-component-only `c` diffs, nested child LiveViews, and same-socket navigation
-across page classes. Uploads are intentionally outside the current roadmap.
-Unsupported channel events receive an error reply; they are not silently
-treated as implemented.
+Current server gaps are uploads, general application-facing
+comprehension/template tables, nested child LiveViews, and same-socket
+navigation across page classes. Uploads are intentionally outside the current
+roadmap. Unsupported channel events receive an error reply; they are not
+silently treated as implemented.
 Applications consume the bundled asset and therefore need no JavaScript build,
 while Opal's own release process pins and rebuilds the upstream npm packages.
