@@ -24,8 +24,19 @@ module LF::LiveView
   class MountContext < ParamsContext
     getter request : ::HTTP::Request
     getter? connected : Bool
+    getter session : JSON::Any
+    getter parent_id : String?
+    getter view_id : String
 
-    def initialize(@request, params : Hash(String, String), resource : String, @connected)
+    def initialize(
+      @request,
+      params : Hash(String, String),
+      resource : String,
+      @connected,
+      @session = JSON::Any.new(nil),
+      @parent_id = nil,
+      @view_id = "opal-live-root",
+    )
       super(params, resource)
     end
   end
@@ -137,6 +148,27 @@ module LF::LiveView
       live_component(type, id, JSON.parse(assigns.to_json), &factory)
     end
 
+    # Renders a child LiveView with its own channel and lifecycle on the same
+    # Phoenix socket. The id must be unique within the document.
+    protected def live_view(
+      type : T.class,
+      id : String,
+      session : JSON::Any = JSON::Any.new(nil),
+      &factory : -> T
+    ) : ChildViewContent forall T
+      child_factory = -> { factory.call.as(View) }
+      @runtime.render_child_view(T.name, id, session, child_factory)
+    end
+
+    protected def live_view(
+      type : T.class,
+      id : String,
+      session,
+      &factory : -> T
+    ) : ChildViewContent forall T
+      live_view(type, id, JSON.parse(session.to_json), &factory)
+    end
+
     # Queues an insert or update in a browser-owned stream container. New items
     # are appended by default; `at: 0` prepends. A positive limit keeps the
     # first N elements and a negative limit keeps the last N elements.
@@ -187,6 +219,14 @@ module LF::LiveView
       refresh : Proc(Bool),
     ) : Nil
       @runtime.connect(send_info, refresh)
+    end
+
+    # :nodoc:
+    def __opal_configure_child_views(
+      renderer : ConnectionRuntime::ChildViewRenderer,
+      finish : Proc(Set(String), Nil),
+    ) : Nil
+      @runtime.configure_child_views(renderer, finish)
     end
 
     # :nodoc:

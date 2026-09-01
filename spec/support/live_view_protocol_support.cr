@@ -464,6 +464,147 @@ class LiveViewSpecKeyed < LF::LiveView::View
   end
 end
 
+class LiveViewSpecGrandchild < LF::LiveView::View
+  include LF::DI::Disposable
+
+  @@destroy_count = 0
+
+  def self.reset : Nil
+    @@destroy_count = 0
+  end
+
+  def self.destroy_count : Int32
+    @@destroy_count
+  end
+
+  @count = 0
+  @label = ""
+
+  def mount(context : LF::LiveView::MountContext) : Nil
+    @label = context.session.as_h["label"].as_s
+  end
+
+  def handle_event(event : String, value : JSON::Any) : Nil
+    if event == "increment_grandchild"
+      @count += 1
+    else
+      super
+    end
+  end
+
+  def render : LF::LiveView::Rendered
+    LF::LiveView::HTML.rendered(
+      %(<button id="spec-grandchild-button" data-opal-click="increment_grandchild">#{@label}:#{@count}</button>)
+    )
+  end
+
+  def destroy : Nil
+    @@destroy_count += 1
+  end
+end
+
+class LiveViewSpecChild < LF::LiveView::View
+  include LF::DI::Disposable
+
+  @@destroy_count = 0
+
+  def self.reset : Nil
+    @@destroy_count = 0
+  end
+
+  def self.destroy_count : Int32
+    @@destroy_count
+  end
+
+  @count = 0
+  @label = ""
+  @show_grandchild = true
+
+  def mount(context : LF::LiveView::MountContext) : Nil
+    @label = context.session.as_h["label"].as_s
+  end
+
+  def handle_event(event : String, value : JSON::Any) : Nil
+    case event
+    when "increment_child"
+      @count += 1
+    when "toggle_grandchild"
+      @show_grandchild = !@show_grandchild
+    when "fail_child"
+      raise "child failure"
+    else
+      super
+    end
+  end
+
+  def render : LF::LiveView::Rendered
+    grandchild = if @show_grandchild
+                   live_view(
+                     LiveViewSpecGrandchild,
+                     "spec-grandchild",
+                     {label: "Grandchild"}
+                   ) { LiveViewSpecGrandchild.new }
+                 else
+                   ""
+                 end
+    LF::LiveView::HTML.rendered(
+      %(<section><button id="spec-child-button" data-opal-click="increment_child">#{@label}:#{@count}</button>#{grandchild}</section>)
+    )
+  end
+
+  def destroy : Nil
+    @@destroy_count += 1
+  end
+end
+
+class LiveViewSpecChildren < LF::LiveView::View
+  @count = 0
+  @show_child = true
+
+  def handle_event(event : String, value : JSON::Any) : Nil
+    case event
+    when "increment_parent"
+      @count += 1
+    when "toggle_child"
+      @show_child = !@show_child
+    else
+      super
+    end
+  end
+
+  def render : LF::LiveView::Rendered
+    child = if @show_child
+              live_view(LiveViewSpecChild, "spec-child", {label: "Child"}) do
+                LiveViewSpecChild.new
+              end
+            else
+              ""
+            end
+    LF::LiveView::HTML.rendered(
+      %(<main><button id="spec-parent-button" data-opal-click="increment_parent">Parent:#{@count}</button>#{child}<button data-opal-click="toggle_child">toggle child</button></main>)
+    )
+  end
+end
+
+class LiveViewSpecChildHostComponent < LF::LiveView::Component
+  def render : LF::LiveView::Rendered
+    child = live_view(
+      LiveViewSpecGrandchild,
+      "component-child-view",
+      {label: "Component child"}
+    ) { LiveViewSpecGrandchild.new }
+    LF::LiveView::HTML.rendered(%(<section>#{child}</section>))
+  end
+end
+
+class LiveViewSpecComponentChildHost < LF::LiveView::View
+  def render : LF::LiveView::Rendered
+    live_component(LiveViewSpecChildHostComponent, "host") do
+      LiveViewSpecChildHostComponent.new
+    end
+  end
+end
+
 class LiveViewSpecNavigation < LF::LiveView::View
   @section = ""
   @tab = ""
@@ -522,6 +663,8 @@ def live_view_spec_server(
   LiveViewSpecDisposable.reset
   LiveViewSpecComponent.reset
   LiveViewSpecNestedComponent.reset
+  LiveViewSpecChild.reset
+  LiveViewSpecGrandchild.reset
   root = LF::DI::DefaultContainer.new
   endpoint = LF::LiveView::Endpoint.new(
     secret,
@@ -537,6 +680,10 @@ def live_view_spec_server(
   endpoint.page("/components", LiveViewSpecComponents) { |_scope| LiveViewSpecComponents.new }
   endpoint.page("/streams", LiveViewSpecStreams) { |_scope| LiveViewSpecStreams.new }
   endpoint.page("/keyed", LiveViewSpecKeyed) { |_scope| LiveViewSpecKeyed.new }
+  endpoint.page("/children", LiveViewSpecChildren) { |_scope| LiveViewSpecChildren.new }
+  endpoint.page("/component-child", LiveViewSpecComponentChildHost) do |_scope|
+    LiveViewSpecComponentChildHost.new
+  end
   endpoint.page("/hooks", LiveViewSpecHooks) { |_scope| LiveViewSpecHooks.new }
   endpoint.page(
     "/navigation/:section",

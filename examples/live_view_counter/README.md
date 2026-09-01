@@ -24,6 +24,7 @@ Open <http://127.0.0.1:8084/?start=2>. The example demonstrates:
 - native keyed-comprehension list reordering without recreating DOM nodes;
 - native component-only diffs, parent-scoped nested state, and deep targeted
   events;
+- nested child LiveViews with independent channels on one Phoenix socket;
 - native Phoenix stream insertion, deletion, limits, and retained DOM identity;
 - client- and server-driven live patches, history, and fresh-page navigation;
 - opt-in JavaScript hook lifecycle, event replies, targeted component events,

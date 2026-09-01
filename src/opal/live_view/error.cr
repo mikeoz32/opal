@@ -45,6 +45,18 @@ module LF::LiveView
     end
   end
 
+  class DuplicateChildViewError < Error
+    def initialize(id : String)
+      super("Duplicate child LiveView id: #{id}")
+    end
+  end
+
+  class ChildViewNestingError < Error
+    def initialize(max_depth : Int32)
+      super("Child LiveViews cannot be nested deeper than #{max_depth} levels")
+    end
+  end
+
   class DuplicateNavigationError < Error
     def initialize
       super("A LiveView callback can request only one navigation")
