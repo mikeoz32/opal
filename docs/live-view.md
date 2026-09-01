@@ -132,6 +132,81 @@ Forms serialize successful fields by name. Repeated names become arrays:
 of replacing the live root. Focused input values and selections remain
 browser-owned while the event is in flight.
 
+## JavaScript hooks and custom events
+
+Use an opt-in hook for browser APIs or third-party widgets that cannot be
+expressed as server-rendered HTML. Every hook element must have a unique,
+stable DOM `id`:
+
+```html
+<div id="sales-chart" data-opal-hook="SalesChart"></div>
+```
+
+Define the registry before Opal's client module loads. A custom
+`render_document` can place an application-owned script immediately before the
+provided `client_script`:
+
+```javascript
+globalThis.OpalLiveViewHooks = {
+  SalesChart: {
+    mounted() {
+      this.subscription = this.handleEvent("chart-points", points => {
+        this.chart.add(points)
+      })
+    },
+    beforeUpdate(toEl) {
+      // Synchronously copy browser-owned attributes to the incoming element.
+      toEl.dataset.zoom = this.el.dataset.zoom
+    },
+    updated() {},
+    disconnected() {},
+    reconnected() {},
+    destroyed() {
+      this.removeHandleEvent(this.subscription)
+      this.chart.destroy()
+    }
+  }
+}
+```
+
+Supported callbacks are `mounted`, `beforeUpdate(toEl)`, `updated`,
+`destroyed`, `disconnected`, and `reconnected`. Each hook instance exposes
+`el`, `liveView` (`liveSocket` is an alias), `pushEvent`, `pushEventTo`,
+`handleEvent`, and `removeHandleEvent`. Callback failures emit
+`opal:hook-error` on the live root and do not close the socket.
+
+`pushEvent` uses the same serialized operation queue as normal bindings. With
+no callback it returns a promise resolving to `{reply, ref}`; with a callback,
+the callback receives `(reply, ref)`. `pushEventTo` accepts a selector or DOM
+element and targets the owning stateful component when one exists:
+
+```javascript
+const {reply} = await this.pushEvent("lookup", {query: "opal"})
+const results = await this.pushEventTo("#todo-42", "archive", {})
+```
+
+A view or component can reply once from its current event callback and enqueue
+events for browser hooks:
+
+```crystal
+def handle_event(event : String, value : JSON::Any) : Nil
+  case event
+  when "lookup"
+    result = search(value.as_h["query"].as_s)
+    push_event("search-result", result)
+    reply({accepted: true, count: result.size})
+  else
+    super
+  end
+end
+```
+
+Pushed events run after the associated DOM patch. Every active hook registered
+through `handleEvent` receives the event, and the browser also dispatches a
+window event named `opal:<event>`. Hook events, replies, and server-pushed
+events require protocol v2. A fresh-document navigation intentionally does not
+deliver queued events to hooks from the page being replaced.
+
 ## Server-initiated updates
 
 Events rerender automatically. A timer or subscription must not mutate view
@@ -261,6 +336,7 @@ forgets its state and calls `destroy` when the component includes
 All remaining components are destroyed when their LiveView disconnects.
 Components may also call protected `push_patch` and `push_navigate` from their
 event callbacks; navigation is serialized through their parent connection.
+They may also call `push_event` and `reply` for hook interoperability.
 
 ## Streams
 
@@ -428,7 +504,8 @@ continues accepting protocol-v1 clients and returns their complete `html`
 payloads.
 
 Protocol v2 provides connection-local stateful components, component-targeted
-events, browser-owned streams, and acknowledged live patches with browser
-history. It does not yet provide nested components, same-socket navigation
-across page classes, upload transport, or JavaScript hooks. These features can
-evolve under Opal's protocol without introducing a Phoenix dependency.
+events and replies, server-pushed hook events, opt-in JavaScript hook lifecycle,
+browser-owned streams, and acknowledged live patches with browser history. It
+does not yet provide nested components, same-socket navigation across page
+classes, or upload transport. These features can evolve under Opal's protocol
+without introducing a Phoenix dependency.

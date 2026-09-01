@@ -79,6 +79,137 @@ test("keeps component state isolated and targets only its instance", async ({pag
   await expect(right).toHaveText("1");
 });
 
+test("runs hook updates after DOM patches and delivers server events before replies", async ({page}) => {
+  const hook = page.locator("#counter-hook");
+  await expect(hook).toHaveAttribute("data-client-state", "preserved");
+  expect(await page.evaluate(() => window.__opalHookLog)).toEqual(["mounted"]);
+  await page.evaluate(() => {
+    window.addEventListener("opal:counter_notice", event => {
+      window.__opalWindowNotice = event.detail;
+    }, {once: true});
+  });
+
+  await page.getByRole("button", {name: "Ping view from hook"}).click();
+
+  await expect(page.locator("#hook-server-state")).toHaveText("hello from hook");
+  await expect(page.locator("#hook-client-notice")).toHaveText("hello from hook");
+  await expect(hook).toHaveAttribute("data-client-state", "preserved");
+  await expect.poll(() => page.evaluate(() => window.__opalHookReplies.length)).toBe(1);
+
+  const result = await page.evaluate(() => ({
+    log: window.__opalHookLog,
+    reply: window.__opalHookReplies[0],
+    notice: window.__opalHookNotices[0],
+    windowNotice: window.__opalWindowNotice,
+  }));
+  expect(result.reply.reply).toEqual({accepted: true, message: "hello from hook", count: 0});
+  expect(result.notice).toEqual({message: "hello from hook", count: 0});
+  expect(result.windowNotice).toEqual({message: "hello from hook", count: 0});
+  expect(result.log.indexOf("beforeUpdate")).toBeLessThan(result.log.indexOf("updated"));
+  expect(result.log.indexOf("updated")).toBeLessThan(result.log.indexOf("notice"));
+  expect(result.log.indexOf("notice")).toBeLessThan(result.log.indexOf("reply"));
+
+  const callbackReply = await hook.evaluate(element => new Promise(resolve => {
+    const liveView = element.closest("[data-opal-live-root]").__opalLiveView;
+    liveView.hooks.get(element).pushEvent(
+      "hook_ping",
+      {message: "callback reply"},
+      (reply, ref) => resolve({reply, ref}),
+    );
+  }));
+  expect(callbackReply.reply).toEqual({accepted: true, message: "callback reply", count: 0});
+  expect(callbackReply.ref).toBeGreaterThan(0);
+  await expect(page.locator("#hook-server-state")).toHaveText("callback reply");
+});
+
+test("targets components from hooks and cleans up hook event handlers", async ({page}) => {
+  await page.getByRole("button", {name: "Ping left component from hook"}).click();
+  await expect.poll(() => page.evaluate(() => window.__opalHookReplies.length)).toBe(1);
+
+  const componentResult = await page.evaluate(() => ({
+    log: window.__opalHookLog,
+    reply: window.__opalHookReplies[0],
+    notice: window.__opalHookNotices[0],
+  }));
+  expect(componentResult.reply.reply).toEqual({id: "left", count: 0});
+  expect(componentResult.notice).toEqual({id: "left", count: 0});
+  expect(componentResult.log).toContain("component-notice");
+  expect(componentResult.log).toContain("component-reply");
+
+  await page.getByRole("button", {name: "Toggle hook"}).click();
+  await expect(page.locator("#counter-hook")).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => window.__opalHookLog.includes("destroyed"))).toBe(true);
+
+  await page.getByRole("button", {name: "Toggle hook"}).click();
+  await expect(page.locator("#counter-hook")).toBeVisible();
+  await expect.poll(
+    () => page.evaluate(() => window.__opalHookLog.filter(item => item === "mounted").length),
+  ).toBe(2);
+});
+
+test("notifies hooks across disconnect and reconnect without remounting them", async ({page}) => {
+  const root = page.locator("[data-opal-live-root]");
+  const hook = page.locator("#counter-hook");
+  await hook.evaluate(element => { window.__opalHookElement = element; });
+  const generation = await root.evaluate(element => element.__opalLiveView.connectionGeneration);
+
+  await root.evaluate(element => element.__opalLiveView.socket.close(4001, "hook reconnect"));
+  await expect.poll(
+    () => root.evaluate(element => element.__opalLiveView.connectionGeneration),
+  ).toBeGreaterThan(generation);
+  await expect(root).toHaveAttribute("data-opal-status", "connected", {timeout: 10_000});
+  await expect.poll(() => hook.evaluate(element => element === window.__opalHookElement)).toBe(true);
+
+  const lifecycle = await page.evaluate(() => window.__opalHookLog);
+  expect(lifecycle.filter(item => item === "mounted")).toHaveLength(1);
+  expect(lifecycle).toContain("disconnected");
+  expect(lifecycle).toContain("reconnected");
+  expect(lifecycle.indexOf("disconnected")).toBeLessThan(lifecycle.indexOf("reconnected"));
+});
+
+test("isolates hook callback failures from the live connection", async ({page}) => {
+  const root = page.locator("[data-opal-live-root]");
+  const error = await root.evaluate(element => new Promise(resolve => {
+    element.addEventListener("opal:hook-error", event => resolve({
+      hook: event.detail.hook,
+      callback: event.detail.callback,
+      message: event.detail.error.message,
+    }), {once: true});
+    element.__opalLiveView.hookDefinitions.BrokenHook = {
+      mounted() { throw new Error("broken hook callback"); },
+    };
+    const broken = document.createElement("div");
+    broken.id = "broken-hook";
+    broken.dataset.opalHook = "BrokenHook";
+    element.appendChild(broken);
+    element.__opalLiveView.reconcileHooks();
+  }));
+
+  expect(error).toEqual({
+    hook: "BrokenHook",
+    callback: "mounted",
+    message: "broken hook callback",
+  });
+
+  const invalid = await root.evaluate(element => new Promise(resolve => {
+    element.addEventListener("opal:hook-error", event => resolve({
+      hook: event.detail.hook,
+      message: event.detail.error.message,
+    }), {once: true});
+    const missingId = document.createElement("div");
+    missingId.dataset.opalHook = "CounterHook";
+    element.appendChild(missingId);
+    element.__opalLiveView.reconcileHooks();
+  }));
+  expect(invalid).toEqual({
+    hook: "CounterHook",
+    message: "LiveView hook elements require a unique id",
+  });
+  await expect(root).toHaveAttribute("data-opal-status", "connected");
+  await page.getByRole("button", {name: "Increment", exact: true}).click();
+  await expect(page.locator("#counter-value")).toHaveText("1");
+});
+
 test("applies bounded stream inserts and deletes without replacing retained items", async ({page}) => {
   const first = page.locator("#activity-1");
   await first.evaluate(element => { window.__opalFirstActivityNode = element; });

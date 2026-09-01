@@ -355,15 +355,17 @@ module LF::LiveView
               value = message["value"]? || JSON::Any.new(nil)
               target = optional_integer(message, "target")
               begin
-                view.__opal_handle_event(target, event, value)
+                event_reply = view.__opal_handle_event(target, event, value)
               rescue error : UnknownEventError
                 view.__opal_clear_stream_operations
                 view.__opal_clear_navigation
+                view.__opal_clear_pushed_events
                 send_error(websocket, "unknown_event", reference)
                 next
               rescue error : UnknownComponentError
                 view.__opal_clear_stream_operations
                 view.__opal_clear_navigation
+                view.__opal_clear_pushed_events
                 send_error(websocket, "unknown_target", reference)
                 next
               rescue error : Exception
@@ -384,7 +386,8 @@ module LF::LiveView
                 reference: reference,
                 status: "ok",
                 navigation: navigation_result.try(&.navigation),
-                token: navigation_result.try(&.token)
+                token: navigation_result.try(&.token),
+                reply: event_reply
               )
               rendered = next_rendered
             when "patch"
@@ -411,6 +414,7 @@ module LF::LiveView
               rescue error : InvalidNavigationError
                 view.__opal_clear_stream_operations
                 view.__opal_clear_navigation
+                view.__opal_clear_pushed_events
                 send_error(websocket, "invalid_navigation", reference)
                 next
               rescue error : LF::HTTP::Forbidden
@@ -636,11 +640,13 @@ module LF::LiveView
       status : String? = nil,
       navigation : Navigation? = nil,
       token : String? = nil,
+      reply : EventReply? = nil,
     ) : Nil
       changes = previous.try { |old| rendered.diff(old) }
       streams = view.__opal_take_stream_operations
-      if protocol == LEGACY_PROTOCOL_VERSION && (!streams.empty? || navigation)
-        raise ProtocolError.new("LiveView streams and navigation require protocol version 2")
+      pushed_events = view.__opal_take_pushed_events
+      if protocol == LEGACY_PROTOCOL_VERSION && (!streams.empty? || navigation || !pushed_events.empty? || reply)
+        raise ProtocolError.new("LiveView streams, navigation, and custom events require protocol version 2")
       end
       websocket.send(JSON.build do |json|
         json.object do
@@ -676,6 +682,11 @@ module LF::LiveView
               streams.to_json(json)
             end
           end
+          unless pushed_events.empty?
+            json.field "events" do
+              pushed_events.to_json(json)
+            end
+          end
           if navigation
             json.field "navigation" do
               navigation.to_json(json)
@@ -683,6 +694,11 @@ module LF::LiveView
           end
           if token
             json.field "token", token
+          end
+          if reply
+            json.field "reply" do
+              reply.value.to_json(json)
+            end
           end
           if reference
             json.field "ref", reference

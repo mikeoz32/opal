@@ -22,6 +22,9 @@ class CounterComponent < LF::LiveView::Component
       @count += 1
     when "decrement_component"
       @count -= 1
+    when "hook_component"
+      push_event("component_notice", {id: id, count: @count})
+      reply({id: id, count: @count})
     else
       super
     end
@@ -51,6 +54,8 @@ class CounterLive < LF::LiveView::View
   @items_reversed = false
   @next_activity = 3
   @page = 1
+  @hook_message = "waiting"
+  @show_hook = true
 
   def initialize(@counter_label : CounterLabel)
   end
@@ -107,6 +112,14 @@ class CounterLive < LF::LiveView::View
       push_patch("/?start=#{@count}&page=#{@page + 1}")
     when "replace_page"
       push_patch("/?start=#{@count}&page=#{@page + 1}", replace: true)
+    when "hook_ping"
+      @hook_message = string_value(value, "message")
+      push_event("counter_notice", {message: @hook_message, count: @count})
+      reply({accepted: true, message: @hook_message, count: @count})
+    when "push_hook_notice"
+      push_event("counter_notice", {message: "server push", count: @count})
+    when "toggle_hook"
+      @show_hook = !@show_hook
     else
       super
     end
@@ -129,6 +142,19 @@ class CounterLive < LF::LiveView::View
       CounterComponent.new
     end
     activity_items = stream_contents("activity-stream")
+    hook = if @show_hook
+             LF::LiveView::HTML.rendered(<<-HTML)
+               <section id="counter-hook" data-opal-hook="CounterHook" data-message="#{@hook_message}">
+                 <h2>JavaScript hook</h2>
+                 <button id="hook-ping" type="button">Ping view from hook</button>
+                 <button id="hook-component-ping" type="button">Ping left component from hook</button>
+                 <output id="hook-server-state">#{@hook_message}</output>
+                 <output id="hook-client-notice">No notice</output>
+               </section>
+             HTML
+           else
+             LF::LiveView::Rendered.opaque("")
+           end
     previous_page = {@page - 1, 1}.max
     previous_page_path = "/?start=#{@count}&page=#{previous_page}"
     next_page_path = "/?start=#{@count}&page=#{@page + 1}"
@@ -185,6 +211,11 @@ class CounterLive < LF::LiveView::View
       <output id="validation-count" data-testid="validation-count">#{@validation_count}</output>
       <div class="components">#{left_component}#{right_component}</div>
       <section>
+        <button type="button" data-opal-click="push_hook_notice">Push notice to hook</button>
+        <button type="button" data-opal-click="toggle_hook">Toggle hook</button>
+        #{hook}
+      </section>
+      <section>
         <h2>Activity stream</h2>
         <button type="button" data-opal-click="prepend_activity">Prepend activity</button>
         <ul id="activity-stream" data-opal-stream>#{activity_items}</ul>
@@ -196,6 +227,78 @@ class CounterLive < LF::LiveView::View
 
   def title : String?
     @empty_title ? "" : "Counter #{@count} · Opal"
+  end
+
+  def render_document(live_root : String, client_script : String) : String
+    <<-HTML
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width,initial-scale=1">
+          <link rel="icon" href="data:,">
+          <title>#{LF::LiveView::HTML.escape(title || "Opal LiveView")}</title>
+        </head>
+        <body>
+          #{live_root}
+          <script>
+            globalThis.__opalHookLog = [];
+            globalThis.__opalHookReplies = [];
+            globalThis.__opalHookNotices = [];
+            globalThis.OpalLiveViewHooks = {
+              CounterHook: {
+                mounted() {
+                  globalThis.__opalHookLog.push("mounted");
+                  this.el.dataset.clientState = "preserved";
+                  this.noticeRef = this.handleEvent("counter_notice", payload => {
+                    globalThis.__opalHookLog.push("notice");
+                    globalThis.__opalHookNotices.push(payload);
+                    this.el.querySelector("#hook-client-notice").textContent = payload.message;
+                  });
+                  this.componentNoticeRef = this.handleEvent("component_notice", payload => {
+                    globalThis.__opalHookLog.push("component-notice");
+                    globalThis.__opalHookNotices.push(payload);
+                  });
+                  this.onPing = async () => {
+                    const result = await this.pushEvent("hook_ping", {message: "hello from hook"});
+                    globalThis.__opalHookLog.push("reply");
+                    globalThis.__opalHookReplies.push(result);
+                  };
+                  this.onComponentPing = async () => {
+                    const results = await this.pushEventTo("#component-left", "hook_component");
+                    globalThis.__opalHookLog.push("component-reply");
+                    globalThis.__opalHookReplies.push(results[0].value);
+                  };
+                  this.el.querySelector("#hook-ping").addEventListener("click", this.onPing);
+                  this.el.querySelector("#hook-component-ping").addEventListener("click", this.onComponentPing);
+                },
+                beforeUpdate(toEl) {
+                  globalThis.__opalHookLog.push("beforeUpdate");
+                  toEl.dataset.clientState = this.el.dataset.clientState;
+                },
+                updated() {
+                  globalThis.__opalHookLog.push("updated");
+                },
+                destroyed() {
+                  globalThis.__opalHookLog.push("destroyed");
+                  this.removeHandleEvent(this.noticeRef);
+                  this.removeHandleEvent(this.componentNoticeRef);
+                  this.el.querySelector("#hook-ping")?.removeEventListener("click", this.onPing);
+                  this.el.querySelector("#hook-component-ping")?.removeEventListener("click", this.onComponentPing);
+                },
+                disconnected() {
+                  globalThis.__opalHookLog.push("disconnected");
+                },
+                reconnected() {
+                  globalThis.__opalHookLog.push("reconnected");
+                }
+              }
+            };
+          </script>
+          #{client_script}
+        </body>
+      </html>
+    HTML
   end
 
   private def string_value(value : JSON::Any, key : String) : String

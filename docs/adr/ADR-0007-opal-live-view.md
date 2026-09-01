@@ -99,15 +99,30 @@ The default client supports:
 - `data-opal-target="component-id"` for stateful component events;
 - `data-opal-patch` and optional `data-opal-replace` for same-view history;
 - `data-opal-navigate` for a fresh document mount;
+- `data-opal-hook` for application-owned JavaScript lifecycle integration;
 - automatic heartbeat and bounded exponential reconnect;
-- `opal:render`, `opal:error`, and `opal:event-error` browser events.
+- `opal:render`, `opal:error`, `opal:event-error`, and `opal:hook-error`
+  browser events.
 
 The form encoder preserves repeated names as arrays. Connection-local stateful
 components use `(component type, id)` identity, mount once, update before each
 render, and receive explicitly targeted events on the same connection fiber.
 Removed components are destroyed. Components can request navigation through
-their parent connection. File uploads, client hooks, nested components, and
-same-socket navigation across page classes are deferred.
+their parent connection. Views and components can reply to the current event
+and enqueue application events for browser hooks. File uploads, nested
+components, and same-socket navigation across page classes are deferred.
+
+Hook definitions are application-owned and registered before the embedded
+module loads. Hook elements require a unique stable DOM id. The client creates
+one isolated hook instance per element and invokes `mounted`, synchronous
+`beforeUpdate`, `updated`, `destroyed`, `disconnected`, and `reconnected`
+callbacks around normal morph, stream, and transport lifecycle transitions.
+Hook errors emit a local diagnostic event without failing the server-owned
+connection. `pushEvent` and `pushEventTo` share the versioned, one-operation-
+in-flight queue; acknowledgements may carry one JSON reply. Server-pushed
+events are delivered after the DOM patch to registered hook handlers and as
+namespaced window events. Custom events and replies are additive protocol-v2
+fields and are rejected for protocol-v1 clients rather than silently lost.
 
 Live patches are additive protocol-v2 messages. The server validates an
 absolute local resource against the current page route, reruns guards, invokes
@@ -171,6 +186,8 @@ connection.
 - Protocol v2 reduces steady-state payloads and DOM churn for structured
   renders, while protocol v1 and opaque `String` renders retain a simpler
   compatibility path.
+- Opt-in hooks cover application JavaScript interoperability without adding a
+  framework or bundler dependency to the default client.
 
 ## References
 
@@ -178,4 +195,5 @@ connection.
 - [Phoenix LiveView bindings](https://phoenix-live-view.hexdocs.pm/bindings.html)
 - [Phoenix stateful components](https://hexdocs.pm/phoenix_live_view/Phoenix.LiveComponent.html)
 - [Phoenix LiveView streams](https://hexdocs.pm/phoenix_live_view/Phoenix.LiveView.html#module-streams)
+- [Phoenix JavaScript interoperability](https://phoenix-live-view.hexdocs.pm/js-interop.html)
 - [Phoenix LiveView security model](https://phoenix-live-view.hexdocs.pm/security-model.html)

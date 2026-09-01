@@ -3,6 +3,7 @@ require "json"
 require "log"
 require "set"
 require "uri"
+require "./client_event"
 require "./component"
 require "./html"
 require "./navigation"
@@ -55,6 +56,9 @@ module LF::LiveView
     @connected = false
     @stream_operations = [] of StreamOperation
     @navigation : Navigation?
+    @pushed_events = [] of PushedEvent
+    @event_reply : EventReply?
+    @handling_event = false
 
     def mount(context : MountContext) : Nil
     end
@@ -116,6 +120,25 @@ module LF::LiveView
     # cross-view live sessions, so this intentionally replaces the document.
     protected def push_navigate(to : String, *, replace : Bool = false) : Nil
       queue_navigation(Navigation.navigate(to, replace: replace))
+    end
+
+    # Delivers an application event to browser hooks after the next DOM patch.
+    protected def push_event(name : String, payload : JSON::Any = JSON::Any.new(nil)) : Nil
+      queue_pushed_event(PushedEvent.new(name, payload))
+    end
+
+    protected def push_event(name : String, payload) : Nil
+      push_event(name, JSON.parse(payload.to_json))
+    end
+
+    # Replies to the client event currently being handled. At most one reply
+    # may be produced by an event callback.
+    protected def reply(value : JSON::Any = JSON::Any.new(nil)) : Nil
+      queue_event_reply(value)
+    end
+
+    protected def reply(value) : Nil
+      reply(JSON.parse(value.to_json))
     end
 
     # Renders a stateful component. Reusing the same component type and id on
@@ -247,6 +270,9 @@ module LF::LiveView
       @rendered_components = nil
       @stream_operations.clear
       @navigation = nil
+      @pushed_events.clear
+      @event_reply = nil
+      @handling_event = false
       components.each { |component| destroy_component(component) }
     end
 
@@ -269,13 +295,24 @@ module LF::LiveView
     end
 
     # :nodoc:
-    def __opal_handle_event(target : Int64?, event : String, value : JSON::Any) : Nil
-      if cid = target
-        component = @components_by_cid[cid]? || raise UnknownComponentError.new
-        component.handle_event(event, value)
-      else
-        handle_event(event, value)
+    def __opal_handle_event(target : Int64?, event : String, value : JSON::Any) : EventReply?
+      raise Error.new("LiveView event callbacks cannot be nested") if @handling_event
+      @handling_event = true
+      @event_reply = nil
+      result : EventReply? = nil
+      begin
+        if cid = target
+          component = @components_by_cid[cid]? || raise UnknownComponentError.new
+          component.handle_event(event, value)
+        else
+          handle_event(event, value)
+        end
+        result = @event_reply
+      ensure
+        @event_reply = nil
+        @handling_event = false
       end
+      result
     end
 
     # :nodoc:
@@ -293,6 +330,18 @@ module LF::LiveView
     # :nodoc:
     def __opal_clear_navigation : Nil
       @navigation = nil
+    end
+
+    # :nodoc:
+    def __opal_take_pushed_events : Array(PushedEvent)
+      events = @pushed_events
+      @pushed_events = [] of PushedEvent
+      events
+    end
+
+    # :nodoc:
+    def __opal_clear_pushed_events : Nil
+      @pushed_events.clear
     end
 
     # :nodoc:
@@ -325,10 +374,34 @@ module LF::LiveView
       @navigation = navigation
     end
 
+    private def queue_pushed_event(event : PushedEvent) : Nil
+      raise ArgumentError.new("LiveView pushed event name cannot be empty") if event.name.empty?
+      @pushed_events << event
+    end
+
+    private def queue_event_reply(value : JSON::Any) : Nil
+      unless @handling_event
+        raise EventReplyError.new("LiveView replies are only valid inside an event callback")
+      end
+      if @event_reply
+        raise EventReplyError.new("A LiveView event callback can reply only once")
+      end
+      @event_reply = EventReply.new(value)
+    end
+
     private def create_component(identity : ComponentIdentity, component : T) : T forall T
       @next_component_cid += 1
       navigate = ->(navigation : Navigation) { queue_navigation(navigation) }
-      component.__opal_attach(identity[1], @next_component_cid, @connected, navigate)
+      push_event = ->(event : PushedEvent) { queue_pushed_event(event) }
+      reply = ->(value : JSON::Any) { queue_event_reply(value) }
+      component.__opal_attach(
+        identity[1],
+        @next_component_cid,
+        @connected,
+        navigate,
+        push_event,
+        reply
+      )
       begin
         component.mount
       rescue error
@@ -408,6 +481,9 @@ module LF::LiveView
     def initialize
       super("A LiveView callback can request only one navigation")
     end
+  end
+
+  class EventReplyError < Error
   end
 
   class InvalidNavigationError < Error

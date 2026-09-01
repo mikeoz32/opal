@@ -24,6 +24,8 @@ Open <http://127.0.0.1:8084/?start=2>. The example demonstrates:
 - two stateful components with isolated state and targeted events;
 - bounded browser-owned stream insertion and deletion;
 - client- and server-driven live patches, history, and fresh-page navigation;
+- opt-in JavaScript hook lifecycle, event replies, targeted component events,
+  and server-pushed browser events;
 - dynamic document titles and automatic reconnect;
 - automatic HTML escaping for structured template values.
 
