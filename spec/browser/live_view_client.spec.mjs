@@ -103,6 +103,45 @@ test("scopes nested component state to each parent and remounts removed children
   await expect(page.locator("#left-component-value")).toHaveText("1");
 });
 
+test("multiplexes nested LiveViews and remounts a removed child tree", async ({page}) => {
+  await page.goto("/nested");
+  const child = page.locator("#nested-child-live");
+  const grandchild = page.locator("#nested-grandchild-live");
+  await expect(child).toHaveClass(/phx-connected/);
+  await expect(grandchild).toHaveClass(/phx-connected/);
+  await expect(child).toHaveAttribute("data-phx-parent-id", "opal-live-root");
+  await expect(grandchild).toHaveAttribute("data-phx-parent-id", "nested-child-live");
+
+  const childValue = page.locator("#nested-child-value");
+  await childValue.evaluate(element => { window.__opalNestedChildValue = element; });
+  await page.getByRole("button", {name: "Increment nested child LiveView"}).click();
+  await expect(childValue).toHaveText("1");
+  await expect(page.locator("#nested-parent-value")).toHaveText("0");
+  await expect(page.locator("#nested-grandchild-value")).toHaveText("0");
+
+  await page.getByRole("button", {name: "Increment nested grandchild LiveView"}).click();
+  await expect(page.locator("#nested-grandchild-value")).toHaveText("1");
+  await page.getByRole("button", {name: "Increment nested parent LiveView"}).click();
+  await expect(page.locator("#nested-parent-value")).toHaveText("1");
+  await expect(childValue).toHaveText("1");
+  await expect.poll(
+    () => childValue.evaluate(element => element === window.__opalNestedChildValue),
+  ).toBe(true);
+
+  await page.getByRole("button", {name: "Crash nested child LiveView"}).click();
+  await expect(page.locator("#nested-child-live")).toHaveClass(/phx-connected/);
+  await expect(page.locator("#nested-child-value")).toHaveText("0");
+  await expect(page.locator("#nested-grandchild-value")).toHaveText("0");
+  await expect(page.locator("#nested-parent-value")).toHaveText("1");
+
+  await page.getByRole("button", {name: "Toggle nested child LiveView"}).click();
+  await expect(child).toHaveCount(0);
+  await page.getByRole("button", {name: "Toggle nested child LiveView"}).click();
+  await expect(page.locator("#nested-child-live")).toHaveClass(/phx-connected/);
+  await expect(page.locator("#nested-child-value")).toHaveText("0");
+  await expect(page.locator("#nested-grandchild-value")).toHaveText("0");
+});
+
 test("runs hook updates after DOM patches and delivers server events before replies", async ({page}) => {
   const hook = page.locator("#counter-hook");
   await expect(hook).toHaveAttribute("data-client-state", "preserved");

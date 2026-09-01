@@ -13,12 +13,14 @@ module LF::LiveView
   abstract class Component
     alias Factory = Proc(Component)
     alias Renderer = Proc(String, String, JSON::Any, Factory, Rendered)
+    alias ChildViewRenderer = Proc(String, String, JSON::Any, ChildViewFactory, ChildViewContent)
 
     @__opal_id = ""
     @__opal_cid = 0_i64
     @__opal_connected = false
     @__opal_attached = false
     @__opal_render_component : Renderer?
+    @__opal_render_child_view : ChildViewRenderer?
     @__opal_navigate : Proc(Navigation, Nil)?
     @__opal_push_event : Proc(PushedEvent, Nil)?
     @__opal_reply : Proc(JSON::Any, Nil)?
@@ -83,6 +85,26 @@ module LF::LiveView
       live_component(type, id, JSON.parse(assigns.to_json), &factory)
     end
 
+    protected def live_view(
+      type : T.class,
+      id : String,
+      session : JSON::Any = JSON::Any.new(nil),
+      &factory : -> T
+    ) : ChildViewContent forall T
+      renderer = @__opal_render_child_view || raise Error.new("LiveView component is not attached")
+      child_factory = -> { factory.call.as(View) }
+      renderer.call(T.name, id, session, child_factory)
+    end
+
+    protected def live_view(
+      type : T.class,
+      id : String,
+      session,
+      &factory : -> T
+    ) : ChildViewContent forall T
+      live_view(type, id, JSON.parse(session.to_json), &factory)
+    end
+
     protected def push_event(name : String, payload : JSON::Any = JSON::Any.new(nil)) : Nil
       callback = @__opal_push_event || raise Error.new("LiveView component is not attached")
       callback.call(PushedEvent.new(name, payload))
@@ -107,6 +129,7 @@ module LF::LiveView
       cid : Int64,
       connected : Bool,
       @__opal_render_component : Renderer,
+      @__opal_render_child_view : ChildViewRenderer,
       @__opal_navigate : Proc(Navigation, Nil),
       @__opal_push_event : Proc(PushedEvent, Nil),
       @__opal_reply : Proc(JSON::Any, Nil),
@@ -121,6 +144,7 @@ module LF::LiveView
     # :nodoc:
     def __opal_detach : Nil
       @__opal_render_component = nil
+      @__opal_render_child_view = nil
       @__opal_navigate = nil
       @__opal_push_event = nil
       @__opal_reply = nil

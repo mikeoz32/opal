@@ -51,6 +51,10 @@ module LF::LiveView::HTML
     value
   end
 
+  def dynamic(value : LF::LiveView::ChildViewContent) : LF::LiveView::ChildViewContent
+    value
+  end
+
   def dynamic(value) : String
     escape(value)
   end
