@@ -9,6 +9,10 @@ export default defineConfig({
   use: {
     baseURL: "http://127.0.0.1:8084",
     browserName: "chromium",
+    channel: "chromium",
+    launchOptions: {
+      ignoreDefaultArgs: ["--disable-back-forward-cache"],
+    },
     trace: "retain-on-failure",
   },
   webServer: {

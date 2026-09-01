@@ -356,6 +356,34 @@ test("uses a fresh document mount for navigation outside the current LiveView", 
   await expect(page.locator("[data-opal-live-root]")).toHaveAttribute("data-opal-status", "connected");
 });
 
+test("reconnects after returning to a BFCache-restored document", async ({page}) => {
+  const root = page.locator("[data-opal-live-root]");
+  const generation = await root.evaluate(element => element.__opalLiveView.connectionGeneration);
+  await root.evaluate(element => {
+    window.__opalRestoredRoot = element;
+    const link = document.createElement("a");
+    link.href = "/_opal/live.js";
+    link.textContent = "Open plain document";
+    element.appendChild(link);
+  });
+
+  await page.getByRole("link", {name: "Open plain document"}).click();
+  await expect(page).toHaveURL(/\/_opal\/live\.js$/);
+
+  await page.evaluate(() => window.history.back());
+  await expect(page).toHaveURL(/127\.0\.0\.1:8084\/\?start=0$/);
+  await expect.poll(
+    () => root.evaluate(element => element === window.__opalRestoredRoot),
+  ).toBe(true);
+  await expect.poll(
+    () => root.evaluate(element => element.__opalLiveView.connectionGeneration),
+  ).toBeGreaterThan(generation);
+  await expect(root).toHaveAttribute("data-opal-status", "connected", {timeout: 10_000});
+
+  await page.getByRole("button", {name: "Increment", exact: true}).click();
+  await expect(page.locator("#counter-value")).toHaveText("1");
+});
+
 test("reconnects after a transient socket interruption", async ({page}) => {
   const root = page.locator("[data-opal-live-root]");
   const generation = await root.evaluate(element => element.__opalLiveView.connectionGeneration);

@@ -82,6 +82,12 @@ so reconnect mounts from the latest acknowledged route and query parameters.
 Persist other state that must survive reconnect in an application service or
 database.
 
+The browser client suspends its socket when the document is hidden for a
+full-page navigation. If Back or Forward restores that document from the
+browser's back-forward cache, Opal reconnects from the latest mount token and
+runs the hook `disconnected` / `reconnected` lifecycle without replacing the
+restored DOM. Calling `disconnect()` directly remains a permanent stop.
+
 HTTP guards can be declared directly on the view. Application-level guards
 also apply. Opal evaluates them for both the disconnected and connected mount:
 

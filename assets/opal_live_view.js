@@ -20,6 +20,7 @@ export class OpalLiveView {
     this.eventQueue = [];
     this.inFlightEvent = null;
     this.stopped = false;
+    this.suspended = false;
     this.hookDefinitions = hooks && typeof hooks === "object" ? hooks : {};
     this.hooks = new Map();
     this.invalidHookElements = new WeakSet();
@@ -71,14 +72,38 @@ export class OpalLiveView {
   }
 
   disconnect() {
+    this.suspended = false;
+    this.stop();
+  }
+
+  suspend() {
+    if (this.stopped) return;
+    this.suspended = true;
+    this.stop();
+  }
+
+  resume() {
+    if (!this.suspended) return;
+    this.suspended = false;
+    this.stopped = false;
+    window.addEventListener("popstate", this.popStateHandler);
+    this.connect();
+  }
+
+  stop() {
+    if (this.stopped) return;
     this.stopped = true;
     this.connectionGeneration += 1;
     if (this.reconnectTimer) window.clearTimeout(this.reconnectTimer);
     this.reconnectTimer = null;
     this.stopHeartbeat();
     this.disconnectHooks();
+    this.failPendingEvents(1000);
+    this.root.dataset.opalStatus = "disconnected";
     window.removeEventListener("popstate", this.popStateHandler);
-    if (this.socket) this.socket.close(1000, "page unload");
+    const socket = this.socket;
+    this.socket = null;
+    if (socket) socket.close(1000, "page unload");
   }
 
   bindEvents() {
@@ -1040,4 +1065,5 @@ export function connectAll(root = document, {hooks = globalThis.OpalLiveViewHook
 }
 
 const instances = connectAll();
-window.addEventListener("pagehide", () => instances.forEach(instance => instance.disconnect()));
+window.addEventListener("pagehide", () => instances.forEach(instance => instance.suspend()));
+window.addEventListener("pageshow", () => instances.forEach(instance => instance.resume()));
