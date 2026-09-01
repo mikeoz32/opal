@@ -326,6 +326,94 @@ describe "Phoenix LiveView protocol compatibility" do
     end
   end
 
+  it "encodes native keyed comprehension inserts, moves, updates, and removals" do
+    live_view_spec_server("k" * 32) do |address|
+      response = HTTP::Client.get("http://#{address.address}:#{address.port}/keyed")
+      websocket = phoenix_socket(
+        address,
+        HTTP::Headers{"Origin" => "http://#{address.address}:#{address.port}"}
+      )
+      joined = phoenix_response(
+        phoenix_join(websocket, live_session(response.body), "http://#{address.address}:#{address.port}/keyed")
+      )["rendered"]["0"].as_h
+      joined["s"].as_a.map(&.as_s).should eq([%(<li id="keyed-), %(">), "</li>"])
+      keyed = joined["k"].as_h
+      keyed["kc"].as_i.should eq(3)
+      keyed["0"]["0"].as_s.should eq("first")
+      keyed["0"]["1"].as_s.should eq("First")
+
+      phoenix_send(websocket, "1", "2", "lv:opal-live-root", "event", {
+        type: "click", event: "reverse_update", value: nil,
+      })
+      moved = phoenix_response(phoenix_receive(websocket))["diff"]["0"].as_h
+      moved.has_key?("s").should be_false
+      moved["k"]["kc"].as_i.should eq(3)
+      moved["k"]["km"].as_bool.should be_true
+      moved["k"]["0"].as_a[0].as_i.should eq(2)
+      moved["k"]["0"].as_a[1]["1"].as_s.should eq("Third updated")
+      moved["k"]["2"].as_i.should eq(0)
+
+      phoenix_send(websocket, "1", "3", "lv:opal-live-root", "event", {
+        type: "click", event: "update_second", value: nil,
+      })
+      updated = phoenix_response(phoenix_receive(websocket))["diff"]["0"].as_h
+      updated.has_key?("s").should be_false
+      updated["k"]["kc"].as_i.should eq(3)
+      updated["k"]["1"]["1"].as_s.should eq("Second updated")
+
+      phoenix_send(websocket, "1", "4", "lv:opal-live-root", "event", {
+        type: "click", event: "remove_third", value: nil,
+      })
+      removed = phoenix_response(phoenix_receive(websocket))["diff"]["0"].as_h
+      removed["k"]["kc"].as_i.should eq(2)
+      removed["k"]["0"].as_i.should eq(1)
+      removed["k"]["1"].as_i.should eq(2)
+
+      phoenix_send(websocket, "1", "5", "lv:opal-live-root", "event", {
+        type: "click", event: "append_fourth", value: nil,
+      })
+      inserted = phoenix_response(phoenix_receive(websocket))["diff"]["0"].as_h
+      inserted.has_key?("s").should be_false
+      inserted["k"]["kc"].as_i.should eq(3)
+      inserted["k"]["2"]["0"].as_s.should eq("fourth")
+      inserted["k"]["2"]["1"].as_s.should eq("Fourth")
+
+      phoenix_send(websocket, "1", "6", "lv:opal-live-root", "event", {
+        type: "click", event: "clear", value: nil,
+      })
+      cleared = phoenix_response(phoenix_receive(websocket))["diff"]["0"].as_h
+      cleared["s"].as_a.map(&.as_s).should eq([""])
+      cleared["k"]["kc"].as_i.should eq(0)
+
+      phoenix_send(websocket, "1", "7", "lv:opal-live-root", "event", {
+        type: "click", event: "append_fourth", value: nil,
+      })
+      restored = phoenix_response(phoenix_receive(websocket))["diff"]["0"].as_h
+      restored["s"].as_a.map(&.as_s).should eq([%(<li id="keyed-), %(">), "</li>"])
+      restored["k"]["kc"].as_i.should eq(1)
+      restored["k"]["0"]["0"].as_s.should eq("fourth")
+      websocket.close
+    ensure
+      websocket.try(&.close)
+    end
+  end
+
+  it "validates keyed comprehension keys and entry templates" do
+    one = "one"
+    two = "two"
+    item = LF::LiveView::HTML.rendered(%(<li>#{one}</li>))
+    expect_raises(ArgumentError, "duplicate key") do
+      LF::LiveView::HTML.keyed([{1, item}, {1, item}]) { |entry| entry }
+    end
+
+    expect_raises(ArgumentError, "same static template") do
+      LF::LiveView::HTML.keyed([
+        {1, LF::LiveView::HTML.rendered(%(<li>#{one}</li>))},
+        {2, LF::LiveView::HTML.rendered(%(<p>#{two}</p>))},
+      ]) { |entry| entry }
+    end
+  end
+
   it "uses the current join URL and handles client and server live patches" do
     live_view_spec_server("f" * 32) do |address|
       response = HTTP::Client.get(
