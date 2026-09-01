@@ -23,7 +23,7 @@ module LF::LiveView
 
     # Compatibility representation for views that still return a complete HTML
     # string. Since the HTML is static from the diff engine's perspective, any
-    # change produces a new fingerprint and a complete protocol-v2 snapshot.
+    # change produces a new fingerprint and a complete rendered snapshot.
     def self.opaque(html : String) : self
       new([html], [] of String)
     end
@@ -45,6 +45,27 @@ module LF::LiveView
           end
         end
       end
+    end
+
+    # Adds the upstream Phoenix component ownership markers to a stateful
+    # component's single root element. Component output is already flattened
+    # when embedded in its parent template, so this compatibility transform
+    # does not reduce the granularity of the current diff model.
+    # :nodoc:
+    def with_component_root(cid : Int64, view_id : String) : self
+      html = to_html
+      match = html.match(/\A(\s*(?:<!--(?s:.*?)-->\s*)*)<[A-Za-z][A-Za-z0-9:-]*/)
+      unless match
+        raise ArgumentError.new("A LiveView component must render one root HTML element")
+      end
+      insert_at = match.end(0)
+      marked = String.build do |output|
+        output << html[0...insert_at]
+        output << " data-phx-component=\"" << cid << "\" data-phx-view=\""
+        output << view_id << "\""
+        output << html[insert_at..]
+      end
+      Rendered.opaque(marked)
     end
 
     # Returns changed dynamic positions, or `nil` when the static template

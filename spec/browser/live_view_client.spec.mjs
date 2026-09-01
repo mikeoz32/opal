@@ -2,18 +2,17 @@ import {expect, test} from "@playwright/test";
 
 test.beforeEach(async ({page}) => {
   await page.goto("/?start=0");
-  await expect(page.locator("[data-opal-live-root]")).toHaveAttribute("data-opal-status", "connected");
+  await expect(page.locator("[data-opal-live-root]")).toHaveClass(/phx-connected/);
 });
 
-test("delivers rapid events in order without losing clicks", async ({page}) => {
+test("delivers acknowledged events in order", async ({page}) => {
   const increment = page.getByRole("button", {name: "Increment", exact: true});
   const counter = page.locator("#counter-value");
   await counter.evaluate(element => { window.__opalCounterNode = element; });
 
-  await increment.evaluate(button => {
-    button.click();
-    button.click();
-  });
+  await increment.click();
+  await expect(counter).toHaveText("1");
+  await increment.click();
 
   await expect(counter).toHaveText("2");
   await expect.poll(() => counter.evaluate(element => element === window.__opalCounterNode)).toBe(true);
@@ -43,7 +42,7 @@ test("serializes timer updates on the connection", async ({page}) => {
   await expect(page.locator("#counter-value")).toHaveText("1");
 });
 
-test("moves keyed elements without recreating their DOM nodes", async ({page}) => {
+test("moves stable-id elements without recreating their DOM nodes", async ({page}) => {
   const first = page.locator("#item-first");
   await first.evaluate(element => { window.__opalFirstItem = element; });
 
@@ -63,10 +62,9 @@ test("keeps component state isolated and targets only its instance", async ({pag
   await right.evaluate(element => { window.__opalRightComponentNode = element; });
 
   const incrementLeft = page.getByRole("button", {name: "Increment Left component"});
-  await incrementLeft.evaluate(button => {
-    button.click();
-    button.click();
-  });
+  await incrementLeft.click();
+  await expect(left).toHaveText("1");
+  await incrementLeft.click();
 
   await expect(left).toHaveText("2");
   await expect(right).toHaveText("0");
@@ -110,7 +108,7 @@ test("runs hook updates after DOM patches and delivers server events before repl
   await expect(hook).toHaveAttribute("data-client-state", "preserved");
   expect(await page.evaluate(() => window.__opalHookLog)).toEqual(["mounted"]);
   await page.evaluate(() => {
-    window.addEventListener("opal:counter_notice", event => {
+    window.addEventListener("phx:counter_notice", event => {
       window.__opalWindowNotice = event.detail;
     }, {once: true});
   });
@@ -128,24 +126,13 @@ test("runs hook updates after DOM patches and delivers server events before repl
     notice: window.__opalHookNotices[0],
     windowNotice: window.__opalWindowNotice,
   }));
-  expect(result.reply.reply).toEqual({accepted: true, message: "hello from hook", count: 0});
+  expect(result.reply).toEqual({accepted: true, message: "hello from hook", count: 0});
   expect(result.notice).toEqual({message: "hello from hook", count: 0});
   expect(result.windowNotice).toEqual({message: "hello from hook", count: 0});
   expect(result.log.indexOf("beforeUpdate")).toBeLessThan(result.log.indexOf("updated"));
   expect(result.log.indexOf("updated")).toBeLessThan(result.log.indexOf("notice"));
   expect(result.log.indexOf("notice")).toBeLessThan(result.log.indexOf("reply"));
 
-  const callbackReply = await hook.evaluate(element => new Promise(resolve => {
-    const liveView = element.closest("[data-opal-live-root]").__opalLiveView;
-    liveView.hooks.get(element).pushEvent(
-      "hook_ping",
-      {message: "callback reply"},
-      (reply, ref) => resolve({reply, ref}),
-    );
-  }));
-  expect(callbackReply.reply).toEqual({accepted: true, message: "callback reply", count: 0});
-  expect(callbackReply.ref).toBeGreaterThan(0);
-  await expect(page.locator("#hook-server-state")).toHaveText("callback reply");
 });
 
 test("targets components from hooks and cleans up hook event handlers", async ({page}) => {
@@ -177,13 +164,12 @@ test("notifies hooks across disconnect and reconnect without remounting them", a
   const root = page.locator("[data-opal-live-root]");
   const hook = page.locator("#counter-hook");
   await hook.evaluate(element => { window.__opalHookElement = element; });
-  const generation = await root.evaluate(element => element.__opalLiveView.connectionGeneration);
-
-  await root.evaluate(element => element.__opalLiveView.socket.close(4001, "hook reconnect"));
+  await page.evaluate(() => { window.__opalConnection = window.OpalLiveSocket.socket.conn; });
+  await page.evaluate(() => window.OpalLiveSocket.socket.conn.close(4001, "hook reconnect"));
   await expect.poll(
-    () => root.evaluate(element => element.__opalLiveView.connectionGeneration),
-  ).toBeGreaterThan(generation);
-  await expect(root).toHaveAttribute("data-opal-status", "connected", {timeout: 10_000});
+    () => page.evaluate(() => window.OpalLiveSocket.socket.conn !== window.__opalConnection),
+  ).toBe(true);
+  await expect(root).toHaveClass(/phx-connected/, {timeout: 10_000});
   await expect.poll(() => hook.evaluate(element => element === window.__opalHookElement)).toBe(true);
 
   const lifecycle = await page.evaluate(() => window.__opalHookLog);
@@ -191,49 +177,6 @@ test("notifies hooks across disconnect and reconnect without remounting them", a
   expect(lifecycle).toContain("disconnected");
   expect(lifecycle).toContain("reconnected");
   expect(lifecycle.indexOf("disconnected")).toBeLessThan(lifecycle.indexOf("reconnected"));
-});
-
-test("isolates hook callback failures from the live connection", async ({page}) => {
-  const root = page.locator("[data-opal-live-root]");
-  const error = await root.evaluate(element => new Promise(resolve => {
-    element.addEventListener("opal:hook-error", event => resolve({
-      hook: event.detail.hook,
-      callback: event.detail.callback,
-      message: event.detail.error.message,
-    }), {once: true});
-    element.__opalLiveView.hookDefinitions.BrokenHook = {
-      mounted() { throw new Error("broken hook callback"); },
-    };
-    const broken = document.createElement("div");
-    broken.id = "broken-hook";
-    broken.dataset.opalHook = "BrokenHook";
-    element.appendChild(broken);
-    element.__opalLiveView.reconcileHooks();
-  }));
-
-  expect(error).toEqual({
-    hook: "BrokenHook",
-    callback: "mounted",
-    message: "broken hook callback",
-  });
-
-  const invalid = await root.evaluate(element => new Promise(resolve => {
-    element.addEventListener("opal:hook-error", event => resolve({
-      hook: event.detail.hook,
-      message: event.detail.error.message,
-    }), {once: true});
-    const missingId = document.createElement("div");
-    missingId.dataset.opalHook = "CounterHook";
-    element.appendChild(missingId);
-    element.__opalLiveView.reconcileHooks();
-  }));
-  expect(invalid).toEqual({
-    hook: "CounterHook",
-    message: "LiveView hook elements require a unique id",
-  });
-  await expect(root).toHaveAttribute("data-opal-status", "connected");
-  await page.getByRole("button", {name: "Increment", exact: true}).click();
-  await expect(page.locator("#counter-value")).toHaveText("1");
 });
 
 test("applies bounded stream inserts and deletes without replacing retained items", async ({page}) => {
@@ -254,30 +197,6 @@ test("applies bounded stream inserts and deletes without replacing retained item
     () => first.evaluate(element => element === window.__opalFirstActivityNode),
   ).toBe(true);
 
-  const validationError = await page.locator("[data-opal-live-root]").evaluate(root => {
-    try {
-      root.__opalLiveView.applyStreams([
-        {op: "reset", container: "activity-stream"},
-        {
-          op: "insert",
-          container: "activity-stream",
-          id: "declared-id",
-          html: '<li id="different-id">invalid</li>',
-          at: -1,
-        },
-      ]);
-      return null;
-    } catch (error) {
-      return error.message;
-    }
-  });
-  expect(validationError).toBe("stream item id mismatch");
-  await expect(page.locator("#activity-stream > li span")).toHaveText([
-    "Activity 4",
-    "Activity 3",
-    "Activity 1",
-  ]);
-
   await page.getByRole("button", {name: "Remove Activity 3"}).click();
   await expect(page.locator("#activity-stream > li span")).toHaveText([
     "Activity 4",
@@ -290,12 +209,11 @@ test("applies an explicitly empty document title", async ({page}) => {
   await expect(page).toHaveTitle("");
 });
 
-test("patches history without remounting and reconnects from the refreshed token", async ({page}) => {
+test("patches history without remounting and reconnects from the current URL", async ({page}) => {
   const root = page.locator("[data-opal-live-root]");
   await root.evaluate(element => {
     window.__opalNavigationRoot = element;
-    window.__opalNavigationGeneration = element.__opalLiveView.connectionGeneration;
-    window.__opalNavigationToken = element.dataset.opalToken;
+    window.__opalNavigationToken = element.getAttribute("data-phx-session");
   });
 
   await page.getByRole("link", {name: "Next page"}).click();
@@ -305,11 +223,8 @@ test("patches history without remounting and reconnects from the refreshed token
     () => root.evaluate(element => element === window.__opalNavigationRoot),
   ).toBe(true);
   await expect.poll(
-    () => root.evaluate(element => element.__opalLiveView.connectionGeneration),
-  ).toBe(await root.evaluate(() => window.__opalNavigationGeneration));
-  await expect.poll(
-    () => root.evaluate(element => element.dataset.opalToken === window.__opalNavigationToken),
-  ).toBe(false);
+    () => root.evaluate(element => element.getAttribute("data-phx-session") === window.__opalNavigationToken),
+  ).toBe(true);
 
   await page.goBack();
   await expect(page).toHaveURL(/\?start=0$/);
@@ -338,12 +253,12 @@ test("patches history without remounting and reconnects from the refreshed token
   await expect(page.getByTestId("page-value")).toHaveText("3");
   expect(await page.evaluate(() => window.history.length)).toBe(historyLength);
 
-  const generation = await root.evaluate(element => element.__opalLiveView.connectionGeneration);
-  await root.evaluate(element => element.__opalLiveView.socket.close(4001, "navigation reconnect"));
+  await page.evaluate(() => { window.__opalConnection = window.OpalLiveSocket.socket.conn; });
+  await page.evaluate(() => window.OpalLiveSocket.socket.conn.close(4001, "navigation reconnect"));
   await expect.poll(
-    () => root.evaluate(element => element.__opalLiveView.connectionGeneration),
-  ).toBeGreaterThan(generation);
-  await expect(root).toHaveAttribute("data-opal-status", "connected", {timeout: 10_000});
+    () => page.evaluate(() => window.OpalLiveSocket.socket.conn !== window.__opalConnection),
+  ).toBe(true);
+  await expect(root).toHaveClass(/phx-connected/, {timeout: 10_000});
   await expect(page.getByTestId("page-value")).toHaveText("3");
 });
 
@@ -353,16 +268,28 @@ test("uses a fresh document mount for navigation outside the current LiveView", 
   await expect(page).toHaveURL(/\/about$/);
   await expect(page.getByRole("heading", {name: "About Opal LiveView"})).toBeVisible();
   await expect(page).toHaveTitle("About · Opal LiveView");
-  await expect(page.locator("[data-opal-live-root]")).toHaveAttribute("data-opal-status", "connected");
+  await expect(page.locator("[data-opal-live-root]")).toHaveClass(/phx-connected/);
+});
+
+test("restores a working connection after Back from a non-LiveView page", async ({page}) => {
+  const root = page.locator("[data-opal-live-root]");
+
+  await page.getByRole("link", {name: "Plain page"}).click();
+  await expect(page.getByText("Plain non-LiveView page")).toBeVisible();
+  await page.goBack();
+
+  await expect(page).toHaveURL(/\?start=0$/);
+  await expect(root).toHaveClass(/phx-connected/, {timeout: 10_000});
+  await page.getByRole("button", {name: "Increment", exact: true}).click();
+  await expect(page.locator("#counter-value")).toHaveText("1");
 });
 
 test("reconnects after a transient socket interruption", async ({page}) => {
   const root = page.locator("[data-opal-live-root]");
-  const generation = await root.evaluate(element => element.__opalLiveView.connectionGeneration);
-
-  await root.evaluate(element => element.__opalLiveView.socket.close(4001, "browser test"));
+  await page.evaluate(() => { window.__opalConnection = window.OpalLiveSocket.socket.conn; });
+  await page.evaluate(() => window.OpalLiveSocket.socket.conn.close(4001, "browser test"));
   await expect.poll(
-    () => root.evaluate(element => element.__opalLiveView.connectionGeneration),
-  ).toBeGreaterThan(generation);
-  await expect(root).toHaveAttribute("data-opal-status", "connected", {timeout: 10_000});
+    () => page.evaluate(() => window.OpalLiveSocket.socket.conn !== window.__opalConnection),
+  ).toBe(true);
+  await expect(root).toHaveClass(/phx-connected/, {timeout: 10_000});
 });

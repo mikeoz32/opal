@@ -114,4 +114,28 @@ describe LF::LiveView::ConnectionRuntime do
     runtime.send_info(LF::LiveView::Info.new("late")).should be_false
     runtime.refresh.should be_false
   end
+
+  it "rolls unacknowledged stream mutations back to the committed render" do
+    runtime = LF::LiveView::ConnectionRuntime.new
+    runtime.stream_reset("items")
+    runtime.stream_insert(
+      "items",
+      "item-1",
+      LF::LiveView::Rendered.opaque(%(<li id="item-1">first</li>))
+    )
+    runtime.take_stream_operations
+
+    runtime.stream_insert(
+      "items",
+      "item-2",
+      LF::LiveView::Rendered.opaque(%(<li id="item-2">second</li>))
+    )
+    runtime.clear_stream_operations
+
+    contents = runtime.stream_contents("items").value
+    contents.should contain("item-1")
+    contents.should_not contain("item-2")
+  ensure
+    runtime.try(&.disconnect)
+  end
 end

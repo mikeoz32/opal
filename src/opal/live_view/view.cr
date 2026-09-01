@@ -161,9 +161,8 @@ module LF::LiveView
       @runtime.stream_reset(container_id)
     end
 
-    # Renders the currently queued contents for the disconnected HTTP response.
-    # The same operations are later sent to a protocol-v2 client. Stream item
-    # markup is already trusted framework output and is not escaped again.
+    # Renders the current stream contents into the normal LiveView tree. Stream
+    # item markup is already trusted framework output and is not escaped again.
     protected def stream_contents(container_id : String) : HTML::Safe
       @runtime.stream_contents(container_id)
     end

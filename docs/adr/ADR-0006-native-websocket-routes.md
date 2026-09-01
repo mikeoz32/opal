@@ -109,9 +109,10 @@ semantics, and standalone server assembly remain unchanged.
 
 This native route layer does not implement channels, DOM rendering, reconnect
 state, presence, heartbeat policy, or a replacement for Crystal's callback
-API. ADR-0007 defines Opal LiveView as an independent layer above it. Opal
-LiveView deliberately does not implement the Phoenix wire protocol or depend
-on Phoenix's JavaScript client.
+API. ADR-0007 originally defined Opal LiveView as an independent layer above
+it; ADR-0009 supersedes that browser/wire decision with a Phoenix LiveView
+client-compatible server subset. The native WebSocket route itself remains
+framework-independent.
 
 ## Consequences
 

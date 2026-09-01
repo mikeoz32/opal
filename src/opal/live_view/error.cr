@@ -68,4 +68,10 @@ module LF::LiveView
 
   class ProtocolError < Error
   end
+
+  class UnsupportedDataError < ProtocolError
+  end
+
+  class MessageTooBigError < ProtocolError
+  end
 end
