@@ -422,6 +422,48 @@ class LiveViewSpecStreams < LF::LiveView::View
   end
 end
 
+class LiveViewSpecKeyed < LF::LiveView::View
+  @items = [
+    {"first", "First"},
+    {"second", "Second"},
+    {"third", "Third"},
+  ]
+
+  def handle_event(event : String, value : JSON::Any) : Nil
+    case event
+    when "reverse"
+      @items.reverse!
+    when "reverse_update"
+      @items.reverse!
+      @items.map! do |id, label|
+        {id, id == "third" ? "Third updated" : label}
+      end
+    when "update_second"
+      @items.map! do |id, label|
+        {id, id == "second" ? "Second updated" : label}
+      end
+    when "remove_third"
+      @items.reject! { |id, _label| id == "third" }
+    when "append_fourth"
+      @items << {"fourth", "Fourth"}
+    when "clear"
+      @items.clear
+    else
+      super
+    end
+  end
+
+  def render : LF::LiveView::Rendered
+    items = LF::LiveView::HTML.keyed(@items) do |item|
+      id, label = item
+      {id, LF::LiveView::HTML.rendered(%(<li id="keyed-#{id}">#{label}</li>))}
+    end
+    LF::LiveView::HTML.rendered(
+      %(<ul id="keyed-spec">#{items}</ul>)
+    )
+  end
+end
+
 class LiveViewSpecNavigation < LF::LiveView::View
   @section = ""
   @tab = ""
@@ -494,6 +536,7 @@ def live_view_spec_server(
   endpoint.page("/failure", LiveViewSpecFailure) { |_scope| LiveViewSpecFailure.new }
   endpoint.page("/components", LiveViewSpecComponents) { |_scope| LiveViewSpecComponents.new }
   endpoint.page("/streams", LiveViewSpecStreams) { |_scope| LiveViewSpecStreams.new }
+  endpoint.page("/keyed", LiveViewSpecKeyed) { |_scope| LiveViewSpecKeyed.new }
   endpoint.page("/hooks", LiveViewSpecHooks) { |_scope| LiveViewSpecHooks.new }
   endpoint.page(
     "/navigation/:section",

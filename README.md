@@ -337,8 +337,9 @@ injects dependencies into separate request and WebSocket instances, serves the
 initial HTML and `/_opal/live.js`, and mounts the socket at `/_opal/live`.
 Configure `live_view.secret` with at least 32 bytes. See the
 [LiveView guide](docs/live-view.md) for lifecycle, structural rendering,
-nested stateful components, streams, live navigation, JavaScript hooks,
-security, forms, reconnect, manual assembly, and current feature boundaries.
+keyed comprehensions, nested stateful components, streams, live navigation,
+JavaScript hooks, security, forms, reconnect, manual assembly, and current
+feature boundaries.
 
 ## DI Container
 
