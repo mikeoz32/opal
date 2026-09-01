@@ -223,11 +223,9 @@ class CounterLive < LF::LiveView::View
       {"third", "Third keyed item"},
     ]
     items.reverse! if @items_reversed
-    items_markup = String.build do |html|
-      items.each do |id, label|
-        html << %(<li id="item-#{LF::LiveView::HTML.escape(id)}">)
-        html << LF::LiveView::HTML.escape(label) << "</li>"
-      end
+    keyed_items = LF::LiveView::HTML.keyed(items) do |item|
+      id, label = item
+      {id, LF::LiveView::HTML.rendered(%(<li id="item-#{id}">#{label}</li>))}
     end
 
     LF::LiveView::HTML.rendered(<<-HTML)
@@ -281,7 +279,7 @@ class CounterLive < LF::LiveView::View
         <ul id="activity-stream" data-opal-update="stream">#{activity_items}</ul>
       </section>
       <button type="button" data-opal-click="reverse_items">Reverse keyed items</button>
-      <ul id="keyed-items">#{LF::LiveView::HTML.raw(items_markup)}</ul>
+      <ul id="keyed-items">#{keyed_items}</ul>
     HTML
   end
 

@@ -3,6 +3,82 @@ require "json"
 require "./stream"
 
 module LF::LiveView
+  # One stable-key entry in a native Phoenix keyed comprehension.
+  # :nodoc:
+  struct KeyedEntry
+    getter key : String
+    getter rendered : Rendered
+
+    def initialize(@key, @rendered)
+    end
+  end
+
+  # A collection rendered with one shared static template and stable entry
+  # keys. Phoenix can move retained entries and patch their changed dynamics
+  # without resending or recreating their DOM nodes.
+  class KeyedContent
+    getter entries : Array(KeyedEntry)
+    getter fingerprint : String
+
+    @statics : Array(String)
+
+    def initialize(entries : Array(KeyedEntry))
+      @entries = entries.dup
+      validate_unique_keys!
+
+      if first = @entries.first?
+        @statics = first.rendered.statics
+        @fingerprint = first.rendered.fingerprint
+        unless @entries.all? { |entry| entry.rendered.fingerprint == @fingerprint }
+          raise ArgumentError.new("Every keyed comprehension entry must use the same static template")
+        end
+      else
+        @statics = [""]
+        @fingerprint = Digest::SHA256.hexdigest(@statics.to_json)
+      end
+    end
+
+    def statics : Array(String)
+      @statics.dup
+    end
+
+    def to_html : String
+      String.build do |html|
+        @entries.each { |entry| html << entry.rendered.to_html }
+      end
+    end
+
+    def ==(other : self) : Bool
+      @fingerprint == other.@fingerprint && @entries == other.@entries
+    end
+
+    # :nodoc:
+    def commit_streams : Nil
+      @entries.each(&.rendered.commit_streams)
+    end
+
+    # :nodoc:
+    def stream_container_ids : Array(String)
+      @entries.flat_map(&.rendered.stream_container_ids)
+    end
+
+    # :nodoc:
+    def component_contents : Hash(Int64, ComponentContent)
+      components = {} of Int64 => ComponentContent
+      @entries.each { |entry| components.merge!(entry.rendered.component_contents) }
+      components
+    end
+
+    private def validate_unique_keys! : Nil
+      seen = Set(String).new
+      @entries.each do |entry|
+        unless seen.add?(entry.key)
+          raise ArgumentError.new("Found duplicate key #{entry.key} in keyed comprehension")
+        end
+      end
+    end
+  end
+
   # A connection-local stateful component reference embedded in its parent
   # render. Phoenix receives the CID in the parent tree and the component's
   # own structural diff through the top-level `c` table.
@@ -27,7 +103,7 @@ module LF::LiveView
     end
   end
 
-  alias RenderedDynamic = String | StreamContent | ComponentContent
+  alias RenderedDynamic = String | StreamContent | ComponentContent | KeyedContent
 
   # A server-rendered template split into immutable static fragments and
   # escaped dynamic values. Matching fingerprints can be updated over the wire
@@ -87,6 +163,7 @@ module LF::LiveView
             when String           then dynamic
             when StreamContent    then dynamic.to_html
             when ComponentContent then dynamic.to_html
+            when KeyedContent     then dynamic.to_html
             end
           end
         end
@@ -134,6 +211,7 @@ module LF::LiveView
         case dynamic
         when StreamContent    then dynamic.commit!
         when ComponentContent then dynamic.rendered.commit_streams
+        when KeyedContent     then dynamic.commit_streams
         end
       end
     end
@@ -145,6 +223,7 @@ module LF::LiveView
         case dynamic
         when StreamContent    then container_ids << dynamic.container_id
         when ComponentContent then container_ids.concat(dynamic.rendered.stream_container_ids)
+        when KeyedContent     then container_ids.concat(dynamic.stream_container_ids)
         end
       end
       container_ids
@@ -154,9 +233,13 @@ module LF::LiveView
     def component_contents : Hash(Int64, ComponentContent)
       components = {} of Int64 => ComponentContent
       @dynamics.each do |dynamic|
-        next unless dynamic.is_a?(ComponentContent)
-        components[dynamic.cid] = dynamic
-        components.merge!(dynamic.rendered.component_contents)
+        case dynamic
+        when ComponentContent
+          components[dynamic.cid] = dynamic
+          components.merge!(dynamic.rendered.component_contents)
+        when KeyedContent
+          components.merge!(dynamic.component_contents)
+        end
       end
       components
     end

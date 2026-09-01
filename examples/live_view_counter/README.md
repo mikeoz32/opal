@@ -21,7 +21,7 @@ Open <http://127.0.0.1:8084/?start=2>. The example demonstrates:
 - debounced form changes and form submit;
 - a delayed server-side state change using serialized `send_info`;
 - Phoenix structural diffs and upstream focused-input preservation;
-- stable-id list reordering without recreating DOM nodes;
+- native keyed-comprehension list reordering without recreating DOM nodes;
 - native component-only diffs, parent-scoped nested state, and deep targeted
   events;
 - native Phoenix stream insertion, deletion, limits, and retained DOM identity;

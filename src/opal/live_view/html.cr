@@ -47,8 +47,28 @@ module LF::LiveView::HTML
     value
   end
 
+  def dynamic(value : LF::LiveView::KeyedContent) : LF::LiveView::KeyedContent
+    value
+  end
+
   def dynamic(value) : String
     escape(value)
+  end
+
+  # Renders a collection as an upstream Phoenix keyed comprehension. The block
+  # returns a stable key and one structured render using the same static
+  # template for every entry.
+  #
+  #     rows = HTML.keyed(projects) do |project|
+  #       {project.id, HTML.rendered(%(<li id="project-#{project.id}">#{project.name}</li>))}
+  #     end
+  def keyed(items, &block) : LF::LiveView::KeyedContent
+    entries = [] of LF::LiveView::KeyedEntry
+    items.each do |item|
+      key, rendered = yield item
+      entries << LF::LiveView::KeyedEntry.new(key.inspect, rendered)
+    end
+    LF::LiveView::KeyedContent.new(entries)
   end
 
   # Compiles an interpolated Crystal string into a structural LiveView render.
