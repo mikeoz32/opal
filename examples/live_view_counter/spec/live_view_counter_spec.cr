@@ -17,6 +17,7 @@ describe CounterLive do
     rendered.should contain("Left component")
     rendered.should contain("Right component")
     rendered.should contain("data-opal-patch")
+    rendered.should contain(%(data-opal-hook="CounterHook"))
     view.title.should eq("Counter 3 · Opal")
   ensure
     view.try(&.__opal_disconnect)

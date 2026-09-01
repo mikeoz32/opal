@@ -167,6 +167,9 @@ class LiveViewSpecComponent < LF::LiveView::Component
       @count += 1
     when "patch_parent"
       push_patch("/components?source=component")
+    when "hook_reply"
+      push_event("component_notice", {id: id, count: @count})
+      reply({id: id, count: @count})
     else
       super
     end
@@ -174,6 +177,29 @@ class LiveViewSpecComponent < LF::LiveView::Component
 
   def destroy : Nil
     @@destroy_count += 1
+  end
+end
+
+class LiveViewSpecHooks < LF::LiveView::View
+  @message = "waiting"
+
+  def handle_event(event : String, value : JSON::Any) : Nil
+    case event
+    when "hook_event"
+      @message = value.as_h["message"].as_s
+      push_event("hook_notice", {message: @message})
+      reply({accepted: true, message: @message})
+    when "null_reply"
+      reply
+    else
+      super
+    end
+  end
+
+  def render : LF::LiveView::Rendered
+    LF::LiveView::HTML.rendered(
+      %(<output id="hook-state" data-opal-hook="SpecHook">#{@message}</output>)
+    )
   end
 end
 
@@ -313,6 +339,7 @@ private def live_view_spec_server(
   endpoint.page("/failure", LiveViewSpecFailure) { |_scope| LiveViewSpecFailure.new }
   endpoint.page("/components", LiveViewSpecComponents) { |_scope| LiveViewSpecComponents.new }
   endpoint.page("/streams", LiveViewSpecStreams) { |_scope| LiveViewSpecStreams.new }
+  endpoint.page("/hooks", LiveViewSpecHooks) { |_scope| LiveViewSpecHooks.new }
   endpoint.page(
     "/navigation/:section",
     LiveViewSpecNavigation,
@@ -616,7 +643,102 @@ describe LF::LiveView do
       component_patch["version"].as_i64.should eq(5)
       component_patch["navigation"]["kind"].as_s.should eq("patch")
       component_patch["navigation"]["to"].as_s.should eq("/components?source=component")
+
+      websocket.send({
+        type:    "event",
+        event:   "hook_reply",
+        target:  restored_target,
+        value:   nil,
+        version: 5,
+        ref:     7,
+      }.to_json)
+      component_reply = JSON.parse(websocket.receive.as(String))
+      component_reply["version"].as_i64.should eq(6)
+      component_reply["reply"].as_h.should eq({
+        "id"    => JSON::Any.new("right"),
+        "count" => JSON::Any.new(0_i64),
+      })
+      component_event = component_reply["events"].as_a.first
+      component_event["event"].as_s.should eq("component_notice")
+      component_event["payload"]["id"].as_s.should eq("right")
       websocket.close
+    ensure
+      websocket.try(&.close)
+    end
+  end
+
+  it "replies to hook events and pushes application events after protocol-v2 renders" do
+    live_view_spec_server("h" * 32) do |address|
+      response = HTTP::Client.get("http://#{address.address}:#{address.port}/hooks")
+      token = response.body.match(/data-opal-token="([^"]+)"/).not_nil![1]
+      websocket = HTTP::WebSocket.new(
+        "127.0.0.1",
+        "/_opal/live",
+        port: address.port,
+        headers: HTTP::Headers{"Origin" => "http://#{address.address}:#{address.port}"}
+      )
+      websocket.send({type: "join", protocol: 2, token: token}.to_json)
+      JSON.parse(websocket.receive.as(String))["version"].as_i64.should eq(0)
+
+      websocket.send({
+        type:    "event",
+        event:   "hook_event",
+        value:   {message: "from hook"},
+        version: 0,
+        ref:     1,
+      }.to_json)
+      rendered = JSON.parse(websocket.receive.as(String))
+      rendered["version"].as_i64.should eq(1)
+      rendered["ref"].as_i64.should eq(1)
+      rendered["diff"].as_h.should eq({"0" => JSON::Any.new("from hook")})
+      rendered["reply"].as_h.should eq({
+        "accepted" => JSON::Any.new(true),
+        "message"  => JSON::Any.new("from hook"),
+      })
+      pushed = rendered["events"].as_a.first
+      pushed["event"].as_s.should eq("hook_notice")
+      pushed["payload"].as_h.should eq({"message" => JSON::Any.new("from hook")})
+
+      websocket.send({
+        type:    "event",
+        event:   "null_reply",
+        value:   nil,
+        version: 1,
+        ref:     2,
+      }.to_json)
+      null_reply = JSON.parse(websocket.receive.as(String))
+      null_reply.as_h.has_key?("reply").should be_true
+      null_reply["reply"].raw.should be_nil
+      websocket.close
+    ensure
+      websocket.try(&.close)
+    end
+  end
+
+  it "rejects custom events and replies for legacy protocol clients" do
+    live_view_spec_server("i" * 32) do |address|
+      response = HTTP::Client.get("http://#{address.address}:#{address.port}/hooks")
+      token = response.body.match(/data-opal-token="([^"]+)"/).not_nil![1]
+      websocket = HTTP::WebSocket.new(
+        "127.0.0.1",
+        "/_opal/live",
+        port: address.port,
+        headers: HTTP::Headers{"Origin" => "http://#{address.address}:#{address.port}"}
+      )
+      close = Channel(HTTP::WebSocket::CloseCode).new(1)
+      websocket.on_close { |code, _reason| close.send(code) }
+      websocket.send({type: "join", protocol: 1, token: token}.to_json)
+      websocket.receive
+
+      websocket.send({
+        type:    "event",
+        event:   "hook_event",
+        value:   {message: "legacy"},
+        version: 0,
+        ref:     1,
+      }.to_json)
+      websocket.receive?.should be_nil
+      close.receive.should eq(HTTP::WebSocket::CloseCode::ProtocolError)
     ensure
       websocket.try(&.close)
     end

@@ -3,7 +3,7 @@ const HEARTBEAT_INTERVAL = 30000;
 const PROTOCOL_VERSION = 2;
 
 export class OpalLiveView {
-  constructor(root) {
+  constructor(root, {hooks = {}} = {}) {
     this.root = root;
     this.token = root.dataset.opalToken;
     this.socketPath = root.dataset.opalSocket;
@@ -20,6 +20,12 @@ export class OpalLiveView {
     this.eventQueue = [];
     this.inFlightEvent = null;
     this.stopped = false;
+    this.hookDefinitions = hooks && typeof hooks === "object" ? hooks : {};
+    this.hooks = new Map();
+    this.invalidHookElements = new WeakSet();
+    this.disconnectedHooks = null;
+    this.nextHookEventRef = 0;
+    this.pendingUpdatedHooks = [];
     this.currentResource = this.locationResource();
     this.navigationMarker = root.id || "opal-live-root";
     this.popStateHandler = () => this.onPopState();
@@ -54,6 +60,7 @@ export class OpalLiveView {
       if (!this.currentConnection(socket, generation)) return;
       this.stopHeartbeat();
       this.root.dataset.opalStatus = "disconnected";
+      this.disconnectHooks();
       this.failPendingEvents(event.code);
       if (!this.stopped && this.locationResource() !== this.currentResource) {
         window.location.reload();
@@ -69,6 +76,7 @@ export class OpalLiveView {
     if (this.reconnectTimer) window.clearTimeout(this.reconnectTimer);
     this.reconnectTimer = null;
     this.stopHeartbeat();
+    this.disconnectHooks();
     window.removeEventListener("popstate", this.popStateHandler);
     if (this.socket) this.socket.close(1000, "page unload");
   }
@@ -127,10 +135,81 @@ export class OpalLiveView {
   }
 
   pushEvent(event, value = {}, target = null) {
-    if (!event || this.root.dataset.opalStatus !== "connected") return false;
-    this.eventQueue.push({type: "event", event, value, target, ref: ++this.nextEventRef});
+    const pending = this.enqueueEvent(event, value, target);
+    return pending !== null;
+  }
+
+  enqueueEvent(event, value, target, completion = {}) {
+    if (typeof event !== "string" || event.length === 0) return null;
+    if (this.root.dataset.opalStatus !== "connected") return null;
+    let normalizedValue;
+    try {
+      normalizedValue = JSON.parse(JSON.stringify(value));
+    } catch (_) {
+      return null;
+    }
+    const pending = {
+      type: "event",
+      event,
+      value: normalizedValue,
+      target,
+      ref: ++this.nextEventRef,
+      ...completion,
+    };
+    this.eventQueue.push(pending);
     this.flushEvents();
-    return true;
+    return pending;
+  }
+
+  pushHookEvent(hook, event, value = {}, callback = null, target = null) {
+    if (callback !== null && typeof callback !== "function") {
+      throw new TypeError("LiveView hook reply callback must be a function");
+    }
+
+    if (callback) {
+      const pending = this.enqueueEvent(event, value, target, {hook, callback});
+      if (!pending) this.reportHookError(hook, "pushEvent", new Error("LiveView is not connected"));
+      return pending?.ref ?? null;
+    }
+
+    return new Promise((resolve, reject) => {
+      const pending = this.enqueueEvent(event, value, target, {hook, resolve, reject});
+      if (!pending) reject(new Error("LiveView is not connected or the event payload is invalid"));
+    });
+  }
+
+  pushHookEventTo(hook, selectorOrTarget, event, value = {}, callback = null) {
+    let targets;
+    if (typeof selectorOrTarget === "string") {
+      try {
+        targets = Array.from(this.root.querySelectorAll(selectorOrTarget));
+      } catch (_) {
+        targets = [];
+      }
+    } else if (selectorOrTarget instanceof Element && this.root.contains(selectorOrTarget)) {
+      targets = [selectorOrTarget];
+    } else {
+      targets = [];
+    }
+
+    if (targets.length === 0) {
+      const error = new Error("LiveView hook target was not found");
+      if (callback) {
+        this.reportHookError(hook, "pushEventTo", error);
+        return [];
+      }
+      return Promise.reject(error);
+    }
+
+    const operations = targets.map(targetElement => {
+      const target = this.componentTarget(targetElement);
+      if (target === undefined) {
+        if (callback) return null;
+        return Promise.reject(new Error("LiveView hook target is invalid"));
+      }
+      return this.pushHookEvent(hook, event, value, callback, target);
+    });
+    return callback ? operations.filter(value => value !== null) : Promise.allSettled(operations);
   }
 
   pushPatch(to, {history = "push"} = {}) {
@@ -204,7 +283,11 @@ export class OpalLiveView {
       if (this.inFlightEvent && message.ref === this.inFlightEvent.ref) {
         const pending = this.inFlightEvent;
         this.inFlightEvent = null;
-        if (message.status === "stale") this.eventQueue.unshift(pending);
+        if (message.status === "stale") {
+          this.eventQueue.unshift(pending);
+        } else {
+          this.resolvePendingEvent(pending, message);
+        }
       }
       this.flushEvents();
     } else if (message.type === "heartbeat") {
@@ -213,6 +296,7 @@ export class OpalLiveView {
       if (this.inFlightEvent && message.ref === this.inFlightEvent.ref) {
         const pending = this.inFlightEvent;
         this.inFlightEvent = null;
+        this.rejectPendingEvent(pending, new Error(message.reason || "LiveView event failed"));
         this.flushEvents();
         if (pending.type === "patch" && pending.history === "none") {
           window.location.reload();
@@ -228,18 +312,23 @@ export class OpalLiveView {
       throw new Error("invalid render version");
     }
 
+    this.pendingUpdatedHooks = [];
     this.patchRoot(this.renderHTML(message));
     this.applyStreams(message.streams);
     this.version = message.version;
     this.root.dataset.opalStatus = "connected";
     if (Object.prototype.hasOwnProperty.call(message, "title")) document.title = message.title;
-    this.applyNavigation(message);
+    this.reconcileHooks();
+    this.flushUpdatedHooks();
+    this.reconnectHooks();
+    const navigating = this.applyNavigation(message);
+    if (!navigating) this.applyPushedEvents(message.events);
     this.root.dispatchEvent(new CustomEvent("opal:render", {detail: message}));
   }
 
   applyNavigation(message) {
     const navigation = message.navigation;
-    if (navigation === undefined) return;
+    if (navigation === undefined) return false;
     if (
       !navigation ||
       typeof navigation !== "object" ||
@@ -256,7 +345,7 @@ export class OpalLiveView {
       if (navigation.history === "none") throw new Error("invalid navigation history");
       this.root.dispatchEvent(new CustomEvent("opal:navigate", {detail: navigation}));
       this.navigateDocument(url, navigation.history === "replace");
-      return;
+      return true;
     }
 
     if (typeof message.token !== "string" || message.token.length === 0) {
@@ -277,6 +366,7 @@ export class OpalLiveView {
     this.token = message.token;
     this.root.dataset.opalToken = message.token;
     this.root.dispatchEvent(new CustomEvent("opal:navigate", {detail: navigation}));
+    return false;
   }
 
   renderHTML(message) {
@@ -371,12 +461,21 @@ export class OpalLiveView {
       return;
     }
 
+    const hook = this.hooks.get(current);
+    const hookUpdating = Boolean(
+      hook &&
+      hook.name === next.getAttribute("data-opal-hook") &&
+      !current.isEqualNode(next)
+    );
+    if (hookUpdating) this.invokeHook(hook, "beforeUpdate", next);
+
     const focused = document.activeElement === current;
     const controlState = focused ? this.controlState(current) : null;
     const streamOwned = current.hasAttribute("data-opal-stream") && next.hasAttribute("data-opal-stream");
     this.morphAttributes(current, next);
     if (!streamOwned) this.morphChildren(current, next);
     this.syncControl(current, next, controlState);
+    if (hookUpdating) this.pendingUpdatedHooks.push({element: current, hook});
   }
 
   applyStreams(operations) {
@@ -472,6 +571,176 @@ export class OpalLiveView {
 
   streamChild(container, id) {
     return Array.from(container.children).find(child => child.id === id) || null;
+  }
+
+  reconcileHooks() {
+    const elements = Array.from(this.root.querySelectorAll("[data-opal-hook]"));
+    const present = new Set(elements);
+
+    for (const [element, hook] of Array.from(this.hooks.entries())) {
+      if (!present.has(element) || element.dataset.opalHook !== hook.name) {
+        this.destroyHook(element, hook);
+      }
+    }
+
+    const idCounts = new Map();
+    for (const element of elements) {
+      if (element.id) idCounts.set(element.id, (idCounts.get(element.id) || 0) + 1);
+    }
+
+    for (const element of elements) {
+      const name = element.dataset.opalHook;
+      const definition = Object.prototype.hasOwnProperty.call(this.hookDefinitions, name)
+        ? this.hookDefinitions[name]
+        : null;
+      let error = null;
+      if (!element.id) {
+        error = new Error("LiveView hook elements require a unique id");
+      } else if (idCounts.get(element.id) !== 1) {
+        error = new Error("LiveView hook element ids must be unique inside the live root");
+      } else if (!definition || !["object", "function"].includes(typeof definition)) {
+        error = new Error(`Unknown LiveView hook: ${name}`);
+      }
+
+      if (error) {
+        if (this.hooks.has(element)) this.destroyHook(element, this.hooks.get(element));
+        if (!this.invalidHookElements.has(element)) {
+          this.invalidHookElements.add(element);
+          this.reportHookError({name, el: element}, "mounted", error);
+        }
+        continue;
+      }
+
+      if (this.hooks.has(element)) continue;
+
+      this.invalidHookElements.delete(element);
+      let hook;
+      try {
+        hook = typeof definition === "function" ? new definition() : Object.create(definition);
+        const eventHandlers = new Map();
+        Object.defineProperties(hook, {
+          name: {value: name},
+          el: {value: element, writable: true},
+          liveView: {value: this},
+          liveSocket: {value: this},
+          pushEvent: {
+            value: (event, payload = {}, callback = null) =>
+              this.pushHookEvent(hook, event, payload, callback),
+          },
+          pushEventTo: {
+            value: (target, event, payload = {}, callback = null) =>
+              this.pushHookEventTo(hook, target, event, payload, callback),
+          },
+          handleEvent: {
+            value: (event, callback) => this.addHookEventHandler(hook, eventHandlers, event, callback),
+          },
+          removeHandleEvent: {
+            value: ref => eventHandlers.delete(ref),
+          },
+          __opalEventHandlers: {value: eventHandlers},
+        });
+      } catch (creationError) {
+        this.invalidHookElements.add(element);
+        this.reportHookError({name, el: element}, "mounted", creationError);
+        continue;
+      }
+
+      this.hooks.set(element, hook);
+      this.invokeHook(hook, "mounted");
+    }
+  }
+
+  flushUpdatedHooks() {
+    const pending = this.pendingUpdatedHooks;
+    this.pendingUpdatedHooks = [];
+    for (const {element, hook} of pending) {
+      if (this.hooks.get(element) === hook && this.root.contains(element)) {
+        this.invokeHook(hook, "updated");
+      }
+    }
+  }
+
+  addHookEventHandler(hook, handlers, event, callback) {
+    if (typeof event !== "string" || event.length === 0 || typeof callback !== "function") {
+      throw new TypeError("LiveView hook event handlers require an event name and callback");
+    }
+    const ref = ++this.nextHookEventRef;
+    handlers.set(ref, {event, callback});
+    return ref;
+  }
+
+  applyPushedEvents(events) {
+    if (events === undefined) return;
+    if (!Array.isArray(events)) throw new Error("invalid pushed events");
+    const prepared = events.map(event => {
+      if (
+        !event ||
+        typeof event !== "object" ||
+        Array.isArray(event) ||
+        typeof event.event !== "string" ||
+        event.event.length === 0 ||
+        !Object.prototype.hasOwnProperty.call(event, "payload")
+      ) {
+        throw new Error("invalid pushed event");
+      }
+      return event;
+    });
+
+    for (const event of prepared) {
+      window.dispatchEvent(new CustomEvent(`opal:${event.event}`, {detail: event.payload}));
+      for (const hook of Array.from(this.hooks.values())) {
+        for (const handler of Array.from(hook.__opalEventHandlers.values())) {
+          if (handler.event !== event.event) continue;
+          try {
+            handler.callback.call(hook, event.payload);
+          } catch (error) {
+            this.reportHookError(hook, `handleEvent:${event.event}`, error);
+          }
+        }
+      }
+    }
+  }
+
+  invokeHook(hook, callbackName, ...args) {
+    const callback = hook[callbackName];
+    if (callback === undefined) return;
+    if (typeof callback !== "function") {
+      this.reportHookError(hook, callbackName, new TypeError("LiveView hook callback must be a function"));
+      return;
+    }
+    try {
+      callback.call(hook, ...args);
+    } catch (error) {
+      this.reportHookError(hook, callbackName, error);
+    }
+  }
+
+  destroyHook(element, hook) {
+    this.invokeHook(hook, "destroyed");
+    hook.__opalEventHandlers.clear();
+    this.disconnectedHooks?.delete(hook);
+    this.hooks.delete(element);
+  }
+
+  disconnectHooks() {
+    if (this.disconnectedHooks !== null) return;
+    this.disconnectedHooks = new Set(this.hooks.values());
+    for (const hook of this.disconnectedHooks) this.invokeHook(hook, "disconnected");
+  }
+
+  reconnectHooks() {
+    if (this.disconnectedHooks === null) return;
+    const disconnected = this.disconnectedHooks;
+    this.disconnectedHooks = null;
+    for (const hook of disconnected) {
+      if (this.hooks.get(hook.el) === hook) this.invokeHook(hook, "reconnected");
+    }
+  }
+
+  reportHookError(hook, callback, error) {
+    const detail = {hook: hook.name || "", callback, error};
+    this.root.dispatchEvent(new CustomEvent("opal:hook-error", {detail}));
+    console.error(`Opal LiveView hook ${detail.hook}.${callback} failed`, error);
   }
 
   morphAttributes(current, next) {
@@ -730,11 +999,29 @@ export class OpalLiveView {
     return ![1000, 1002, 1003, 1008, 1009].includes(code);
   }
 
+  resolvePendingEvent(pending, message) {
+    if (pending.type !== "event") return;
+    const reply = Object.prototype.hasOwnProperty.call(message, "reply") ? message.reply : null;
+    if (pending.callback) {
+      try {
+        pending.callback.call(pending.hook, reply, pending.ref);
+      } catch (error) {
+        this.reportHookError(pending.hook, "reply", error);
+      }
+    }
+    if (pending.resolve) pending.resolve({reply, ref: pending.ref});
+  }
+
+  rejectPendingEvent(pending, error) {
+    if (pending.type === "event" && pending.reject) pending.reject(error);
+  }
+
   failPendingEvents(code) {
     const pending = [this.inFlightEvent, ...this.eventQueue].filter(Boolean);
     this.inFlightEvent = null;
     this.eventQueue = [];
     for (const event of pending) {
+      this.rejectPendingEvent(event, new Error(`LiveView connection closed (${code})`));
       this.root.dispatchEvent(new CustomEvent("opal:event-error", {
         detail: {event: event.event || event.type, ref: event.ref, code},
       }));
@@ -743,9 +1030,9 @@ export class OpalLiveView {
 
 }
 
-export function connectAll(root = document) {
+export function connectAll(root = document, {hooks = globalThis.OpalLiveViewHooks || {}} = {}) {
   return Array.from(root.querySelectorAll("[data-opal-live-root]"), element => {
-    const liveView = new OpalLiveView(element);
+    const liveView = new OpalLiveView(element, {hooks});
     Object.defineProperty(element, "__opalLiveView", {value: liveView, configurable: true});
     liveView.connect();
     return liveView;

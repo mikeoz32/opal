@@ -29,13 +29,14 @@ reconnect. Opal serves a dependency-free ES module as the default client.
     operations with browser-owned DOM collections.
 15. Add `handle_params`, guarded same-view patching, refreshed mount tokens,
     push/replace history, popstate, and fresh-document navigation.
+16. Add opt-in JavaScript hooks, DOM and reconnect lifecycle callbacks,
+    targeted client events with replies, and server-pushed application events.
 
 ## Deferred protocol work
 
 - nested components;
 - upload transport and progress;
 - same-socket navigation across an explicit live-session boundary;
-- opt-in JavaScript hooks;
 - persisted reconnect/resume sessions where applications need them.
 
 Each deferred feature requires an explicit protocol version or additive message
