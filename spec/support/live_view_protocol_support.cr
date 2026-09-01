@@ -413,12 +413,12 @@ class LiveViewSpecStreams < LF::LiveView::View
   def render : LF::LiveView::Rendered
     contents = stream_contents("spec-stream")
     LF::LiveView::HTML.rendered(
-      %(<ul id="spec-stream" data-opal-stream>#{contents}</ul>)
+      %(<ul id="spec-stream" data-opal-update="stream">#{contents}</ul>)
     )
   end
 
   private def item(id : String, label : String) : LF::LiveView::Rendered
-    LF::LiveView::HTML.rendered(%(<li id="#{id}" data-opal-key="#{id}">#{label}</li>))
+    LF::LiveView::HTML.rendered(%(<li id="#{id}">#{label}</li>))
   end
 end
 

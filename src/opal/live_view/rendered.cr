@@ -1,7 +1,10 @@
 require "digest/sha256"
 require "json"
+require "./stream"
 
 module LF::LiveView
+  alias RenderedDynamic = String | StreamContent
+
   # A server-rendered template split into immutable static fragments and
   # escaped dynamic values. Matching fingerprints can be updated over the wire
   # by sending only changed dynamic positions.
@@ -9,9 +12,13 @@ module LF::LiveView
     getter fingerprint : String
 
     @statics : Array(String)
-    @dynamics : Array(String)
+    @dynamics : Array(RenderedDynamic)
 
     def initialize(statics : Array(String), dynamics : Array(String))
+      initialize(statics, dynamics.map(&.as(RenderedDynamic)))
+    end
+
+    def initialize(statics : Array(String), dynamics : Array(RenderedDynamic))
       unless statics.size == dynamics.size + 1
         raise ArgumentError.new("A LiveView render needs exactly one more static fragment than dynamic values")
       end
@@ -32,7 +39,7 @@ module LF::LiveView
       @statics.dup
     end
 
-    def dynamics : Array(String)
+    def dynamics : Array(RenderedDynamic)
       @dynamics.dup
     end
 
@@ -41,7 +48,10 @@ module LF::LiveView
         @statics.each_with_index do |static, index|
           html << static
           if dynamic = @dynamics[index]?
-            html << dynamic
+            html << case dynamic
+            when String        then dynamic
+            when StreamContent then dynamic.to_html
+            end
           end
         end
       end
@@ -70,14 +80,30 @@ module LF::LiveView
 
     # Returns changed dynamic positions, or `nil` when the static template
     # changed and the client needs a complete snapshot.
-    def diff(previous : self) : Hash(Int32, String)?
+    def diff(previous : self) : Hash(Int32, RenderedDynamic)?
       return nil unless previous.fingerprint == fingerprint
 
-      changes = {} of Int32 => String
+      changes = {} of Int32 => RenderedDynamic
       @dynamics.each_with_index do |dynamic, index|
         changes[index] = dynamic unless previous.@dynamics[index] == dynamic
       end
       changes
+    end
+
+    # Marks native stream snapshots as delivered so the next ordinary render
+    # does not resend already acknowledged operations.
+    # :nodoc:
+    def commit_streams : Nil
+      @dynamics.each do |dynamic|
+        dynamic.commit! if dynamic.is_a?(StreamContent)
+      end
+    end
+
+    # :nodoc:
+    def stream_container_ids : Array(String)
+      @dynamics.compact_map do |dynamic|
+        dynamic.container_id if dynamic.is_a?(StreamContent)
+      end
     end
   end
 

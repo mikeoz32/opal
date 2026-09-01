@@ -278,7 +278,7 @@ class CounterLive < LF::LiveView::View
       <section>
         <h2>Activity stream</h2>
         <button type="button" data-opal-click="prepend_activity">Prepend activity</button>
-        <ul id="activity-stream" data-opal-stream>#{activity_items}</ul>
+        <ul id="activity-stream" data-opal-update="stream">#{activity_items}</ul>
       </section>
       <button type="button" data-opal-click="reverse_items">Reverse keyed items</button>
       <ul id="keyed-items">#{LF::LiveView::HTML.raw(items_markup)}</ul>

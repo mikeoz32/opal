@@ -384,9 +384,9 @@ They may also call `push_event` and `reply` for hook interoperability.
 
 The stream API maintains large or frequently changing ordered collections in
 the connection runtime instead of application view fields. Give the container
-a unique `id`; `data-opal-stream` remains a descriptive compatibility marker.
-Queue initial operations from `mount` and expose the canonical collection with
-`stream_contents`:
+a unique `id` and set `data-opal-update="stream"`; the binding prefix maps this
+to Phoenix LiveView's native stream DOM behavior. Queue initial operations from
+`mount` and expose the collection with `stream_contents`:
 
 ```crystal
 def mount(context : LF::LiveView::MountContext) : Nil
@@ -400,7 +400,7 @@ end
 def render : LF::LiveView::Rendered
   notifications = stream_contents("notifications")
   LF::LiveView::HTML.rendered(
-    %(<ul id="notifications" data-opal-stream>#{notifications}</ul>)
+    %(<ul id="notifications" data-opal-update="stream">#{notifications}</ul>)
   )
 end
 
@@ -417,6 +417,7 @@ the item id passed to `stream_insert`. Queue mutations from `handle_event`,
 stream_insert("notifications", id, item)                 # append or update
 stream_insert("notifications", id, item, at: 0)          # prepend
 stream_insert("notifications", id, item, at: 0, limit: 20)
+stream_insert("notifications", id, item, update_only: true)
 stream_delete("notifications", id)
 stream_reset("notifications")
 ```
@@ -424,13 +425,17 @@ stream_reset("notifications")
 Inserting an existing id morphs that item in place and preserves its position.
 For new items, `at: -1` appends and a non-negative index inserts at that
 position. A positive `limit` retains the first N children; a negative limit
-retains the last N. Reset is useful when a fresh connected mount or reconnect
-must replace the collection with a canonical snapshot.
+retains the last N. `update_only: true` updates an existing browser item but
+does not insert it when absent. Reset is useful when a fresh connected mount or
+reconnect must replace the collection with a canonical snapshot.
 
-The connection runtime retains the canonical ordered collection and renders it
-through the normal Phoenix structural diff. Stable item `id` values let the
-upstream DOM patcher preserve retained nodes. Native Phoenix stream payloads
-and `phx-update="stream"` are not emitted yet.
+Each connected diff contains the upstream keyed-comprehension `s`/`k`/`kc`
+shape and `stream` metadata tuple. Only inserted or updated item HTML plus
+delete/reset metadata crosses the socket; retained items are not resent. The
+runtime keeps a canonical snapshot for disconnected rendering, reconnect, and
+rollback when an event is rejected. It also rejects duplicate stream
+consumption, pending operations omitted from the render, and item markup whose
+root `id` does not match the declared stream item id.
 
 ## Live navigation
 
@@ -548,9 +553,10 @@ Phoenix LiveView 1.2.11: `phx_join`, `phx_reply`, heartbeat, `event`,
 titles, hook replies/events, and component CIDs. The independent Opal protocol
 and browser DOM runtime are removed.
 
-Current server gaps are uploads, native Phoenix stream payloads,
-comprehension/template tables, component-only `c` diffs, nested child
-LiveViews, and same-socket navigation across page classes. Unsupported channel
-events receive an error reply; they are not silently treated as implemented.
+Current server gaps are uploads, general comprehension/template tables,
+component-only `c` diffs, nested child LiveViews, and same-socket navigation
+across page classes. Uploads are intentionally outside the current roadmap.
+Unsupported channel events receive an error reply; they are not silently
+treated as implemented.
 Applications consume the bundled asset and therefore need no JavaScript build,
 while Opal's own release process pins and rebuilds the upstream npm packages.

@@ -147,8 +147,16 @@ module LF::LiveView
       *,
       at : Int32 = -1,
       limit : Int32? = nil,
+      update_only : Bool = false,
     ) : Nil
-      @runtime.stream_insert(container_id, item_id, rendered, at: at, limit: limit)
+      @runtime.stream_insert(
+        container_id,
+        item_id,
+        rendered,
+        at: at,
+        limit: limit,
+        update_only: update_only
+      )
     end
 
     # Queues removal of one direct child from a browser-owned stream container.
@@ -163,7 +171,7 @@ module LF::LiveView
 
     # Renders the current stream contents into the normal LiveView tree. Stream
     # item markup is already trusted framework output and is not escaped again.
-    protected def stream_contents(container_id : String) : HTML::Safe
+    protected def stream_contents(container_id : String) : StreamContent
       @runtime.stream_contents(container_id)
     end
 
@@ -222,8 +230,10 @@ module LF::LiveView
     end
 
     # :nodoc:
-    def __opal_take_stream_operations : Array(StreamOperation)
-      @runtime.take_stream_operations
+    def __opal_take_stream_operations(
+      consumed_containers : Array(String)? = nil,
+    ) : Array(StreamOperation)
+      @runtime.take_stream_operations(consumed_containers)
     end
 
     # :nodoc:
