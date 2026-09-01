@@ -118,6 +118,148 @@ class LiveViewSpecFailure < LF::LiveView::View
   end
 end
 
+class LiveViewSpecNestedComponent < LF::LiveView::Component
+  include LF::DI::Disposable
+
+  @@mount_count = 0
+  @@destroy_count = 0
+  @@lifecycle = [] of String
+
+  def self.reset : Nil
+    @@mount_count = 0
+    @@destroy_count = 0
+    @@lifecycle.clear
+  end
+
+  def self.mount_count : Int32
+    @@mount_count
+  end
+
+  def self.destroy_count : Int32
+    @@destroy_count
+  end
+
+  def self.lifecycle : Array(String)
+    @@lifecycle.dup
+  end
+
+  def self.clear_lifecycle : Nil
+    @@lifecycle.clear
+  end
+
+  def self.record_lifecycle(entry : String) : Nil
+    @@lifecycle << entry
+  end
+
+  @count = 0
+  @owner = ""
+
+  def mount : Nil
+    @@mount_count += 1
+  end
+
+  def update(assigns : JSON::Any) : Nil
+    @owner = assigns.as_h["owner"].as_s
+  end
+
+  def render : LF::LiveView::Rendered
+    LF::LiveView::HTML.rendered(
+      %(<button id="nested-component-#{@owner.downcase}" data-opal-target="#{myself}" data-opal-click="increment_nested">#{@owner} nested:#{@count}</button>)
+    )
+  end
+
+  def handle_event(event : String, value : JSON::Any) : Nil
+    if event == "increment_nested"
+      @count += 1
+    else
+      super
+    end
+  end
+
+  def destroy : Nil
+    @@destroy_count += 1
+    @@lifecycle << "child:#{@owner}"
+  end
+end
+
+class LiveViewSpecRecursiveComponent < LF::LiveView::Component
+  include LF::DI::Disposable
+
+  @@destroy_count = 0
+
+  def self.reset : Nil
+    @@destroy_count = 0
+  end
+
+  def self.destroy_count : Int32
+    @@destroy_count
+  end
+
+  def render : LF::LiveView::Rendered
+    child = live_component(LiveViewSpecRecursiveComponent, id) do
+      LiveViewSpecRecursiveComponent.new
+    end
+    LF::LiveView::HTML.rendered(%(<div>#{child}</div>))
+  end
+
+  def destroy : Nil
+    @@destroy_count += 1
+  end
+end
+
+class LiveViewSpecRecursiveComponents < LF::LiveView::View
+  def render : LF::LiveView::Rendered
+    live_component(LiveViewSpecRecursiveComponent, "cycle") do
+      LiveViewSpecRecursiveComponent.new
+    end
+  end
+end
+
+class LiveViewSpecDeepComponent < LF::LiveView::Component
+  include LF::DI::Disposable
+
+  @@destroy_count = 0
+
+  def self.reset : Nil
+    @@destroy_count = 0
+  end
+
+  def self.destroy_count : Int32
+    @@destroy_count
+  end
+
+  @remaining = 0
+
+  def update(assigns : JSON::Any) : Nil
+    @remaining = assigns.as_h["remaining"].as_i.to_i
+  end
+
+  def render : LF::LiveView::Rendered
+    return LF::LiveView::Rendered.opaque("leaf") if @remaining.zero?
+
+    child = live_component(
+      LiveViewSpecDeepComponent,
+      @remaining.to_s,
+      {remaining: @remaining - 1}
+    ) do
+      LiveViewSpecDeepComponent.new
+    end
+    LF::LiveView::HTML.rendered(%(<div>#{child}</div>))
+  end
+
+  def destroy : Nil
+    @@destroy_count += 1
+  end
+end
+
+class LiveViewSpecDeepComponents < LF::LiveView::View
+  def render : LF::LiveView::Rendered
+    live_component(LiveViewSpecDeepComponent, "root", {remaining: LF::LiveView::View::MAX_COMPONENT_DEPTH}) do
+      LiveViewSpecDeepComponent.new
+    end
+  end
+end
+
 class LiveViewSpecComponent < LF::LiveView::Component
   include LF::DI::Disposable
 
@@ -145,6 +287,7 @@ class LiveViewSpecComponent < LF::LiveView::Component
 
   @count = 0
   @label = ""
+  @show_nested = true
 
   def mount : Nil
     @@mount_count += 1
@@ -156,8 +299,16 @@ class LiveViewSpecComponent < LF::LiveView::Component
   end
 
   def render : LF::LiveView::Rendered
+    nested = if @show_nested
+               live_component(LiveViewSpecNestedComponent, "shared", {owner: @label}) do
+                 LiveViewSpecNestedComponent.new
+               end
+             else
+               LF::LiveView::Rendered.opaque("")
+             end
+
     LF::LiveView::HTML.rendered(
-      %(<button id="component-#{id}" data-opal-target="#{myself}" data-opal-click="increment">#{@label}:#{@count}</button>)
+      %(<section id="component-#{id}" data-opal-target="#{myself}"><button data-opal-click="increment">#{@label}:#{@count}</button><button data-opal-click="toggle_nested">toggle nested</button>#{nested}</section>)
     )
   end
 
@@ -170,6 +321,8 @@ class LiveViewSpecComponent < LF::LiveView::Component
     when "hook_reply"
       push_event("component_notice", {id: id, count: @count})
       reply({id: id, count: @count})
+    when "toggle_nested"
+      @show_nested = !@show_nested
     else
       super
     end
@@ -177,6 +330,7 @@ class LiveViewSpecComponent < LF::LiveView::Component
 
   def destroy : Nil
     @@destroy_count += 1
+    LiveViewSpecNestedComponent.record_lifecycle("parent:#{@label}")
   end
 end
 
@@ -325,6 +479,7 @@ private def live_view_spec_server(
   LiveViewSpecPush.reset
   LiveViewSpecDisposable.reset
   LiveViewSpecComponent.reset
+  LiveViewSpecNestedComponent.reset
   root = LF::DI::DefaultContainer.new
   endpoint = LF::LiveView::Endpoint.new(
     secret,
@@ -540,6 +695,46 @@ describe LF::LiveView do
     end
   end
 
+  it "rejects recursive component identities and cleans up the failed render" do
+    LiveViewSpecRecursiveComponent.reset
+    view = LiveViewSpecRecursiveComponents.new
+    request = HTTP::Request.new("GET", "/recursive-components")
+    context = LF::LiveView::MountContext.new(
+      request,
+      {} of String => String,
+      request.resource,
+      true
+    )
+    view.__opal_mount(context)
+
+    expect_raises(LF::LiveView::RecursiveComponentError) do
+      view.__opal_render
+    end
+    LiveViewSpecRecursiveComponent.destroy_count.should eq(1)
+  ensure
+    view.try(&.__opal_disconnect)
+  end
+
+  it "bounds component nesting depth and cleans up the partial tree" do
+    LiveViewSpecDeepComponent.reset
+    view = LiveViewSpecDeepComponents.new
+    request = HTTP::Request.new("GET", "/deep-components")
+    context = LF::LiveView::MountContext.new(
+      request,
+      {} of String => String,
+      request.resource,
+      true
+    )
+    view.__opal_mount(context)
+
+    expect_raises(LF::LiveView::ComponentNestingError) do
+      view.__opal_render
+    end
+    LiveViewSpecDeepComponent.destroy_count.should eq(LF::LiveView::View::MAX_COMPONENT_DEPTH)
+  ensure
+    view.try(&.__opal_disconnect)
+  end
+
   it "keeps stateful component instances and routes events by component target" do
     live_view_spec_server("k" * 32) do |address|
       response = HTTP::Client.get("http://#{address.address}:#{address.port}/components")
@@ -661,6 +856,102 @@ describe LF::LiveView do
       component_event = component_reply["events"].as_a.first
       component_event["event"].as_s.should eq("component_notice")
       component_event["payload"]["id"].as_s.should eq("right")
+      websocket.close
+    ensure
+      websocket.try(&.close)
+    end
+  end
+
+  it "scopes nested component identities to their parents and tears down descendants first" do
+    live_view_spec_server("n" * 32) do |address|
+      response = HTTP::Client.get("http://#{address.address}:#{address.port}/components")
+      token = response.body.match(/data-opal-token="([^"]+)"/).not_nil![1]
+      LiveViewSpecNestedComponent.mount_count.should eq(2)
+      LiveViewSpecNestedComponent.destroy_count.should eq(2)
+
+      websocket = HTTP::WebSocket.new(
+        "127.0.0.1",
+        "/_opal/live",
+        port: address.port,
+        headers: HTTP::Headers{"Origin" => "http://#{address.address}:#{address.port}"}
+      )
+      websocket.send({type: "join", protocol: 2, token: token}.to_json)
+      joined = JSON.parse(websocket.receive.as(String))
+      dynamics = joined["rendered"].as_h["dynamics"].as_a.map(&.as_s)
+      left_parent = dynamics[0].match(/id="component-left" data-opal-target="(\d+)"/).not_nil![1].to_i64
+      left_child = dynamics[0].match(/id="nested-component-left" data-opal-target="(\d+)"/).not_nil![1].to_i64
+      right_child = dynamics[1].match(/id="nested-component-right" data-opal-target="(\d+)"/).not_nil![1].to_i64
+      left_child.should_not eq(right_child)
+      LiveViewSpecNestedComponent.mount_count.should eq(4)
+      LiveViewSpecNestedComponent.clear_lifecycle
+
+      websocket.send({
+        type:    "event",
+        event:   "increment_nested",
+        target:  left_child,
+        value:   nil,
+        version: 0,
+        ref:     1,
+      }.to_json)
+      incremented = JSON.parse(websocket.receive.as(String))
+      incremented["version"].as_i64.should eq(1)
+      incremented["diff"].as_h["0"].as_s.should contain("Left nested:1")
+      incremented["diff"].as_h["0"].as_s.should_not contain("Right nested:1")
+
+      websocket.send({
+        type:    "event",
+        event:   "toggle_nested",
+        target:  left_parent,
+        value:   nil,
+        version: 1,
+        ref:     2,
+      }.to_json)
+      removed = JSON.parse(websocket.receive.as(String))
+      removed["version"].as_i64.should eq(2)
+      removed["diff"].as_h["0"].as_s.should_not contain("nested-component-left")
+      LiveViewSpecNestedComponent.lifecycle.should eq(["child:Left"])
+
+      websocket.send({
+        type:    "event",
+        event:   "increment_nested",
+        target:  left_child,
+        value:   nil,
+        version: 2,
+        ref:     3,
+      }.to_json)
+      stale = JSON.parse(websocket.receive.as(String))
+      stale["type"].as_s.should eq("error")
+      stale["reason"].as_s.should eq("unknown_target")
+
+      websocket.send({
+        type:    "event",
+        event:   "toggle_nested",
+        target:  left_parent,
+        value:   nil,
+        version: 2,
+        ref:     4,
+      }.to_json)
+      restored = JSON.parse(websocket.receive.as(String))
+      restored_child_html = restored["diff"].as_h["0"].as_s
+      restored_child_html.should contain("Left nested:0")
+      restored_child = restored_child_html.match(/id="nested-component-left" data-opal-target="(\d+)"/).not_nil![1].to_i64
+      restored_child.should_not eq(left_child)
+
+      websocket.send({
+        type:    "event",
+        event:   "toggle_right",
+        value:   nil,
+        version: 3,
+        ref:     5,
+      }.to_json)
+      removed_parent = JSON.parse(websocket.receive.as(String))
+      removed_parent["version"].as_i64.should eq(4)
+      removed_parent["diff"].as_h["1"].as_s.should be_empty
+      LiveViewSpecNestedComponent.lifecycle.should eq([
+        "child:Left",
+        "child:Right",
+        "parent:Right",
+      ])
       websocket.close
     ensure
       websocket.try(&.close)

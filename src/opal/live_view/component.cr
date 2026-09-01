@@ -7,13 +7,17 @@ require "./rendered"
 module LF::LiveView
   # A connection-local, stateful piece of a LiveView.
   #
-  # Components are identified by their concrete type and caller-provided id.
-  # The same identity keeps the same component instance across parent renders.
+  # Components are identified by their parent, concrete type, and caller-provided
+  # id. The same identity keeps the same component instance across parent renders.
   abstract class Component
+    alias Factory = Proc(Component)
+    alias Renderer = Proc(String, String, JSON::Any, Factory, Rendered)
+
     @__opal_id = ""
     @__opal_cid = 0_i64
     @__opal_connected = false
     @__opal_attached = false
+    @__opal_render_component : Renderer?
     @__opal_navigate : Proc(Navigation, Nil)?
     @__opal_push_event : Proc(PushedEvent, Nil)?
     @__opal_reply : Proc(JSON::Any, Nil)?
@@ -56,6 +60,28 @@ module LF::LiveView
       navigate(Navigation.navigate(to, replace: replace))
     end
 
+    # Renders a stateful child component. Child identities are scoped to this
+    # component, so separate parent instances may reuse the same child id.
+    protected def live_component(
+      type : T.class,
+      id : String,
+      assigns : JSON::Any = JSON::Any.new(nil),
+      &factory : -> T
+    ) : Rendered forall T
+      renderer = @__opal_render_component || raise Error.new("LiveView component is not attached")
+      component_factory = -> { factory.call.as(Component) }
+      renderer.call(T.name, id, assigns, component_factory)
+    end
+
+    protected def live_component(
+      type : T.class,
+      id : String,
+      assigns,
+      &factory : -> T
+    ) : Rendered forall T
+      live_component(type, id, JSON.parse(assigns.to_json), &factory)
+    end
+
     protected def push_event(name : String, payload : JSON::Any = JSON::Any.new(nil)) : Nil
       callback = @__opal_push_event || raise Error.new("LiveView component is not attached")
       callback.call(PushedEvent.new(name, payload))
@@ -79,6 +105,7 @@ module LF::LiveView
       id : String,
       cid : Int64,
       connected : Bool,
+      @__opal_render_component : Renderer,
       @__opal_navigate : Proc(Navigation, Nil),
       @__opal_push_event : Proc(PushedEvent, Nil),
       @__opal_reply : Proc(JSON::Any, Nil),
@@ -92,6 +119,7 @@ module LF::LiveView
 
     # :nodoc:
     def __opal_detach : Nil
+      @__opal_render_component = nil
       @__opal_navigate = nil
       @__opal_push_event = nil
       @__opal_reply = nil

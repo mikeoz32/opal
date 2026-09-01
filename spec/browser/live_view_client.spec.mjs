@@ -79,6 +79,32 @@ test("keeps component state isolated and targets only its instance", async ({pag
   await expect(right).toHaveText("1");
 });
 
+test("scopes nested component state to each parent and remounts removed children", async ({page}) => {
+  const left = page.locator("#left-nested-component-value");
+  const right = page.locator("#right-nested-component-value");
+  await right.evaluate(element => { window.__opalRightNestedNode = element; });
+
+  await page.getByRole("button", {name: "Increment Left nested component"}).click();
+  await expect(left).toHaveText("1");
+  await expect(right).toHaveText("0");
+  await expect.poll(
+    () => right.evaluate(element => element === window.__opalRightNestedNode),
+  ).toBe(true);
+
+  await page.getByRole("button", {name: "Increment Left component"}).click();
+  await expect(page.locator("#left-component-value")).toHaveText("1");
+  await expect(page.locator("#left-nested-parent-value")).toHaveText("1");
+  await expect(left).toHaveText("1");
+
+  await page.getByRole("button", {name: "Toggle Left nested component"}).click();
+  await expect(page.locator("#left-nested-component")).toHaveCount(0);
+  await expect(page.locator("#right-nested-component")).toBeVisible();
+
+  await page.getByRole("button", {name: "Toggle Left nested component"}).click();
+  await expect(page.locator("#left-nested-component-value")).toHaveText("0");
+  await expect(page.locator("#left-component-value")).toHaveText("1");
+});
+
 test("runs hook updates after DOM patches and delivers server events before replies", async ({page}) => {
   const hook = page.locator("#counter-hook");
   await expect(hook).toHaveAttribute("data-client-state", "preserved");

@@ -105,12 +105,13 @@ The default client supports:
   browser events.
 
 The form encoder preserves repeated names as arrays. Connection-local stateful
-components use `(component type, id)` identity, mount once, update before each
-render, and receive explicitly targeted events on the same connection fiber.
-Removed components are destroyed. Components can request navigation through
-their parent connection. Views and components can reply to the current event
-and enqueue application events for browser hooks. File uploads, nested
-components, and same-socket navigation across page classes are deferred.
+components use parent-scoped `(component type, id)` identity, mount once,
+update before each render, can recursively render bounded stateful child trees,
+and receive explicitly targeted events on the same connection fiber. Removed
+component trees are destroyed child-first. Components can request navigation
+through their parent connection. Views and components can reply to the current
+event and enqueue application events for browser hooks. File uploads and
+same-socket navigation across page classes are deferred.
 
 Hook definitions are application-owned and registered before the embedded
 module loads. Hook elements require a unique stable DOM id. The client creates
@@ -188,6 +189,9 @@ connection.
   compatibility path.
 - Opt-in hooks cover application JavaScript interoperability without adding a
   framework or bundler dependency to the default client.
+- Parent-scoped component identities allow reusable nested component trees
+  without collisions between separate parent instances. Recursive identities
+  and excessive nesting fail the render instead of growing without bound.
 
 ## References
 

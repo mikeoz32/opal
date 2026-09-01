@@ -281,8 +281,10 @@ or `data-opal-key` values when identity must survive insertion or reordering:
 ## Stateful components
 
 Subclass `LF::LiveView::Component` when multiple independently stateful pieces
-share one LiveView connection. A component identity is its concrete type plus
-the `id` passed to `live_component`. Its `mount` callback runs once for that
+share one LiveView connection. At the view root, a component identity is its
+concrete type plus the `id` passed to `live_component`. Nested identities also
+include the parent component instance, so separate parents can safely reuse the
+same child type and id. A component's `mount` callback runs once for that
 identity, `update` receives the current parent assigns before every render, and
 targeted events run on the component instead of the parent view:
 
@@ -310,6 +312,33 @@ class CounterComponent < LF::LiveView::Component
 end
 ```
 
+Components can render stateful children with the same protected helper. For
+example, every panel below owns an independent `CounterComponent` whose local
+id is `"counter"`:
+
+```crystal
+class PanelComponent < LF::LiveView::Component
+  @label = ""
+
+  def update(assigns : JSON::Any) : Nil
+    @label = assigns.as_h["label"].as_s
+  end
+
+  def render : LF::LiveView::Rendered
+    counter = live_component(CounterComponent, "counter", {label: @label}) do
+      CounterComponent.new
+    end
+    LF::LiveView::HTML.rendered(%(<section>#{counter}</section>))
+  end
+end
+```
+
+`live_component` is valid only while the receiving view or component is in its
+own `render` callback. Repeating an identity within the same parent render is
+an error. Repeating the same type and id in its own ancestry is rejected as a
+recursive component cycle, and nesting is bounded to
+`LF::LiveView::View::MAX_COMPONENT_DEPTH` levels.
+
 Render each instance from the parent with a stable id:
 
 ```crystal
@@ -333,7 +362,9 @@ with click, change, and submit events. Events without a target continue to run
 A component disappears when the parent stops rendering its identity. Opal then
 forgets its state and calls `destroy` when the component includes
 `LF::DI::Disposable`; rendering that identity again creates a fresh instance.
-All remaining components are destroyed when their LiveView disconnects.
+Removing a parent recursively removes its descendants and destroys children
+before their parent. All remaining component trees are destroyed in the same
+order when their LiveView disconnects.
 Components may also call protected `push_patch` and `push_navigate` from their
 event callbacks; navigation is serialized through their parent connection.
 They may also call `push_event` and `reply` for hook interoperability.
@@ -504,8 +535,9 @@ continues accepting protocol-v1 clients and returns their complete `html`
 payloads.
 
 Protocol v2 provides connection-local stateful components, component-targeted
-events and replies, server-pushed hook events, opt-in JavaScript hook lifecycle,
-browser-owned streams, and acknowledged live patches with browser history. It
-does not yet provide nested components, same-socket navigation across page
-classes, or upload transport. These features can evolve under Opal's protocol
-without introducing a Phoenix dependency.
+events and replies, parent-scoped nested component trees, server-pushed hook
+events, opt-in JavaScript hook lifecycle, browser-owned streams, and
+acknowledged live patches with browser history. It does not yet provide
+same-socket navigation across page classes, upload transport, or persisted
+reconnect sessions. These features can evolve under Opal's protocol without
+introducing a Phoenix dependency.
