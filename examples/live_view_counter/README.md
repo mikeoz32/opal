@@ -22,7 +22,7 @@ Open <http://127.0.0.1:8084/?start=2>. The example demonstrates:
 - a delayed server-side state change using serialized `send_info`;
 - Phoenix structural diffs and upstream focused-input preservation;
 - stable-id list reordering without recreating DOM nodes;
-- parent-scoped nested stateful components with isolated state and deep targeted
+- native component-only diffs, parent-scoped nested state, and deep targeted
   events;
 - native Phoenix stream insertion, deletion, limits, and retained DOM identity;
 - client- and server-driven live patches, history, and fresh-page navigation;

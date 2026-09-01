@@ -3,7 +3,31 @@ require "json"
 require "./stream"
 
 module LF::LiveView
-  alias RenderedDynamic = String | StreamContent
+  # A connection-local stateful component reference embedded in its parent
+  # render. Phoenix receives the CID in the parent tree and the component's
+  # own structural diff through the top-level `c` table.
+  # :nodoc:
+  class ComponentContent
+    getter cid : Int64
+    getter rendered : Rendered
+    getter view_id : String
+
+    @html : String
+
+    def initialize(@cid, @rendered, @view_id)
+      @html = @rendered.with_component_root(@cid, @view_id).to_html
+    end
+
+    def to_html : String
+      @html
+    end
+
+    def ==(other : self) : Bool
+      @cid == other.@cid && @view_id == other.@view_id
+    end
+  end
+
+  alias RenderedDynamic = String | StreamContent | ComponentContent
 
   # A server-rendered template split into immutable static fragments and
   # escaped dynamic values. Matching fingerprints can be updated over the wire
@@ -35,6 +59,17 @@ module LF::LiveView
       new([html], [] of String)
     end
 
+    # :nodoc:
+    def self.component(content : ComponentContent) : self
+      new(["", ""], [content] of RenderedDynamic)
+    end
+
+    # :nodoc:
+    def component_content? : ComponentContent?
+      return nil unless @statics == ["", ""] && @dynamics.size == 1
+      @dynamics.first.as?(ComponentContent)
+    end
+
     def statics : Array(String)
       @statics.dup
     end
@@ -49,8 +84,9 @@ module LF::LiveView
           html << static
           if dynamic = @dynamics[index]?
             html << case dynamic
-            when String        then dynamic
-            when StreamContent then dynamic.to_html
+            when String           then dynamic
+            when StreamContent    then dynamic.to_html
+            when ComponentContent then dynamic.to_html
             end
           end
         end
@@ -95,15 +131,34 @@ module LF::LiveView
     # :nodoc:
     def commit_streams : Nil
       @dynamics.each do |dynamic|
-        dynamic.commit! if dynamic.is_a?(StreamContent)
+        case dynamic
+        when StreamContent    then dynamic.commit!
+        when ComponentContent then dynamic.rendered.commit_streams
+        end
       end
     end
 
     # :nodoc:
     def stream_container_ids : Array(String)
-      @dynamics.compact_map do |dynamic|
-        dynamic.container_id if dynamic.is_a?(StreamContent)
+      container_ids = [] of String
+      @dynamics.each do |dynamic|
+        case dynamic
+        when StreamContent    then container_ids << dynamic.container_id
+        when ComponentContent then container_ids.concat(dynamic.rendered.stream_container_ids)
+        end
       end
+      container_ids
+    end
+
+    # :nodoc:
+    def component_contents : Hash(Int64, ComponentContent)
+      components = {} of Int64 => ComponentContent
+      @dynamics.each do |dynamic|
+        next unless dynamic.is_a?(ComponentContent)
+        components[dynamic.cid] = dynamic
+        components.merge!(dynamic.rendered.component_contents)
+      end
+      components
     end
   end
 
