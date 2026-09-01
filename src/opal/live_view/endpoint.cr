@@ -662,18 +662,9 @@ module LF::LiveView
       previous : Rendered?,
       reply : EventReply? = nil,
     ) : JSON::Any
-      diff = {} of String => JSON::Any
-      changes = previous.try { |old| rendered.diff(old) }
-      if changes
-        changes.each do |index, dynamic|
-          diff[index.to_s] = dynamic_to_json(dynamic)
-        end
-      else
-        diff["s"] = JSON::Any.new(rendered.statics.map { |static| JSON::Any.new(static) })
-        rendered.dynamics.each_with_index do |dynamic, index|
-          diff[index.to_s] = dynamic_to_json(dynamic)
-        end
-      end
+      diff = structural_diff(rendered, previous)
+      components = component_diffs(rendered, previous)
+      diff["c"] = JSON::Any.new(components) unless components.empty?
 
       view.__opal_take_stream_operations(rendered.stream_container_ids)
       rendered.commit_streams
@@ -690,11 +681,55 @@ module LF::LiveView
       JSON::Any.new(diff)
     end
 
+    private def structural_diff(
+      rendered : Rendered,
+      previous : Rendered?,
+      *,
+      component_root : Bool = false,
+    ) : Hash(String, JSON::Any)
+      diff = {} of String => JSON::Any
+      changes = previous.try { |old| rendered.diff(old) }
+      if changes
+        changes.each do |index, dynamic|
+          diff[index.to_s] = dynamic_to_json(dynamic)
+        end
+      else
+        diff["s"] = JSON::Any.new(rendered.statics.map { |static| JSON::Any.new(static) })
+        rendered.dynamics.each_with_index do |dynamic, index|
+          diff[index.to_s] = dynamic_to_json(dynamic)
+        end
+        diff["r"] = JSON::Any.new(1_i64) if component_root
+      end
+      diff
+    end
+
+    private def component_diffs(
+      rendered : Rendered,
+      previous : Rendered?,
+    ) : Hash(String, JSON::Any)
+      current_components = rendered.component_contents
+      previous_components = previous.try(&.component_contents) || {} of Int64 => ComponentContent
+      diffs = {} of String => JSON::Any
+      current_components.each do |cid, component|
+        previous_rendered = previous_components[cid]?.try(&.rendered)
+        component_diff = structural_diff(
+          component.rendered,
+          previous_rendered,
+          component_root: true
+        )
+        unless component_diff.empty?
+          diffs[cid.to_s] = JSON::Any.new(component_diff)
+        end
+      end
+      diffs
+    end
+
     private def dynamic_to_json(dynamic : RenderedDynamic) : JSON::Any
       case dynamic
-      when String        then JSON::Any.new(dynamic)
-      when StreamContent then dynamic.to_diff
-      else                    raise Error.new("Unsupported LiveView dynamic value")
+      when String           then JSON::Any.new(dynamic)
+      when StreamContent    then dynamic.to_diff
+      when ComponentContent then JSON::Any.new(dynamic.cid)
+      else                       raise Error.new("Unsupported LiveView dynamic value")
       end
     end
 

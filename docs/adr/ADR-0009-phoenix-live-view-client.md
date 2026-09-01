@@ -30,7 +30,7 @@ server contract:
 - LiveView mount responses and pushed/event-reply diffs;
 - structural statics and numeric dynamics;
 - keyed-comprehension native stream inserts, deletes, reset, position, and limit;
-- titles, hook replies, pushed browser events, and component CIDs;
+- titles, hook replies, pushed browser events, and component-only `c` diffs;
 - `live_patch` and `live_redirect` with current-URL reconnect mounts.
 
 The client uses the supported `bindingPrefix: "data-opal-"`, preserving
@@ -56,7 +56,7 @@ upgrades deliberately. Asset generation is reproducible through
 `npm run build:live-view-client`; `npm run check:live-view-client` detects an
 out-of-date committed bundle.
 
-Uploads, general template/comprehension tables, component-only diffs, nested
-child LiveViews, and same-socket navigation across page classes are outside the
+Uploads, general application-facing template/comprehension tables, nested child
+LiveViews, and same-socket navigation across page classes are outside the
 initial subset. Uploads are intentionally not planned. Unsupported channel
 events return an explicit error reply.
