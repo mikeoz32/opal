@@ -1,0 +1,21 @@
+@layer theme, base, components, utilities;
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+@source "../src/opal/ui";
+
+@layer components {
+  [data-opal-ui],
+  [data-opal-ui]::before,
+  [data-opal-ui]::after {
+    box-sizing: border-box;
+  }
+
+  button[data-opal-ui],
+  input[data-opal-ui],
+  select[data-opal-ui],
+  textarea[data-opal-ui] {
+    font: inherit;
+  }
+}

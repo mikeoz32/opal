@@ -5,11 +5,15 @@
   "scripts": {
     "build:live-view-client": "esbuild assets/opal_live_view_entry.js --bundle --format=esm --platform=browser --target=es2020 --minify --legal-comments=inline --banner:js=\"/* Opal LiveView browser runtime; includes Phoenix and Phoenix LiveView under the MIT license. */\" --outfile=assets/opal_live_view.js",
     "check:live-view-client": "node scripts/check_live_view_client.mjs",
+    "build:ui-css": "tailwindcss -i assets/opal_ui.tailwind.css -o assets/opal_ui.css --minify",
+    "check:ui-css": "npm run build:ui-css && git diff --exit-code -- assets/opal_ui.css",
     "test:live-view-browser": "playwright test"
   },
   "devDependencies": {
     "@playwright/test": "1.62.1",
-    "esbuild": "0.28.2"
+    "@tailwindcss/cli": "4.3.3",
+    "esbuild": "0.28.2",
+    "tailwindcss": "4.3.3"
   },
   "dependencies": {
     "phoenix": "1.8.13",
