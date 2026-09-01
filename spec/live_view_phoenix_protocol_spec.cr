@@ -61,6 +61,34 @@ private def phoenix_join(
   phoenix_receive(websocket)
 end
 
+private def phoenix_child_join(
+  websocket : HTTP::WebSocket,
+  token : String,
+  id : String,
+  *,
+  join_ref : String,
+  reference : String,
+) : Array(JSON::Any)
+  phoenix_send(
+    websocket,
+    join_ref,
+    reference,
+    "lv:#{id}",
+    "phx_join",
+    {
+      params:  {"_mounts" => 0},
+      session: token,
+      static:  nil,
+    }
+  )
+  phoenix_receive(websocket)
+end
+
+private def child_session(html : String, id : String) : String
+  pattern = Regex.new(%(id="#{Regex.escape(id)}"[^>]*data-phx-session="([^"]*)"))
+  html.match(pattern).not_nil![1]
+end
+
 private def phoenix_response(envelope : Array(JSON::Any)) : Hash(String, JSON::Any)
   envelope[3].as_s.should eq("phx_reply")
   payload = envelope[4].as_h
@@ -90,6 +118,23 @@ describe "Phoenix LiveView protocol compatibility" do
     short_lived.verify(expiring, now + 499.milliseconds).route.should eq("Counter")
     expect_raises(LF::LiveView::InvalidMountTokenError) do
       short_lived.verify(expiring, now + 501.milliseconds)
+    end
+
+    child_token = tokens.sign_child(
+      "ChildView",
+      "child",
+      "parent",
+      "lv:parent",
+      JSON.parse(%({"scope":"spec"})),
+      "/counter",
+      1
+    )
+    child_mount = tokens.verify_child(child_token)
+    child_mount.id.should eq("child")
+    child_mount.parent_topic.should eq("lv:parent")
+    child_mount.session["scope"].as_s.should eq("spec")
+    expect_raises(LF::LiveView::InvalidMountTokenError) do
+      tokens.verify_child(child_token.sub('C', 'X'))
     end
 
     expect_raises(LF::LiveView::ConfigurationError, "at least 32 bytes") do
@@ -411,6 +456,173 @@ describe "Phoenix LiveView protocol compatibility" do
         {1, LF::LiveView::HTML.rendered(%(<li>#{one}</li>))},
         {2, LF::LiveView::HTML.rendered(%(<p>#{two}</p>))},
       ]) { |entry| entry }
+    end
+  end
+
+  it "multiplexes nested child LiveViews on independent Phoenix channels" do
+    live_view_spec_server("n" * 32) do |address|
+      response = HTTP::Client.get("http://#{address.address}:#{address.port}/children")
+      response.body.should contain(%(id="spec-child" data-phx-session=""))
+      response.body.should contain(%(data-phx-parent-id="opal-live-root"))
+      response.body.should contain("Child:0")
+      response.body.should contain("Grandchild:0")
+      LiveViewSpecChild.destroy_count.should eq(1)
+      LiveViewSpecGrandchild.destroy_count.should eq(1)
+
+      websocket = phoenix_socket(
+        address,
+        HTTP::Headers{"Origin" => "http://#{address.address}:#{address.port}"}
+      )
+      root = phoenix_response(
+        phoenix_join(websocket, live_session(response.body), "http://#{address.address}:#{address.port}/children")
+      )["rendered"].as_h
+      child_html = root["1"].as_s
+      child_html.should contain(%(data-phx-parent-id="opal-live-root"))
+      child_token = child_session(child_html, "spec-child")
+      child_token.should_not be_empty
+
+      phoenix_send(websocket, "bad", "bad", "lv:rogue", "phx_join", {
+        params: {"_mounts" => 0}, session: child_token, static: nil,
+      })
+      invalid_child = phoenix_receive(websocket)[4].as_h
+      invalid_child["status"].as_s.should eq("error")
+      invalid_child["response"]["reason"].as_s.should eq("invalid_mount")
+
+      child = phoenix_response(phoenix_child_join(
+        websocket,
+        child_token,
+        "spec-child",
+        join_ref: "2",
+        reference: "2"
+      ))["rendered"].as_h
+      child["0"].as_s.should eq("Child")
+      child["1"].as_s.should eq("0")
+      grandchild_html = child["2"].as_s
+      grandchild_html.should contain(%(data-phx-parent-id="spec-child"))
+      grandchild_token = child_session(grandchild_html, "spec-grandchild")
+
+      grandchild = phoenix_response(phoenix_child_join(
+        websocket,
+        grandchild_token,
+        "spec-grandchild",
+        join_ref: "3",
+        reference: "3"
+      ))["rendered"].as_h
+      grandchild["0"].as_s.should eq("Grandchild")
+      grandchild["1"].as_s.should eq("0")
+
+      phoenix_send(websocket, "2", "4", "lv:spec-child", "event", {
+        type: "click", event: "increment_child", value: nil,
+      })
+      child_diff = phoenix_response(phoenix_receive(websocket))["diff"].as_h
+      child_diff["1"].as_s.should eq("1")
+
+      phoenix_send(websocket, "3", "5", "lv:spec-grandchild", "event", {
+        type: "click", event: "increment_grandchild", value: nil,
+      })
+      grandchild_diff = phoenix_response(phoenix_receive(websocket))["diff"].as_h
+      grandchild_diff["1"].as_s.should eq("1")
+
+      phoenix_send(websocket, "1", "6", "lv:opal-live-root", "event", {
+        type: "click", event: "increment_parent", value: nil,
+      })
+      parent_diff = phoenix_response(phoenix_receive(websocket))["diff"].as_h
+      parent_diff["0"].as_s.should eq("1")
+
+      phoenix_send(websocket, "1", "7", "lv:opal-live-root", "event", {
+        type: "click", event: "toggle_child", value: nil,
+      })
+      removed = phoenix_response(phoenix_receive(websocket))["diff"].as_h
+      removed["1"].as_s.should be_empty
+      phoenix_send(websocket, "3", "8", "lv:spec-grandchild", "phx_leave", {} of String => String)
+      phoenix_response(phoenix_receive(websocket)).should be_empty
+      phoenix_send(websocket, "2", "9", "lv:spec-child", "phx_leave", {} of String => String)
+      phoenix_response(phoenix_receive(websocket)).should be_empty
+      LiveViewSpecChild.destroy_count.should eq(2)
+      LiveViewSpecGrandchild.destroy_count.should eq(2)
+
+      phoenix_send(websocket, nil, "10", "phoenix", "heartbeat", {} of String => String)
+      phoenix_response(phoenix_receive(websocket)).should be_empty
+      websocket.close
+    ensure
+      websocket.try(&.close)
+    end
+  end
+
+  it "isolates a crashed child channel and accepts its rejoin" do
+    live_view_spec_server("x" * 32) do |address|
+      response = HTTP::Client.get("http://#{address.address}:#{address.port}/children")
+      websocket = phoenix_socket(
+        address,
+        HTTP::Headers{"Origin" => "http://#{address.address}:#{address.port}"}
+      )
+      root = phoenix_response(
+        phoenix_join(websocket, live_session(response.body), "http://#{address.address}:#{address.port}/children")
+      )["rendered"].as_h
+      token = child_session(root["1"].as_s, "spec-child")
+      phoenix_response(phoenix_child_join(
+        websocket,
+        token,
+        "spec-child",
+        join_ref: "2",
+        reference: "2"
+      ))
+
+      phoenix_send(websocket, "2", "3", "lv:spec-child", "event", {
+        type: "click", event: "fail_child", value: nil,
+      })
+      crashed = phoenix_receive(websocket)
+      crashed[0].as_s.should eq("2")
+      crashed[2].as_s.should eq("lv:spec-child")
+      crashed[3].as_s.should eq("phx_error")
+
+      rejoined = phoenix_response(phoenix_child_join(
+        websocket,
+        token,
+        "spec-child",
+        join_ref: "4",
+        reference: "4"
+      ))["rendered"].as_h
+      rejoined["1"].as_s.should eq("0")
+
+      phoenix_send(websocket, nil, "5", "phoenix", "heartbeat", {} of String => String)
+      phoenix_response(phoenix_receive(websocket)).should be_empty
+      websocket.close
+    ensure
+      websocket.try(&.close)
+    end
+  end
+
+  it "renders a child LiveView from a stateful component" do
+    live_view_spec_server("v" * 32) do |address|
+      response = HTTP::Client.get("http://#{address.address}:#{address.port}/component-child")
+      response.body.should contain(%(id="component-child-view"))
+
+      websocket = phoenix_socket(
+        address,
+        HTTP::Headers{"Origin" => "http://#{address.address}:#{address.port}"}
+      )
+      root = phoenix_response(
+        phoenix_join(
+          websocket,
+          live_session(response.body),
+          "http://#{address.address}:#{address.port}/component-child"
+        )
+      )["rendered"].as_h
+      cid = root["0"].as_i64
+      child_html = root["c"][cid.to_s]["0"].as_s
+      child_html.should contain(%(data-phx-parent-id="opal-live-root"))
+      child = phoenix_response(phoenix_child_join(
+        websocket,
+        child_session(child_html, "component-child-view"),
+        "component-child-view",
+        join_ref: "2",
+        reference: "2"
+      ))["rendered"].as_h
+      child["0"].as_s.should eq("Component child")
+      websocket.close
+    ensure
+      websocket.try(&.close)
     end
   end
 

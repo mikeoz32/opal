@@ -387,6 +387,57 @@ Components may also call protected `push_patch` and `push_navigate` from their
 event callbacks; navigation is serialized through their parent connection.
 They may also call `push_event` and `reply` for hook interoperability.
 
+## Child LiveViews
+
+Use a child LiveView when a subtree needs a complete LiveView lifecycle and an
+independent event queue, rather than only connection-local component state.
+Child classes are ordinary `View` subclasses without a `Page` annotation:
+
+```crystal
+class ActivityLive < LF::LiveView::View
+  @project_id = ""
+
+  def mount(context : LF::LiveView::MountContext) : Nil
+    @project_id = context.session.as_h["project_id"].as_s
+  end
+
+  def render : LF::LiveView::Rendered
+    LF::LiveView::HTML.rendered(
+      %(<section id="activity">Project #{@project_id}</section>)
+    )
+  end
+end
+```
+
+Render it from a parent View or stateful Component with a document-unique id,
+a JSON-serializable mount session, and a factory:
+
+```crystal
+activity = live_view(ActivityLive, "project-activity", {project_id: @project_id}) do
+  ActivityLive.new
+end
+
+LF::LiveView::HTML.rendered(%(<main>#{activity}</main>))
+```
+
+Disconnected HTTP rendering mounts and renders the complete child tree. Once
+connected, Phoenix.js joins `lv:project-activity` on the existing WebSocket.
+The child then owns its state, events, `send_info`, components, streams, hooks,
+pushed events, and diffs independently. Child LiveViews may render further
+children; nesting is bounded to 32 levels.
+
+Rerendering the parent with the same child id preserves the connected child DOM
+and state. Removing the id makes Phoenix leave that child and its descendants;
+rendering it again creates fresh instances. Factory-created child views that
+include `LF::DI::Disposable` receive `destroy` after disconnect. Child ids must
+be unique across the document, and a live id cannot change its view type.
+
+`MountContext#session`, `#parent_id`, and `#view_id` identify a child mount.
+Child views are not router pages, so they do not run `handle_params` and cannot
+own `live_patch`; use `push_navigate` for a fresh-page destination or let the
+root view own URL patches. Each child session is signed with its parent/topic,
+type, id, resource, and nesting depth before a join is accepted.
+
 ## Keyed comprehensions
 
 Use `HTML.keyed` for an application-owned collection whose retained entries
@@ -591,9 +642,9 @@ Phoenix LiveView 1.2.11: `phx_join`, `phx_reply`, heartbeat, `event`,
 titles, hook replies/events, and component CIDs. The independent Opal protocol
 and browser DOM runtime are removed.
 
-Current server gaps are shared template tables, nested child LiveViews, and
-same-socket navigation across page classes. Uploads are intentionally outside
-the current roadmap. Unsupported channel events receive an error reply; they
-are not silently treated as implemented.
+Current server gaps are shared template tables and same-socket navigation
+across page classes. Uploads are intentionally outside the current roadmap.
+Unsupported channel events receive an error reply; they are not silently
+treated as implemented.
 Applications consume the bundled asset and therefore need no JavaScript build,
 while Opal's own release process pins and rebuilds the upstream npm packages.
