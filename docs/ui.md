@@ -13,7 +13,7 @@ Requiring `opal` alone does not load the UI layer.
 
 ## Theme
 
-The shortest setup embeds the 23 KB minified theme in an application document:
+The shortest setup embeds the 27 KB minified theme in an application document:
 
 ```crystal
 def render_document(live_root : String, client_script : String) : String
@@ -167,6 +167,100 @@ stable opener after the server renders `open: false` (automatic capture is the
 fallback). Set `close_on_escape` or
 `close_on_backdrop` to `false` when the application must block those paths.
 
+## Dropdown menus
+
+Dropdown visibility and roving focus are local presentation state. Menu item
+events still update the application view normally:
+
+```crystal
+trigger = LF::UI.dropdown_trigger(
+  "Release actions",
+  id: "release-trigger",
+  controls: "release-menu"
+)
+menu = LF::UI.dropdown_menu(
+  LF::LiveView::HTML.raw(
+    LF::UI.dropdown_item(
+      "Run checks",
+      event: "run_action",
+      value: "checks"
+    ).to_html +
+    LF::UI.dropdown_link("Documentation", "/docs").to_html
+  ),
+  id: "release-menu",
+  labelled_by: "release-trigger",
+  align: LF::UI::MenuAlign::End
+)
+
+LF::UI.dropdown(
+  LF::LiveView::HTML.raw(trigger.to_html + menu.to_html),
+  id: "release-actions"
+)
+```
+
+The `OpalDropdown` hook handles outside click, Escape, Tab, Home, End, and
+ArrowUp/ArrowDown. Disabled items are skipped. A typed item `event` emits its
+optional `value` as the `item` event field. `dropdown_link` applies the same
+safe URL policy as `link_button`.
+
+## Tabs
+
+Tab selection is server-owned. Render every tab and panel from the current
+selection; the hook adds automatic arrow-key activation:
+
+```crystal
+tab = LF::UI.tab(
+  "Overview",
+  id: "overview-tab",
+  panel_id: "overview-panel",
+  selected: @selected_tab == "overview",
+  select_event: "select_tab",
+  value: "overview"
+)
+list = LF::UI.tab_list(tab, label: "Release details")
+panel = LF::UI.tab_panel(
+  "Current release status",
+  id: "overview-panel",
+  labelled_by: "overview-tab",
+  selected: @selected_tab == "overview"
+)
+
+LF::UI.tabs(
+  LF::LiveView::HTML.raw(list.to_html + panel.to_html),
+  id: "release-tabs"
+)
+```
+
+The select event receives the configured value as `tab`. Horizontal lists use
+ArrowLeft/ArrowRight; `TabsOrientation::Vertical` uses ArrowUp/ArrowDown. Home
+and End select the first and last enabled tabs. The view must validate the
+received value before storing it.
+
+## Toast notifications
+
+The application owns the notification list and removes a toast when its
+dismiss event arrives. The hook only handles the close control and optional
+timer:
+
+```crystal
+toast = LF::UI.toast(
+  "The release candidate passed its checks.",
+  id: "release-ready-toast",
+  title: "Release ready",
+  tone: LF::UI::Tone::Success,
+  dismiss_event: "dismiss_toast",
+  auto_dismiss_ms: 5_000,
+  return_focus: "show-toast"
+)
+
+LF::UI.toast_region(toast, id: "notifications")
+```
+
+Manual dismiss emits `reason: "button"`; automatic dismiss emits
+`reason: "timeout"`. Auto-dismiss requires a dismiss event. `return_focus` is
+used only for manual dismissal, when the focused close button is removed by
+the server patch. Omit `auto_dismiss_ms` for persistent important messages.
+
 ## Forms
 
 Text controls render their label, required marker, hint, error, and ARIA
@@ -224,11 +318,11 @@ Normal text is HTML escaped. Pass `LF::LiveView::Rendered` or an explicit
 ## Stateful behavior
 
 UI primitives are not `LF::LiveView::Component` subclasses. Buttons, fields,
-cards, badges, tables, and dialogs do not own connection state and therefore
-should not consume component identities. Application views own state and pass
-the current values when rendering. Future dropdown, tabs, toast, and accordion
-components may use the same dependency-free hook asset for local interaction;
-server state remains explicit when the application needs it.
+cards, badges, tables, dialogs, dropdowns, tabs, and toasts do not own connection
+state and therefore should not consume component identities. Application views
+own selected tabs, dialog state, notification lists, and menu action results.
+Hooks own only transient focus, visibility, and timer behavior and restore it
+after compatible DOM morphs.
 
 See [the UI showcase](../examples/ui_showcase/README.md) for a runnable page
 covering every primitive family and LiveView validation updates.

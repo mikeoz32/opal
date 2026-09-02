@@ -26,9 +26,7 @@ module LF::UI
     validate_id!(labelled_by)
     described_by.try { |value| validate_id!(value) }
     return_focus.try { |value| validate_id!(value) }
-    if close_event.blank? || close_event.each_char.any?(&.control?)
-      raise ArgumentError.new("UI dialog close event must not be blank or contain control characters")
-    end
+    validate_event!(close_event, "UI dialog close event")
 
     fixed = {
       "id"                              => id,

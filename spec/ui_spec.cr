@@ -118,6 +118,134 @@ describe LF::UI do
     end
   end
 
+  it "renders an accessible dropdown menu with typed actions and links" do
+    trigger = LF::UI.dropdown_trigger(
+      "Release actions",
+      id: "release-trigger",
+      controls: "release-menu"
+    )
+    menu = LF::UI.dropdown_menu(
+      LF::LiveView::HTML.raw(
+        LF::UI.dropdown_item("Run checks", event: "run_action", value: "checks").to_html +
+        LF::UI.dropdown_item("Deploy", disabled: true).to_html +
+        LF::UI.dropdown_link("Documentation", "https://example.com/docs?a=1&b=2").to_html
+      ),
+      id: "release-menu",
+      labelled_by: "release-trigger",
+      align: LF::UI::MenuAlign::End
+    )
+    html = LF::UI.dropdown(
+      LF::LiveView::HTML.raw(trigger.to_html + menu.to_html),
+      id: "release-dropdown"
+    ).to_html
+
+    html.should contain(%(data-opal-hook="OpalDropdown"))
+    html.should contain(%(aria-haspopup="menu"))
+    html.should contain(%(aria-expanded="false"))
+    html.should contain(%(role="menu"))
+    html.should contain(%(aria-labelledby="release-trigger"))
+    html.should contain(%(data-opal-click="run_action"))
+    html.should contain(%(data-opal-value-item="checks"))
+    html.should contain(%(href="https://example.com/docs?a=1&amp;b=2"))
+    html.should contain(" hidden")
+    html.should contain(" disabled")
+  end
+
+  it "rejects incomplete dropdown actions" do
+    expect_raises(ArgumentError, "UI dropdown item value requires an event") do
+      LF::UI.dropdown_item("Run", value: "checks")
+    end
+    expect_raises(ArgumentError, "UI dropdown item event must not be blank") do
+      LF::UI.dropdown_item("Run", event: "")
+    end
+  end
+
+  it "renders server-controlled accessible tabs and panels" do
+    list = LF::UI.tab_list(
+      LF::LiveView::HTML.raw(
+        LF::UI.tab(
+          "Overview",
+          id: "overview-tab",
+          panel_id: "overview-panel",
+          selected: true,
+          select_event: "select_tab",
+          value: "overview"
+        ).to_html +
+        LF::UI.tab(
+          "Activity",
+          id: "activity-tab",
+          panel_id: "activity-panel",
+          selected: false,
+          select_event: "select_tab",
+          value: "activity"
+        ).to_html
+      ),
+      label: "Release details"
+    )
+    panels = LF::UI.tab_panel(
+      "Current release",
+      id: "overview-panel",
+      labelled_by: "overview-tab",
+      selected: true
+    ).to_html + LF::UI.tab_panel(
+      "Recent activity",
+      id: "activity-panel",
+      labelled_by: "activity-tab",
+      selected: false
+    ).to_html
+    html = LF::UI.tabs(
+      LF::LiveView::HTML.raw(list.to_html + panels),
+      id: "release-tabs"
+    ).to_html
+
+    html.should contain(%(data-opal-hook="OpalTabs"))
+    html.should contain(%(role="tablist"))
+    html.should contain(%(aria-label="Release details"))
+    html.should contain(%(aria-selected="true"))
+    html.should contain(%(aria-controls="overview-panel"))
+    html.should contain(%(data-opal-value-tab="activity"))
+    html.should contain(%(<section class=))
+    html.should contain(%(role="tabpanel"))
+    html.should contain(%(id="activity-panel"))
+    html.should contain(" hidden")
+  end
+
+  it "renders a live toast region with server-owned dismissal" do
+    toast = LF::UI.toast(
+      "Version <1.0> is ready.",
+      id: "release-toast",
+      title: "Release <ready>",
+      tone: LF::UI::Tone::Success,
+      dismiss_event: "dismiss_toast",
+      auto_dismiss_ms: 5_000,
+      dismiss_label: "Close release notification",
+      return_focus: "show-toast"
+    )
+    html = LF::UI.toast_region(toast, id: "notifications").to_html
+
+    html.should contain(%(role="region"))
+    html.should contain(%(aria-live="polite"))
+    html.should contain(%(data-opal-hook="OpalToast"))
+    html.should contain(%(data-opal-toast-dismiss-event="dismiss_toast"))
+    html.should contain(%(data-opal-toast-duration="5000"))
+    html.should contain(%(data-opal-toast-return-focus="show-toast"))
+    html.should contain(%(aria-label="Close release notification"))
+    html.should contain("Release &lt;ready&gt;")
+    html.should contain("Version &lt;1.0&gt; is ready.")
+  end
+
+  it "rejects invalid toast dismissal contracts" do
+    expect_raises(ArgumentError, "UI toast auto dismiss requires a dismiss event") do
+      LF::UI.toast("Ready", id: "toast", auto_dismiss_ms: 1_000)
+    end
+    expect_raises(ArgumentError, "UI toast auto dismiss duration must be greater than zero") do
+      LF::UI.toast("Ready", id: "toast", dismiss_event: "dismiss", auto_dismiss_ms: 0)
+    end
+    expect_raises(ArgumentError, "UI toast return focus requires a dismiss event") do
+      LF::UI.toast("Ready", id: "toast", return_focus: "show-toast")
+    end
+  end
+
   it "renders accessible text controls, errors, and escaped values" do
     input = LF::UI.input(
       "Email",
@@ -239,8 +367,11 @@ describe LF::UI do
     link.should eq(%(<link rel="stylesheet" href="/assets/ui.css?v=1&amp;theme=opal" data-opal-ui-theme>))
   end
 
-  it "ships optional dialog hooks with inline and linked helpers" do
+  it "ships optional interaction hooks with inline and linked helpers" do
     LF::UI.hooks.should contain("OpalDialog")
+    LF::UI.hooks.should contain("OpalDropdown")
+    LF::UI.hooks.should contain("OpalTabs")
+    LF::UI.hooks.should contain("OpalToast")
     LF::UI.hooks.should contain("showModal")
 
     inline = LF::UI.hook_script_tag(%(nonce"value)).value

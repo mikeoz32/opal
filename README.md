@@ -372,8 +372,9 @@ LF::UI.input(
 ```
 
 Use `LF::UI.stylesheet_tag` for a zero-setup embedded theme. Interactive
-primitives such as dialogs additionally load `LF::UI.hook_script_tag` before
-the LiveView client; both assets also have cacheable mounted routes. See the
+primitives such as dialogs, dropdowns, tabs, and toasts additionally load
+`LF::UI.hook_script_tag` before the LiveView client; both assets also have
+cacheable mounted routes. See the
 [UI guide](docs/ui.md) and runnable [UI showcase](examples/ui_showcase/README.md).
 
 ## DI Container
@@ -686,7 +687,8 @@ The repository includes these examples:
 
 - [examples/ui_showcase](examples/ui_showcase/)
   Tailwind-based `LF::UI` showcase covering typed variants, accessible forms,
-  validation, switches, feedback, cards, tables, and modal dialog behavior.
+  validation, switches, feedback, cards, tables, modal dialogs, dropdown menus,
+  tabs, and toast notifications.
 
 Run them with:
 

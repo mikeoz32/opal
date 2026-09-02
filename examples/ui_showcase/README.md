@@ -3,7 +3,9 @@
 This runnable LiveView demonstrates the optional `LF::UI` primitives and the
 precompiled Tailwind theme. It covers actions, feedback, cards, accessible form
 controls, validation, switches, composable tables, and a server-controlled
-native modal dialog with Escape, backdrop, DOM-patch, and focus behavior.
+native modal dialog with Escape, backdrop, DOM-patch, and focus behavior. It
+also demonstrates a keyboard-navigable dropdown, server-controlled tabs, and
+manual plus timed toast dismissal.
 
 From this directory:
 

@@ -38,7 +38,9 @@ The initial component families are:
 - badge and alert;
 - card and card sections;
 - field, input, textarea, select, checkbox, radio, and switch;
-- composable table elements.
+- composable table elements;
+- native modal dialog;
+- dropdown menu, tabs, toast, and toast region.
 
 Opal ships a minified stylesheet generated with Tailwind CSS. The source scans
 complete class literals in `src/opal/ui`, does not include Tailwind Preflight,
@@ -50,7 +52,9 @@ Interactive primitives use a separate dependency-free browser-hook asset.
 Applications opt into that asset inline or through the cacheable UI route and
 load it before the LiveView client. The native dialog primitive uses the hook
 only to synchronize top-layer, close-request, and focus behavior; its open
-state remains application-owned.
+state remains application-owned. Dropdown visibility is local ephemeral state;
+tab selection and toast presence remain application-owned. Their hooks provide
+keyboard focus, DOM-morph continuity, and optional dismissal timers.
 
 Component state remains application-owned. Interactive overlay components may
 later use the existing LiveView hook contract for focus management, keyboard
@@ -68,5 +72,5 @@ behavior that genuinely requires server-owned state.
 - Contributors need Node only when UI class literals or theme sources change.
 - The precompiled theme is intentionally a baseline. Applications that require
   design-token or utility-level customization should own the Tailwind build.
-- Interactive components remain separate slices with browser-level keyboard,
-  focus, reconnect, and DOM-morph tests.
+- Interactive components require browser-level keyboard, focus, reconnect, and
+  DOM-morph tests.

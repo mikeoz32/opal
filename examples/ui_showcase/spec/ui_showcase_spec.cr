@@ -16,6 +16,10 @@ describe UIShowcaseLive do
     initial.should contain(%(data-opal-ui="table"))
     initial.should contain(%(data-opal-ui="dialog"))
     initial.should contain(%(data-opal-dialog-open="false"))
+    initial.should contain(%(data-opal-ui="dropdown"))
+    initial.should contain(%(data-opal-ui="tabs"))
+    initial.should contain(%(data-opal-ui="toast-region"))
+    initial.should_not contain(%(data-opal-ui="toast"))
 
     view.__opal_handle_event(nil, "toggle_notifications", JSON.parse("{}"))
     view.__opal_handle_event(nil, "toggle_deployment", JSON.parse("{}"))
@@ -40,6 +44,26 @@ describe UIShowcaseLive do
     closed = view.__opal_render.to_html
     closed.should contain(%(data-opal-dialog-open="false"))
     closed.should contain("Closed by escape")
+
+    view.__opal_handle_event(nil, "run_menu_action", JSON.parse(%({"item":"checks"})))
+    menu_updated = view.__opal_render.to_html
+    menu_updated.should contain("Selected checks")
+
+    view.__opal_handle_event(nil, "select_component_tab", JSON.parse(%({"tab":"activity"})))
+    tabs_updated = view.__opal_render.to_html
+    tabs_updated.should contain(%(id="activity-tab"))
+    tabs_updated.should contain(%(aria-selected="true"))
+    tabs_updated.should contain("Recent builds and deployment events.")
+
+    view.__opal_handle_event(nil, "show_release_toast", JSON.parse("{}"))
+    toast_visible = view.__opal_render.to_html
+    toast_visible.should contain(%(data-opal-ui="toast"))
+    toast_visible.should contain("Release ready")
+
+    view.__opal_handle_event(nil, "dismiss_release_toast", JSON.parse(%({"reason":"button"})))
+    toast_dismissed = view.__opal_render.to_html
+    toast_dismissed.should_not contain(%(data-opal-ui="toast"))
+    toast_dismissed.should contain("Toast dismissed by button")
   ensure
     view.try(&.__opal_disconnect)
   end

@@ -21,6 +21,16 @@ module LF::UI
     Ghost
   end
 
+  enum MenuAlign
+    Start
+    End
+  end
+
+  enum TabsOrientation
+    Horizontal
+    Vertical
+  end
+
   # One option rendered by `UI.select`.
   struct SelectOption
     getter value : String

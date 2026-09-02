@@ -13,6 +13,11 @@ class UIShowcaseLive < LF::LiveView::View
   @release_dialog_open = false
   @dialog_revision = 0
   @last_dialog_close_reason = ""
+  @selected_tab = "overview"
+  @last_menu_action = ""
+  @toast_visible = false
+  @toast_sequence = 0
+  @last_toast_dismiss_reason = ""
 
   def handle_event(event : String, value : JSON::Any) : Nil
     case event
@@ -36,6 +41,18 @@ class UIShowcaseLive < LF::LiveView::View
     when "close_release_dialog"
       @release_dialog_open = false
       @last_dialog_close_reason = string_value(value, "reason")
+    when "run_menu_action"
+      @last_menu_action = string_value(value, "item")
+    when "select_component_tab"
+      selected = string_value(value, "tab")
+      @selected_tab = selected if {"overview", "activity", "settings"}.includes?(selected)
+    when "show_release_toast"
+      @toast_sequence += 1
+      @toast_visible = true
+      @last_toast_dismiss_reason = ""
+    when "dismiss_release_toast"
+      @toast_visible = false
+      @last_toast_dismiss_reason = string_value(value, "reason")
     else
       super
     end
@@ -56,10 +73,12 @@ class UIShowcaseLive < LF::LiveView::View
         <main class="showcase-grid">
           #{actions_card}
           #{feedback_card}
+          #{interaction_card}
           #{form_card}
           #{table_card}
         </main>
         #{release_dialog}
+        #{notifications}
       </div>
     HTML
   end
@@ -265,6 +284,113 @@ class UIShowcaseLive < LF::LiveView::View
     )
   end
 
+  private def interaction_card : LF::LiveView::Rendered
+    menu_items = LF::LiveView::HTML.raw(
+      LF::UI.dropdown_item(
+        "Run checks",
+        event: "run_menu_action",
+        value: "checks",
+        attributes: {"id" => "menu-run-checks"}
+      ).to_html +
+      LF::UI.dropdown_item(
+        "Create tag",
+        event: "run_menu_action",
+        value: "tag",
+        attributes: {"id" => "menu-create-tag"}
+      ).to_html +
+      LF::UI.dropdown_item("Deploy production", disabled: true).to_html +
+      LF::UI.dropdown_link("Open documentation", "https://github.com/mikeoz32/opal").to_html
+    )
+    dropdown = LF::UI.dropdown(
+      LF::LiveView::HTML.raw(
+        LF::UI.dropdown_trigger(
+          "Release actions",
+          id: "release-actions-trigger",
+          controls: "release-actions-menu"
+        ).to_html +
+        LF::UI.dropdown_menu(
+          menu_items,
+          id: "release-actions-menu",
+          labelled_by: "release-actions-trigger",
+          align: LF::UI::MenuAlign::End
+        ).to_html
+      ),
+      id: "release-actions"
+    )
+
+    tab_buttons = String.build do |html|
+      {"overview" => "Overview", "activity" => "Activity", "settings" => "Settings"}.each do |value, label|
+        html << LF::UI.tab(
+          label,
+          id: "#{value}-tab",
+          panel_id: "#{value}-panel",
+          selected: @selected_tab == value,
+          select_event: "select_component_tab",
+          value: value
+        ).to_html
+      end
+    end
+    panels = String.build do |html|
+      {
+        "overview" => "Current release metadata and readiness.",
+        "activity" => "Recent builds and deployment events.",
+        "settings" => "Release channel and notification settings.",
+      }.each do |value, copy|
+        html << LF::UI.tab_panel(
+          copy,
+          id: "#{value}-panel",
+          labelled_by: "#{value}-tab",
+          selected: @selected_tab == value
+        ).to_html
+      end
+    end
+    tabs = LF::UI.tabs(
+      LF::LiveView::HTML.raw(
+        LF::UI.tab_list(
+          LF::LiveView::HTML.raw(tab_buttons),
+          label: "Release details"
+        ).to_html + panels
+      ),
+      id: "release-tabs"
+    )
+
+    controls = String.build do |html|
+      html << %(<div class="showcase-actions">#{dropdown.to_html})
+      html << LF::UI.button(
+        "Show notification",
+        variant: LF::UI::ButtonVariant::Outline,
+        attributes: {"id" => "show-release-toast", "data-opal-click" => "show_release_toast"}
+      ).to_html
+      unless @last_menu_action.blank?
+        html << LF::UI.badge(
+          "Selected #{@last_menu_action}",
+          attributes: {"id" => "menu-action-result", "aria-live" => "polite"}
+        ).to_html
+      end
+      unless @last_toast_dismiss_reason.blank?
+        html << LF::UI.badge(
+          "Toast dismissed by #{@last_toast_dismiss_reason}",
+          attributes: {"id" => "toast-dismiss-result", "aria-live" => "polite"}
+        ).to_html
+      end
+      html << "</div>"
+    end
+    content = LF::LiveView::HTML.raw(
+      %(<div class="showcase-stack">#{controls}#{tabs.to_html}</div>)
+    )
+    header = LF::UI.card_header(
+      LF::LiveView::HTML.raw(
+        LF::UI.card_title("Interactive primitives").to_html +
+        LF::UI.card_description("Dropdown focus is local; tabs and notifications keep application state on the server.").to_html
+      )
+    )
+    body = LF::UI.card_body(content)
+    LF::UI.card(
+      LF::LiveView::HTML.raw(header.to_html + body.to_html),
+      class_name: "showcase-wide"
+    )
+  end
+
   private def table_card : LF::LiveView::Rendered
     head = LF::UI.table_head(
       LF::UI.table_row(
@@ -337,6 +463,23 @@ class UIShowcaseLive < LF::LiveView::View
       close_event: "close_release_dialog",
       return_focus: "open-release-dialog"
     )
+  end
+
+  private def notifications : LF::LiveView::Rendered
+    content = if @toast_visible
+                LF::UI.toast(
+                  "The release candidate passed its local checks.",
+                  id: "release-toast-#{@toast_sequence}",
+                  title: "Release ready",
+                  tone: LF::UI::Tone::Success,
+                  dismiss_event: "dismiss_release_toast",
+                  auto_dismiss_ms: 5_000,
+                  return_focus: "show-release-toast"
+                )
+              else
+                LF::LiveView::Rendered.opaque("")
+              end
+    LF::UI.toast_region(content, id: "showcase-notifications")
   end
 
   private def update_profile(value : JSON::Any) : Nil

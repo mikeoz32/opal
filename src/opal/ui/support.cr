@@ -82,6 +82,12 @@ module LF::UI
     end
   end
 
+  private def validate_event!(event : String, label : String) : Nil
+    if event.blank? || event.each_char.any?(&.control?)
+      raise ArgumentError.new("#{label} must not be blank or contain control characters")
+    end
+  end
+
   private def validate_href!(href : String) : Nil
     value = href.strip
     raise ArgumentError.new("UI link href must not be blank") if value.blank?
