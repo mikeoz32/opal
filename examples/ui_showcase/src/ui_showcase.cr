@@ -10,6 +10,9 @@ class UIShowcaseLive < LF::LiveView::View
   @notifications = true
   @deployment_ready = false
   @saved = false
+  @release_dialog_open = false
+  @dialog_revision = 0
+  @last_dialog_close_reason = ""
 
   def handle_event(event : String, value : JSON::Any) : Nil
     case event
@@ -25,6 +28,14 @@ class UIShowcaseLive < LF::LiveView::View
       @notifications = !@notifications
     when "toggle_deployment"
       @deployment_ready = !@deployment_ready
+    when "open_release_dialog"
+      @release_dialog_open = true
+      @last_dialog_close_reason = ""
+    when "refresh_release_dialog"
+      @dialog_revision += 1
+    when "close_release_dialog"
+      @release_dialog_open = false
+      @last_dialog_close_reason = string_value(value, "reason")
     else
       super
     end
@@ -48,6 +59,7 @@ class UIShowcaseLive < LF::LiveView::View
           #{form_card}
           #{table_card}
         </main>
+        #{release_dialog}
       </div>
     HTML
   end
@@ -90,7 +102,7 @@ class UIShowcaseLive < LF::LiveView::View
             }
           </style>
         </head>
-        <body>#{live_root}#{client_script}</body>
+        <body>#{live_root}#{LF::UI.hook_script_tag.value}#{client_script}</body>
       </html>
     HTML
   end
@@ -111,6 +123,11 @@ class UIShowcaseLive < LF::LiveView::View
         variant: LF::UI::ButtonVariant::Ghost,
         tone: LF::UI::Tone::Danger
       ).to_html
+      html << LF::UI.button(
+        "Open release dialog",
+        variant: LF::UI::ButtonVariant::Outline,
+        attributes: {"id" => "open-release-dialog", "data-opal-click" => "open_release_dialog"}
+      ).to_html
       html << LF::UI.link_button(
         "Documentation",
         "https://github.com/mikeoz32/opal",
@@ -118,6 +135,12 @@ class UIShowcaseLive < LF::LiveView::View
         tone: LF::UI::Tone::Primary
       ).to_html
       html << LF::UI.button("Disabled", disabled: true).to_html
+      unless @last_dialog_close_reason.blank?
+        html << LF::UI.badge(
+          "Closed by #{@last_dialog_close_reason}",
+          attributes: {"id" => "dialog-close-reason", "aria-live" => "polite"}
+        ).to_html
+      end
     end
     header = LF::UI.card_header(
       LF::LiveView::HTML.raw(
@@ -272,6 +295,50 @@ class UIShowcaseLive < LF::LiveView::View
     )
   end
 
+  private def release_dialog : LF::LiveView::Rendered
+    header = LF::UI.dialog_header(
+      LF::LiveView::HTML.raw(
+        LF::UI.dialog_title("Publish release", id: "release-dialog-title").to_html +
+        LF::UI.dialog_description(
+          "Review the current release state before publishing.",
+          id: "release-dialog-description"
+        ).to_html
+      )
+    )
+    body = LF::UI.dialog_body(
+      LF::LiveView::HTML.raw(
+        %(<p id="dialog-revision">Dialog update #{@dialog_revision}</p>)
+      )
+    )
+    footer = LF::UI.dialog_footer(
+      LF::LiveView::HTML.raw(
+        LF::UI.button(
+          "Refresh preview",
+          variant: LF::UI::ButtonVariant::Outline,
+          attributes: {"id" => "refresh-release-dialog", "data-opal-click" => "refresh_release_dialog"}
+        ).to_html +
+        LF::UI.button(
+          "Close dialog",
+          attributes: {
+            "id"                     => "close-release-dialog",
+            "autofocus"              => "",
+            "data-opal-click"        => "close_release_dialog",
+            "data-opal-value-reason" => "button",
+          }
+        ).to_html
+      )
+    )
+    LF::UI.dialog(
+      LF::LiveView::HTML.raw(header.to_html + body.to_html + footer.to_html),
+      id: "release-dialog",
+      open: @release_dialog_open,
+      labelled_by: "release-dialog-title",
+      described_by: "release-dialog-description",
+      close_event: "close_release_dialog",
+      return_focus: "open-release-dialog"
+    )
+  end
+
   private def update_profile(value : JSON::Any) : Nil
     fields = value.as_h
     @name = fields["name"]?.try(&.as_s) || ""
@@ -279,6 +346,12 @@ class UIShowcaseLive < LF::LiveView::View
   rescue TypeCastError
     @name = ""
     @role = ""
+  end
+
+  private def string_value(value : JSON::Any, key : String) : String
+    value.as_h[key]?.try(&.as_s) || ""
+  rescue TypeCastError
+    ""
   end
 end
 

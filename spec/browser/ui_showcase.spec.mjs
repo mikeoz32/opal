@@ -8,7 +8,7 @@ test("renders the compiled UI theme and primitive families", async ({page}) => {
   await expect(page).toHaveTitle("Opal UI showcase");
   await expect(page.locator("#opal-live-root")).toHaveClass(/phx-connected/);
   await expect(page.locator('[data-opal-ui="card"]')).toHaveCount(4);
-  await expect(page.locator('[data-opal-ui="button"]')).toHaveCount(5);
+  await expect(page.locator('[data-opal-ui="button"]')).toHaveCount(8);
   await expect(page.locator('[data-opal-ui="table"]')).toBeVisible();
   await expect(page.locator('[data-opal-ui="input"]')).toBeVisible();
 
@@ -20,6 +20,37 @@ test("renders the compiled UI theme and primitive families", async ({page}) => {
 
   await page.emulateMedia({colorScheme: "dark"});
   await expect(page.locator("body")).toHaveCSS("background-color", "rgb(2, 6, 23)");
+});
+
+test("keeps dialog state on the server and handles modal focus semantics", async ({page}) => {
+  await page.goto("/");
+
+  const opener = page.locator("#open-release-dialog");
+  const dialog = page.locator("#release-dialog");
+  const close = page.locator("#close-release-dialog");
+
+  await expect(dialog).not.toBeVisible();
+  await opener.click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toHaveAttribute("aria-labelledby", "release-dialog-title");
+  await expect(dialog).toHaveAttribute("aria-describedby", "release-dialog-description");
+  await expect(close).toBeFocused();
+
+  await page.locator("#refresh-release-dialog").click();
+  await expect(dialog).toBeVisible();
+  await expect(page.locator("#dialog-revision")).toHaveText("Dialog update 1");
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).not.toBeVisible();
+  await expect(page.locator("#dialog-close-reason")).toHaveText("Closed by escape");
+  await expect(opener).toBeFocused();
+
+  await opener.click();
+  await expect(dialog).toBeVisible();
+  await page.mouse.click(4, 4);
+  await expect(dialog).not.toBeVisible();
+  await expect(page.locator("#dialog-close-reason")).toHaveText("Closed by backdrop");
+  await expect(opener).toBeFocused();
 });
 
 test("updates alert and switch state through LiveView", async ({page}) => {

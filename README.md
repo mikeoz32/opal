@@ -65,8 +65,8 @@ Opal exposes eight independent layers:
    pinned Phoenix/LiveView browser packages prebundled into the shard.
 
 8. `require "opal/ui"`
-   Optional stateless actions, feedback, cards, form controls, and tables with
-   a precompiled Tailwind theme.
+   Optional stateless actions, feedback, cards, form controls, tables, and
+   server-controlled dialogs with a precompiled Tailwind theme.
 
 ## Basic Router
 
@@ -371,9 +371,10 @@ LF::UI.input(
 )
 ```
 
-Use `LF::UI.stylesheet_tag` for a zero-setup embedded theme, or mount and link
-the cacheable stylesheet. See the [UI guide](docs/ui.md) and runnable
-[UI showcase](examples/ui_showcase/README.md).
+Use `LF::UI.stylesheet_tag` for a zero-setup embedded theme. Interactive
+primitives such as dialogs additionally load `LF::UI.hook_script_tag` before
+the LiveView client; both assets also have cacheable mounted routes. See the
+[UI guide](docs/ui.md) and runnable [UI showcase](examples/ui_showcase/README.md).
 
 ## DI Container
 
@@ -685,7 +686,7 @@ The repository includes these examples:
 
 - [examples/ui_showcase](examples/ui_showcase/)
   Tailwind-based `LF::UI` showcase covering typed variants, accessible forms,
-  validation, switches, feedback, cards, and tables.
+  validation, switches, feedback, cards, tables, and modal dialog behavior.
 
 Run them with:
 

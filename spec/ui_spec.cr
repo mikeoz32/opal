@@ -69,6 +69,55 @@ describe LF::UI do
     html.should contain(">Stable</span>")
   end
 
+  it "renders an accessible server-controlled dialog" do
+    header = LF::UI.dialog_header(
+      LF::LiveView::HTML.raw(
+        LF::UI.dialog_title("Publish release", id: "publish-title").to_html +
+        LF::UI.dialog_description("Confirm the release.", id: "publish-description").to_html
+      )
+    )
+    body = LF::UI.dialog_body("Version <1.0>")
+    footer = LF::UI.dialog_footer(
+      LF::UI.button("Cancel", attributes: {"data-opal-click" => "close_publish"})
+    )
+    html = LF::UI.dialog(
+      LF::LiveView::HTML.raw(header.to_html + body.to_html + footer.to_html),
+      id: "publish-dialog",
+      open: true,
+      labelled_by: "publish-title",
+      described_by: "publish-description",
+      close_event: "close_publish",
+      return_focus: "publish-button",
+      attributes: {"data-opal-target" => "7"}
+    ).to_html
+
+    html.should contain(%(<dialog))
+    html.should contain(%(id="publish-dialog"))
+    html.should contain(%(role="dialog"))
+    html.should contain(%(aria-modal="true"))
+    html.should contain(%(aria-labelledby="publish-title"))
+    html.should contain(%(aria-describedby="publish-description"))
+    html.should contain(%(data-opal-hook="OpalDialog"))
+    html.should contain(%(data-opal-dialog-open="true"))
+    html.should contain(%(data-opal-dialog-close-escape="true"))
+    html.should contain(%(data-opal-dialog-return-focus="publish-button"))
+    html.should contain(%(data-opal-target="7"))
+    html.should contain(%(data-opal-ui="dialog-panel"))
+    html.should contain("Version &lt;1.0&gt;")
+  end
+
+  it "rejects invalid dialog identities and close events" do
+    expect_raises(ArgumentError, "UI element id must not be blank") do
+      LF::UI.dialog("Content", id: "", open: false, labelled_by: "title", close_event: "close")
+    end
+    expect_raises(ArgumentError, "UI element id must not contain whitespace") do
+      LF::UI.dialog("Content", id: "dialog", open: false, labelled_by: "bad title", close_event: "close")
+    end
+    expect_raises(ArgumentError, "UI dialog close event must not be blank") do
+      LF::UI.dialog("Content", id: "dialog", open: false, labelled_by: "title", close_event: "")
+    end
+  end
+
   it "renders accessible text controls, errors, and escaped values" do
     input = LF::UI.input(
       "Email",
@@ -190,19 +239,44 @@ describe LF::UI do
     link.should eq(%(<link rel="stylesheet" href="/assets/ui.css?v=1&amp;theme=opal" data-opal-ui-theme>))
   end
 
-  it "mounts the compiled theme as a cacheable HTTP asset" do
+  it "ships optional dialog hooks with inline and linked helpers" do
+    LF::UI.hooks.should contain("OpalDialog")
+    LF::UI.hooks.should contain("showModal")
+
+    inline = LF::UI.hook_script_tag(%(nonce"value)).value
+    inline.should start_with(%(<script data-opal-ui-hooks nonce="nonce&quot;value">))
+    inline.should contain("OpalDialog")
+    inline.should end_with("</script>")
+
+    link = LF::UI.hook_script_link("/assets/ui.js?v=1&theme=opal").value
+    link.should eq(%(<script src="/assets/ui.js?v=1&amp;theme=opal" data-opal-ui-hooks></script>))
+  end
+
+  it "mounts the compiled theme and hooks as cacheable HTTP assets" do
     router = LF::HTTP::Router.new
     LF::UI.mount_assets(router)
-    io = IO::Memory.new
-    request = HTTP::Request.new("GET", LF::UI::STYLESHEET_PATH)
-    response = HTTP::Server::Response.new(io)
+    css_io = IO::Memory.new
+    css_request = HTTP::Request.new("GET", LF::UI::STYLESHEET_PATH)
+    css_response = HTTP::Server::Response.new(css_io)
 
-    router.call(HTTP::Server::Context.new(request, response))
-    response.close
+    router.call(HTTP::Server::Context.new(css_request, css_response))
+    css_response.close
 
-    response.status.should eq(HTTP::Status::OK)
-    response.content_type.should eq("text/css; charset=utf-8")
-    response.headers["Cache-Control"].should eq("public, max-age=3600")
-    io.to_s.split("\r\n\r\n", 2)[1].should eq(LF::UI.stylesheet)
+    css_response.status.should eq(HTTP::Status::OK)
+    css_response.content_type.should eq("text/css; charset=utf-8")
+    css_response.headers["Cache-Control"].should eq("public, max-age=3600")
+    css_io.to_s.split("\r\n\r\n", 2)[1].should eq(LF::UI.stylesheet)
+
+    hooks_io = IO::Memory.new
+    hooks_request = HTTP::Request.new("GET", LF::UI::HOOKS_PATH)
+    hooks_response = HTTP::Server::Response.new(hooks_io)
+
+    router.call(HTTP::Server::Context.new(hooks_request, hooks_response))
+    hooks_response.close
+
+    hooks_response.status.should eq(HTTP::Status::OK)
+    hooks_response.content_type.should eq("text/javascript; charset=utf-8")
+    hooks_response.headers["Cache-Control"].should eq("public, max-age=3600")
+    hooks_io.to_s.split("\r\n\r\n", 2)[1].should eq(LF::UI.hooks)
   end
 end

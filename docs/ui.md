@@ -40,6 +40,20 @@ end
 LF::UI.stylesheet_link # /_opal/ui.css
 ```
 
+Interactive primitives keep their small browser hooks in a separate optional
+asset. Load either form immediately before the LiveView client module:
+
+```crystal
+<body>
+  #{live_root}
+  #{LF::UI.hook_script_tag.value}
+  #{client_script}
+</body>
+```
+
+When `mount_assets` is used, `LF::UI.hook_script_link` points to the cacheable
+`/_opal/ui.js` route. Both inline helpers accept a CSP nonce.
+
 Applications with their own Tailwind build may omit the precompiled theme and
 scan Opal's complete literal utility classes instead. With Tailwind 4, add the
 library source to the application stylesheet:
@@ -106,6 +120,53 @@ LF::UI.card(
 `HTML.raw` is appropriate above because every fragment came from a framework
 component. Do not wrap user-controlled HTML with it.
 
+## Dialogs
+
+`dialog` uses the browser's native modal top layer while the application view
+remains the source of truth for whether it is open. Compose its labelled
+sections and handle one close event for Escape, backdrop clicks, or explicit
+buttons:
+
+```crystal
+header = LF::UI.dialog_header(
+  LF::LiveView::HTML.raw(
+    LF::UI.dialog_title("Publish release", id: "publish-title").to_html +
+    LF::UI.dialog_description(
+      "Review the release before publishing.",
+      id: "publish-description"
+    ).to_html
+  )
+)
+footer = LF::UI.dialog_footer(
+  LF::UI.button(
+    "Close",
+    attributes: {
+      "autofocus" => "",
+      "data-opal-click" => "close_publish",
+      "data-opal-value-reason" => "button",
+    }
+  )
+)
+
+LF::UI.dialog(
+  LF::LiveView::HTML.raw(header.to_html + footer.to_html),
+  id: "publish-dialog",
+  open: @publish_open,
+  labelled_by: "publish-title",
+  described_by: "publish-description",
+  close_event: "close_publish",
+  return_focus: "publish-button"
+)
+```
+
+The optional `OpalDialog` hook calls native `showModal`, preserves modal state
+through LiveView DOM patches, prevents browser-owned close state, and pushes
+the configured close event with `reason` equal to `escape` or `backdrop`.
+Native modal focus containment is retained, and `return_focus` restores the
+stable opener after the server renders `open: false` (automatic capture is the
+fallback). Set `close_on_escape` or
+`close_on_backdrop` to `false` when the application must block those paths.
+
 ## Forms
 
 Text controls render their label, required marker, hint, error, and ARIA
@@ -163,11 +224,11 @@ Normal text is HTML escaped. Pass `LF::LiveView::Rendered` or an explicit
 ## Stateful behavior
 
 UI primitives are not `LF::LiveView::Component` subclasses. Buttons, fields,
-cards, badges, and tables do not own connection state and therefore should not
-consume component identities. Application views own state and pass the current
-values when rendering. Future modal, dropdown, tabs, toast, and accordion
-components may use dependency-free browser hooks for local interaction; server
-state remains explicit when the application needs it.
+cards, badges, tables, and dialogs do not own connection state and therefore
+should not consume component identities. Application views own state and pass
+the current values when rendering. Future dropdown, tabs, toast, and accordion
+components may use the same dependency-free hook asset for local interaction;
+server state remains explicit when the application needs it.
 
 See [the UI showcase](../examples/ui_showcase/README.md) for a runnable page
 covering every primitive family and LiveView validation updates.

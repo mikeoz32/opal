@@ -46,6 +46,12 @@ and can be regenerated with `npm run build:ui-css`. Applications may embed the
 compiled theme, mount it as a cacheable HTTP asset, or run their own Tailwind
 build against the library source.
 
+Interactive primitives use a separate dependency-free browser-hook asset.
+Applications opt into that asset inline or through the cacheable UI route and
+load it before the LiveView client. The native dialog primitive uses the hook
+only to synchronize top-layer, close-request, and focus behavior; its open
+state remains application-owned.
+
 Component state remains application-owned. Interactive overlay components may
 later use the existing LiveView hook contract for focus management, keyboard
 behavior, and local presentation. A stateful LiveView component is reserved for
@@ -62,5 +68,5 @@ behavior that genuinely requires server-owned state.
 - Contributors need Node only when UI class literals or theme sources change.
 - The precompiled theme is intentionally a baseline. Applications that require
   design-token or utility-level customization should own the Tailwind build.
-- Complex interactive components remain a separate slice with browser-level
-  accessibility tests.
+- Interactive components remain separate slices with browser-level keyboard,
+  focus, reconnect, and DOM-morph tests.

@@ -14,6 +14,8 @@ describe UIShowcaseLive do
     initial.should contain(%(data-opal-ui="select"))
     initial.should contain(%(data-opal-ui="switch"))
     initial.should contain(%(data-opal-ui="table"))
+    initial.should contain(%(data-opal-ui="dialog"))
+    initial.should contain(%(data-opal-dialog-open="false"))
 
     view.__opal_handle_event(nil, "toggle_notifications", JSON.parse("{}"))
     view.__opal_handle_event(nil, "toggle_deployment", JSON.parse("{}"))
@@ -24,6 +26,20 @@ describe UIShowcaseLive do
     updated.should contain(%(aria-checked="false"))
     updated.should contain("Ready to deploy")
     updated.should contain(%(id="saved-status"))
+
+    view.__opal_handle_event(nil, "open_release_dialog", JSON.parse("{}"))
+    opened = view.__opal_render.to_html
+    opened.should contain(%(data-opal-dialog-open="true"))
+    opened.should contain("Dialog update 0")
+
+    view.__opal_handle_event(nil, "refresh_release_dialog", JSON.parse("{}"))
+    refreshed = view.__opal_render.to_html
+    refreshed.should contain("Dialog update 1")
+
+    view.__opal_handle_event(nil, "close_release_dialog", JSON.parse(%({"reason":"escape"})))
+    closed = view.__opal_render.to_html
+    closed.should contain(%(data-opal-dialog-open="false"))
+    closed.should contain("Closed by escape")
   ensure
     view.try(&.__opal_disconnect)
   end
