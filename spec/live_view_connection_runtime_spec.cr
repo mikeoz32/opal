@@ -18,7 +18,7 @@ private class ConnectionRuntimeSpecComponent < LF::LiveView::Component
 
   def render : LF::LiveView::Rendered
     LF::LiveView::Rendered.opaque(
-      %(<button data-opal-target="#{myself}">#{connected?}:#{@count}</button>)
+      %(<button phx-target="#{myself}">#{connected?}:#{@count}</button>)
     )
   end
 

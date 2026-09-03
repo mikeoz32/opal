@@ -64,6 +64,9 @@ jobs:
       - name: Check generated UI theme
         run: npm run check:ui-css
 
+      - name: Check UI browser hooks
+        run: npm run check:ui-hooks
+
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 

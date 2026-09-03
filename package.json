@@ -7,6 +7,7 @@
     "check:live-view-client": "node scripts/check_live_view_client.mjs",
     "build:ui-css": "tailwindcss -i assets/opal_ui.tailwind.css -o assets/opal_ui.css --minify",
     "check:ui-css": "npm run build:ui-css && git diff --exit-code -- assets/opal_ui.css",
+    "check:ui-hooks": "node --check assets/opal_ui.js",
     "test:live-view-browser": "playwright test"
   },
   "devDependencies": {

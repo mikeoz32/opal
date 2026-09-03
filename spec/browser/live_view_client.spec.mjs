@@ -5,6 +5,17 @@ test.beforeEach(async ({page}) => {
   await expect(page.locator("[data-opal-live-root]")).toHaveClass(/phx-connected/);
 });
 
+test("uses upstream Phoenix DOM bindings", async ({page}) => {
+  const increment = page.getByRole("button", {name: "Increment", exact: true});
+  const form = page.locator("form");
+
+  await expect(increment).toHaveAttribute("phx-click", "increment");
+  await expect(increment).not.toHaveAttribute("data-opal-click");
+  await expect(form).toHaveAttribute("phx-change", "validate_name");
+  await expect(form).toHaveAttribute("phx-submit", "save_name");
+  await expect(page.locator("#counter-hook")).toHaveAttribute("phx-hook", "CounterHook");
+});
+
 test("delivers acknowledged events in order", async ({page}) => {
   const increment = page.getByRole("button", {name: "Increment", exact: true});
   const counter = page.locator("#counter-value");

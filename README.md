@@ -65,8 +65,9 @@ Opal exposes eight independent layers:
    pinned Phoenix/LiveView browser packages prebundled into the shard.
 
 8. `require "opal/ui"`
-   Optional stateless actions, feedback, cards, form controls, and tables with
-   a precompiled Tailwind theme.
+   Optional stateless actions, feedback, cards, form controls, tables,
+   dialogs, disclosure/navigation primitives, and overlays with a precompiled
+   Tailwind theme.
 
 ## Basic Router
 
@@ -331,7 +332,7 @@ class CounterLive < LF::LiveView::View
 
   def render : LF::LiveView::Rendered
     LF::LiveView::HTML.rendered(
-      %(<button id="counter" data-opal-click="increment">#{@count}</button>)
+      %(<button id="counter" phx-click="increment">#{@count}</button>)
     )
   end
 end
@@ -358,7 +359,7 @@ LF::UI.button(
   "Save",
   type: "submit",
   tone: LF::UI::Tone::Primary,
-  attributes: {"data-opal-click" => "save"}
+  attributes: {"phx-click" => "save"}
 )
 
 LF::UI.input(
@@ -371,9 +372,12 @@ LF::UI.input(
 )
 ```
 
-Use `LF::UI.stylesheet_tag` for a zero-setup embedded theme, or mount and link
-the cacheable stylesheet. See the [UI guide](docs/ui.md) and runnable
-[UI showcase](examples/ui_showcase/README.md).
+Use `LF::UI.stylesheet_tag` for a zero-setup embedded theme. Interactive
+primitives such as dialogs, dropdowns, tabs, toasts, accordions, and tooltips
+additionally load `LF::UI.hook_script_tag` before the LiveView client;
+pagination can use upstream Phoenix live patches without another hook. Both
+assets also have cacheable mounted routes. See the
+[UI guide](docs/ui.md) and runnable [UI showcase](examples/ui_showcase/README.md).
 
 ## DI Container
 
@@ -685,7 +689,8 @@ The repository includes these examples:
 
 - [examples/ui_showcase](examples/ui_showcase/)
   Tailwind-based `LF::UI` showcase covering typed variants, accessible forms,
-  validation, switches, feedback, cards, and tables.
+  validation, switches, feedback, cards, tables, modal dialogs, dropdown menus,
+  tabs, and toast notifications.
 
 Run them with:
 

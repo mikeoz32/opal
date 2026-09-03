@@ -27,11 +27,19 @@ All notable changes to Opal are documented in this file.
 - end-to-end SQLite Data and Todo examples with process-level verification;
 - bounded transport-aware HTTP drain with typed timeout reporting;
 - explicit controller `HEAD` and `OPTIONS` routes, deterministic HTTP 405
-  `Allow` metadata, and application error-body mapping.
+  `Allow` metadata, and application error-body mapping;
+- optional accessible UI primitives with a precompiled Tailwind theme,
+  including dialogs, dropdowns, tabs, toasts, accordions, tooltips, and
+  LiveNavigation-aware pagination;
+- typed server-driven DataTable composition with keyed rows, sortable headers,
+  selection and bulk actions, repository-agnostic page metadata, and explicit
+  loading, empty, and error states.
 
 ### Changed
 
 - minimum supported Crystal version is 1.21.0;
 - framework package boundaries keep HTTP, Application, DI, and Data optional;
+- LiveView markup uses upstream `phx-*` bindings directly instead of a custom
+  `data-opal-*` binding prefix;
 - incomplete extension stops preserve dependent extensions and root DI until a
   safe shutdown retry.

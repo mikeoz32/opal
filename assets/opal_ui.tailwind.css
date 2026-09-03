@@ -18,4 +18,21 @@
   textarea[data-opal-ui] {
     font: inherit;
   }
+
+  dialog[data-opal-ui="dialog"]::backdrop {
+    background: rgb(15 23 42 / 62%);
+    backdrop-filter: blur(2px);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-opal-ui],
+    [data-opal-ui] *,
+    [data-opal-ui]::before,
+    [data-opal-ui]::after {
+      animation-duration: 0s !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: 0s !important;
+    }
+  }
 }

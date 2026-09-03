@@ -45,7 +45,7 @@ module LF::LiveView
       @__opal_id
     end
 
-    # The connection-local target used by `data-opal-target`.
+    # The connection-local target used by `phx-target`.
     def myself : Int64
       raise Error.new("LiveView component is not attached") unless @__opal_attached
       @__opal_cid

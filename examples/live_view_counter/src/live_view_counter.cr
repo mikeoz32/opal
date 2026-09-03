@@ -37,7 +37,7 @@ class NestedGrandchildLive < LF::LiveView::View
     LF::LiveView::HTML.rendered(<<-HTML)
       <section>
         <h3>#{@label} LiveView</h3>
-        <button type="button" data-opal-click="increment_nested_grandchild">Increment nested grandchild LiveView</button>
+        <button type="button" phx-click="increment_nested_grandchild">Increment nested grandchild LiveView</button>
         <output id="nested-grandchild-value">#{@count}</output>
       </section>
     HTML
@@ -72,8 +72,8 @@ class NestedChildLive < LF::LiveView::View
     LF::LiveView::HTML.rendered(<<-HTML)
       <section>
         <h2>#{@label} LiveView</h2>
-        <button type="button" data-opal-click="increment_nested_child">Increment nested child LiveView</button>
-        <button type="button" data-opal-click="crash_nested_child">Crash nested child LiveView</button>
+        <button type="button" phx-click="increment_nested_child">Increment nested child LiveView</button>
+        <button type="button" phx-click="crash_nested_child">Crash nested child LiveView</button>
         <output id="nested-child-value">#{@count}</output>
         #{grandchild}
       </section>
@@ -108,9 +108,9 @@ class NestedLivePage < LF::LiveView::View
     LF::LiveView::HTML.rendered(<<-HTML)
       <main>
         <h1>Nested LiveViews</h1>
-        <button type="button" data-opal-click="increment_nested_parent">Increment nested parent LiveView</button>
+        <button type="button" phx-click="increment_nested_parent">Increment nested parent LiveView</button>
         <output id="nested-parent-value">#{@count}</output>
-        <button type="button" data-opal-click="toggle_nested_child">Toggle nested child LiveView</button>
+        <button type="button" phx-click="toggle_nested_child">Toggle nested child LiveView</button>
         #{child}
       </main>
     HTML
@@ -143,7 +143,7 @@ class CounterDetailComponent < LF::LiveView::Component
       <section id="#{@owner_id}-nested-component">
         <h3>#{@owner_label} nested component</h3>
         <p>Parent count: <output id="#{@owner_id}-nested-parent-value">#{@parent_count}</output></p>
-        <button type="button" data-opal-click="increment_nested_component" data-opal-target="#{myself}" aria-label="Increment #{@owner_label} nested component">Nested +</button>
+        <button type="button" phx-click="increment_nested_component" phx-target="#{myself}" aria-label="Increment #{@owner_label} nested component">Nested +</button>
         <output id="#{@owner_id}-nested-component-value" aria-live="polite">#{@count}</output>
       </section>
     HTML
@@ -192,11 +192,11 @@ class CounterComponent < LF::LiveView::Component
       <section id="component-#{id}">
         <h2>#{@label} component</h2>
         <div class="counter">
-          <button type="button" data-opal-click="decrement_component" data-opal-target="#{myself}" aria-label="Decrement #{@label} component">−</button>
+          <button type="button" phx-click="decrement_component" phx-target="#{myself}" aria-label="Decrement #{@label} component">−</button>
           <output id="#{id}-component-value" aria-live="polite">#{@count}</output>
-          <button type="button" data-opal-click="increment_component" data-opal-target="#{myself}" aria-label="Increment #{@label} component">+</button>
+          <button type="button" phx-click="increment_component" phx-target="#{myself}" aria-label="Increment #{@label} component">+</button>
         </div>
-        <button type="button" data-opal-click="toggle_nested_component" data-opal-target="#{myself}">Toggle #{@label} nested component</button>
+        <button type="button" phx-click="toggle_nested_component" phx-target="#{myself}">Toggle #{@label} nested component</button>
         #{nested}
       </section>
     HTML
@@ -303,7 +303,7 @@ class CounterLive < LF::LiveView::View
     activity_items = stream_contents("activity-stream")
     hook = if @show_hook
              LF::LiveView::HTML.rendered(<<-HTML)
-               <section id="counter-hook" data-opal-hook="CounterHook" data-message="#{@hook_message}">
+               <section id="counter-hook" phx-hook="CounterHook" data-message="#{@hook_message}">
                  <h2>JavaScript hook</h2>
                  <button id="hook-ping" type="button">Ping view from hook</button>
                  <button id="hook-component-ping" type="button">Ping left component from hook</button>
@@ -346,20 +346,20 @@ class CounterLive < LF::LiveView::View
       <nav aria-label="Live navigation">
         <a id="previous-page" href="#{previous_page_path}" data-phx-link="patch" data-phx-link-state="replace">Previous page</a>
         <a id="next-page" href="#{next_page_path}" data-phx-link="patch" data-phx-link-state="push">Next page</a>
-        <button type="button" data-opal-click="next_page">Next page from server</button>
-        <button type="button" data-opal-click="replace_page">Replace page from server</button>
+        <button type="button" phx-click="next_page">Next page from server</button>
+        <button type="button" phx-click="replace_page">Replace page from server</button>
         <a href="/about">About this example</a>
         <a href="/plain">Plain page</a>
       </nav>
       <output id="page-value" data-testid="page-value">#{@page}</output>
       <div class="counter">
-        <button type="button" data-opal-click="decrement" aria-label="Decrement">−</button>
+        <button type="button" phx-click="decrement" aria-label="Decrement">−</button>
         <output id="counter-value" aria-live="polite">#{@count}</output>
-        <button type="button" data-opal-click="increment" aria-label="Increment">+</button>
-        <button type="button" data-opal-click="increment_later">+1 later</button>
-        <button type="button" data-opal-click="clear_title">Clear title</button>
+        <button type="button" phx-click="increment" aria-label="Increment">+</button>
+        <button type="button" phx-click="increment_later">+1 later</button>
+        <button type="button" phx-click="clear_title">Clear title</button>
       </div>
-      <form data-opal-change="validate_name" data-opal-debounce="150" data-opal-submit="save_name">
+      <form phx-change="validate_name" phx-debounce="150" phx-submit="save_name">
         <label>
           Name
           <input id="name" name="name" value="#{@draft_name}" autocomplete="off">
@@ -369,16 +369,16 @@ class CounterLive < LF::LiveView::View
       <output id="validation-count" data-testid="validation-count">#{@validation_count}</output>
       <div class="components">#{left_component}#{right_component}</div>
       <section>
-        <button type="button" data-opal-click="push_hook_notice">Push notice to hook</button>
-        <button type="button" data-opal-click="toggle_hook">Toggle hook</button>
+        <button type="button" phx-click="push_hook_notice">Push notice to hook</button>
+        <button type="button" phx-click="toggle_hook">Toggle hook</button>
         #{hook}
       </section>
       <section>
         <h2>Activity stream</h2>
-        <button type="button" data-opal-click="prepend_activity">Prepend activity</button>
-        <ul id="activity-stream" data-opal-update="stream">#{activity_items}</ul>
+        <button type="button" phx-click="prepend_activity">Prepend activity</button>
+        <ul id="activity-stream" phx-update="stream">#{activity_items}</ul>
       </section>
-      <button type="button" data-opal-click="reverse_items">Reverse keyed items</button>
+      <button type="button" phx-click="reverse_items">Reverse keyed items</button>
       <ul id="keyed-items">#{keyed_items}</ul>
     HTML
   end
@@ -470,7 +470,7 @@ class CounterLive < LF::LiveView::View
     LF::LiveView::HTML.rendered(<<-HTML)
       <li id="#{id}">
         <span>Activity #{sequence}</span>
-        <button type="button" data-opal-click="delete_activity" data-opal-value-id="#{id}" aria-label="Remove Activity #{sequence}">Remove</button>
+        <button type="button" phx-click="delete_activity" phx-value-id="#{id}" aria-label="Remove Activity #{sequence}">Remove</button>
       </li>
     HTML
   end
