@@ -18,6 +18,13 @@ class UIShowcaseLive < LF::LiveView::View
   @toast_visible = false
   @toast_sequence = 0
   @last_toast_dismiss_reason = ""
+  @expanded_sections = Set{"checks"}
+  @current_page = 1
+
+  def handle_params(context : LF::LiveView::ParamsContext) : Nil
+    page = context.query_params["page"]?.try(&.to_i?) || 1
+    @current_page = page.clamp(1, 5)
+  end
 
   def handle_event(event : String, value : JSON::Any) : Nil
     case event
@@ -53,6 +60,15 @@ class UIShowcaseLive < LF::LiveView::View
     when "dismiss_release_toast"
       @toast_visible = false
       @last_toast_dismiss_reason = string_value(value, "reason")
+    when "toggle_accordion"
+      section = string_value(value, "item")
+      if {"checks", "artifacts", "rollback"}.includes?(section)
+        if @expanded_sections.includes?(section)
+          @expanded_sections.delete(section)
+        else
+          @expanded_sections.add(section)
+        end
+      end
     else
       super
     end
@@ -74,6 +90,7 @@ class UIShowcaseLive < LF::LiveView::View
           #{actions_card}
           #{feedback_card}
           #{interaction_card}
+          #{advanced_components_card}
           #{form_card}
           #{table_card}
         </main>
@@ -402,7 +419,14 @@ class UIShowcaseLive < LF::LiveView::View
       )
     )
     rows = String.build do |html|
-      {"Button" => "Action", "Input" => "Form", "Table" => "Data"}.each do |name, kind|
+      {
+        "Button"     => "Action",
+        "Input"      => "Form",
+        "Table"      => "Data",
+        "Accordion"  => "Disclosure",
+        "Tooltip"    => "Overlay",
+        "Pagination" => "Navigation",
+      }.each do |name, kind|
         cells = LF::UI.table_cell(name).to_html +
                 LF::UI.table_cell(kind).to_html +
                 LF::UI.table_cell(LF::UI.badge("Ready", tone: LF::UI::Tone::Success)).to_html
@@ -418,6 +442,108 @@ class UIShowcaseLive < LF::LiveView::View
     LF::UI.card(
       LF::LiveView::HTML.raw(header.to_html + body.to_html),
       class_name: "showcase-wide"
+    )
+  end
+
+  private def advanced_components_card : LF::LiveView::Rendered
+    accordion_items = String.build do |html|
+      {
+        "checks"    => {"Release checks", "All required checks passed on the current candidate."},
+        "artifacts" => {"Build artifacts", "Packages and documentation are ready for publication."},
+        "rollback"  => {"Rollback plan", "Keep the previous release available until verification completes."},
+        "archived"  => {"Archived release", "Archived releases cannot be changed."},
+      }.each do |value, copy|
+        trigger_id = "#{value}-accordion-trigger"
+        panel_id = "#{value}-accordion-panel"
+        expanded = @expanded_sections.includes?(value)
+        trigger = LF::UI.accordion_trigger(
+          copy[0],
+          id: trigger_id,
+          panel_id: panel_id,
+          expanded: expanded,
+          toggle_event: "toggle_accordion",
+          value: value,
+          disabled: value == "archived"
+        )
+        panel = LF::UI.accordion_panel(
+          copy[1],
+          id: panel_id,
+          labelled_by: trigger_id,
+          expanded: expanded
+        )
+        html << LF::UI.accordion_item(
+          LF::LiveView::HTML.raw(trigger.to_html + panel.to_html)
+        ).to_html
+      end
+    end
+    accordion = LF::UI.accordion(
+      LF::LiveView::HTML.raw(accordion_items),
+      id: "release-accordion",
+      label: "Release preparation"
+    )
+
+    tooltip = LF::UI.tooltip(
+      "?",
+      "Arrow keys move between accordion headings without changing server-owned expansion state.",
+      id: "accordion-help",
+      trigger_label: "About accordion keyboard controls",
+      position: LF::UI::TooltipPosition::Right,
+      delay_ms: 150
+    )
+
+    pages = String.build do |html|
+      html << LF::UI.pagination_link(
+        "Previous",
+        "/?page=#{@current_page - 1}",
+        label: "Previous page",
+        disabled: @current_page == 1,
+        live_patch: true
+      ).to_html
+      1.upto(5) do |page|
+        html << LF::UI.pagination_link(
+          page.to_s,
+          "/?page=#{page}",
+          label: "Page #{page}",
+          current: @current_page == page,
+          live_patch: true
+        ).to_html
+      end
+      html << LF::UI.pagination_link(
+        "Next",
+        "/?page=#{@current_page + 1}",
+        label: "Next page",
+        disabled: @current_page == 5,
+        live_patch: true
+      ).to_html
+    end
+    pagination = LF::UI.pagination(
+      LF::LiveView::HTML.raw(pages),
+      label: "Release history pages",
+      attributes: {"id" => "release-pagination"}
+    )
+
+    content = LF::LiveView::HTML.raw(<<-HTML)
+      <div class="showcase-stack">
+        <div class="showcase-form-actions">
+          <strong>Release preparation</strong>
+          #{tooltip.to_html}
+        </div>
+        #{accordion.to_html}
+        <output id="pagination-status" aria-live="polite">Page #{@current_page} of 5</output>
+        #{pagination.to_html}
+      </div>
+    HTML
+    header = LF::UI.card_header(
+      LF::LiveView::HTML.raw(
+        LF::UI.card_title("Disclosure and navigation").to_html +
+        LF::UI.card_description("Accordion expansion and pagination live in the URL-backed application state; tooltip visibility stays local.").to_html
+      )
+    )
+    body = LF::UI.card_body(content)
+    LF::UI.card(
+      LF::LiveView::HTML.raw(header.to_html + body.to_html),
+      class_name: "showcase-wide",
+      attributes: {"id" => "advanced-components-card"}
     )
   end
 

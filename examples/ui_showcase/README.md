@@ -5,7 +5,9 @@ precompiled Tailwind theme. It covers actions, feedback, cards, accessible form
 controls, validation, switches, composable tables, and a server-controlled
 native modal dialog with Escape, backdrop, DOM-patch, and focus behavior. It
 also demonstrates a keyboard-navigable dropdown, server-controlled tabs, and
-manual plus timed toast dismissal.
+manual plus timed toast dismissal. Accordion expansion and pagination remain
+server-owned, pagination uses Phoenix live patches and browser history, and
+tooltip visibility remains local across compatible DOM morphs.
 
 From this directory:
 

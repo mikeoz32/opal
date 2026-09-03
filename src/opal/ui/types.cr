@@ -31,6 +31,13 @@ module LF::UI
     Vertical
   end
 
+  enum TooltipPosition
+    Top
+    Right
+    Bottom
+    Left
+  end
+
   # One option rendered by `UI.select`.
   struct SelectOption
     getter value : String

@@ -219,6 +219,148 @@ describe LF::UI do
     html.should contain(" hidden")
   end
 
+  it "renders a server-controlled accessible accordion" do
+    trigger = LF::UI.accordion_trigger(
+      "Release checks",
+      id: "checks-trigger",
+      panel_id: "checks-panel",
+      expanded: true,
+      toggle_event: "toggle_section",
+      value: "checks"
+    )
+    panel = LF::UI.accordion_panel(
+      "All required checks passed.",
+      id: "checks-panel",
+      labelled_by: "checks-trigger",
+      expanded: true
+    )
+    collapsed_trigger = LF::UI.accordion_trigger(
+      "Rollback plan",
+      id: "rollback-trigger",
+      panel_id: "rollback-panel",
+      expanded: false,
+      toggle_event: "toggle_section",
+      value: "rollback"
+    )
+    collapsed_panel = LF::UI.accordion_panel(
+      "Rollback steps.",
+      id: "rollback-panel",
+      labelled_by: "rollback-trigger",
+      expanded: false
+    )
+    html = LF::UI.accordion(
+      LF::LiveView::HTML.raw(
+        LF::UI.accordion_item(
+          LF::LiveView::HTML.raw(trigger.to_html + panel.to_html)
+        ).to_html + LF::UI.accordion_item(
+          LF::LiveView::HTML.raw(collapsed_trigger.to_html + collapsed_panel.to_html)
+        ).to_html
+      ),
+      id: "release-accordion",
+      label: "Release checklist"
+    ).to_html
+
+    html.should contain(%(phx-hook="OpalAccordion"))
+    html.should contain(%(aria-label="Release checklist"))
+    html.should contain(%(aria-expanded="true"))
+    html.should contain(%(aria-controls="checks-panel"))
+    html.should contain(%(phx-click="toggle_section"))
+    html.should contain(%(phx-value-item="checks"))
+    html.should contain(%(role="region"))
+    html.should contain(%(aria-labelledby="checks-trigger"))
+    html.should contain(%(id="rollback-panel"))
+    html.should contain(" hidden")
+  end
+
+  it "rejects invalid accordion contracts" do
+    expect_raises(ArgumentError, "UI accordion label must not be blank") do
+      LF::UI.accordion("Content", id: "accordion", label: "")
+    end
+    expect_raises(ArgumentError, "UI accordion toggle event must not be blank") do
+      LF::UI.accordion_trigger("Title", id: "trigger", panel_id: "panel", expanded: false, toggle_event: "")
+    end
+    expect_raises(ArgumentError, "UI accordion heading level must be between 1 and 6") do
+      LF::UI.accordion_trigger("Title", id: "trigger", panel_id: "panel", expanded: false, toggle_event: "toggle", heading_level: 7)
+    end
+  end
+
+  it "renders an accessible local tooltip" do
+    html = LF::UI.tooltip(
+      "?",
+      "Only validated releases can be published.",
+      id: "release-help",
+      trigger_label: "About release readiness",
+      position: LF::UI::TooltipPosition::Right,
+      delay_ms: 150,
+      trigger_attributes: {"phx-click" => "explain_release"}
+    ).to_html
+
+    html.should contain(%(id="release-help"))
+    html.should contain(%(phx-hook="OpalTooltip"))
+    html.should contain(%(data-opal-tooltip-delay="150"))
+    html.should contain(%(id="release-help-trigger"))
+    html.should contain(%(aria-label="About release readiness"))
+    html.should contain(%(aria-describedby="release-help-content"))
+    html.should contain(%(phx-click="explain_release"))
+    html.should contain(%(id="release-help-content"))
+    html.should contain(%(role="tooltip"))
+    html.should contain("left-full")
+    html.should contain(" hidden")
+  end
+
+  it "rejects invalid tooltip contracts" do
+    expect_raises(ArgumentError, "UI tooltip trigger label must not be blank") do
+      LF::UI.tooltip("?", "Help", id: "help", trigger_label: "")
+    end
+    expect_raises(ArgumentError, "UI tooltip delay must not be negative") do
+      LF::UI.tooltip("?", "Help", id: "help", delay_ms: -1)
+    end
+  end
+
+  it "renders accessible pagination with Phoenix live patches" do
+    links = LF::UI.pagination_link(
+      "Previous",
+      "/?page=1",
+      label: "Previous page",
+      disabled: true,
+      live_patch: true
+    ).to_html + LF::UI.pagination_link(
+      "2",
+      "/?page=2",
+      label: "Page 2",
+      current: true,
+      live_patch: true,
+      replace: true
+    ).to_html + LF::UI.pagination_ellipsis.to_html
+    html = LF::UI.pagination(
+      LF::LiveView::HTML.raw(links),
+      label: "Release pages"
+    ).to_html
+
+    html.should contain(%(<nav))
+    html.should contain(%(aria-label="Release pages"))
+    html.should contain(%(aria-disabled="true"))
+    html.should contain(%(tabindex="-1"))
+    html.should contain(%(href="/?page=2"))
+    html.should contain(%(aria-current="page"))
+    html.should contain(%(data-phx-link="patch"))
+    html.should contain(%(data-phx-link-state="replace"))
+    html.should contain(%(aria-hidden="true">…</span>))
+    html.should contain(%(<span class="sr-only">More pages</span>))
+  end
+
+  it "rejects invalid pagination navigation" do
+    expect_raises(ArgumentError, "UI pagination label must not be blank") do
+      LF::UI.pagination("Pages", label: "")
+    end
+    expect_raises(ArgumentError, "UI pagination replace requires live_patch") do
+      LF::UI.pagination_link("2", "/?page=2", replace: true)
+    end
+    expect_raises(ArgumentError, "UI pagination live patch href must be a local absolute resource") do
+      LF::UI.pagination_link("External", "https://example.com", live_patch: true)
+    end
+  end
+
   it "renders a live toast region with server-owned dismissal" do
     toast = LF::UI.toast(
       "Version <1.0> is ready.",
@@ -381,6 +523,8 @@ describe LF::UI do
     LF::UI.hooks.should contain("OpalDropdown")
     LF::UI.hooks.should contain("OpalTabs")
     LF::UI.hooks.should contain("OpalToast")
+    LF::UI.hooks.should contain("OpalAccordion")
+    LF::UI.hooks.should contain("OpalTooltip")
     LF::UI.hooks.should contain("showModal")
 
     inline = LF::UI.hook_script_tag(%(nonce"value)).value

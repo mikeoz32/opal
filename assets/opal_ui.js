@@ -251,6 +251,125 @@
     }
   };
 
+  if (!hooks.OpalAccordion) hooks.OpalAccordion = {
+    mounted() {
+      this.onAccordionKeydown = event => {
+        const trigger = event.target instanceof Element && event.target.closest("[data-opal-accordion-trigger]");
+        if (!trigger || !this.el.contains(trigger)) return;
+        const triggers = Array.from(this.el.querySelectorAll("[data-opal-accordion-trigger]"))
+          .filter(candidate => !candidate.hasAttribute("disabled"));
+        const index = triggers.indexOf(trigger);
+        let next = null;
+        if (event.key === "Home") next = triggers[0];
+        if (event.key === "End") next = triggers[triggers.length - 1];
+        if (event.key === "ArrowDown") next = triggers[(index + 1) % triggers.length];
+        if (event.key === "ArrowUp") next = triggers[(index - 1 + triggers.length) % triggers.length];
+        if (!(next instanceof HTMLElement)) return;
+        event.preventDefault();
+        next.focus();
+      };
+      this.el.addEventListener("keydown", this.onAccordionKeydown);
+    },
+
+    destroyed() {
+      this.el.removeEventListener("keydown", this.onAccordionKeydown);
+    }
+  };
+
+  if (!hooks.OpalTooltip) hooks.OpalTooltip = {
+    mounted() {
+      this.tooltipOpen = false;
+      this.tooltipTimer = null;
+      this.onTooltipMouseEnter = () => this.scheduleTooltip();
+      this.onTooltipMouseLeave = () => {
+        if (!this.el.contains(document.activeElement)) this.hideTooltip();
+      };
+      this.onTooltipFocusIn = () => this.showTooltip();
+      this.onTooltipFocusOut = event => {
+        const related = event.relatedTarget;
+        if (!(related instanceof Node) || !this.el.contains(related)) this.hideTooltip();
+      };
+      this.onTooltipKeydown = event => {
+        if (event.key !== "Escape" || !this.tooltipOpen) return;
+        event.preventDefault();
+        this.hideTooltip();
+      };
+      this.el.addEventListener("mouseenter", this.onTooltipMouseEnter);
+      this.el.addEventListener("mouseleave", this.onTooltipMouseLeave);
+      this.el.addEventListener("focusin", this.onTooltipFocusIn);
+      this.el.addEventListener("focusout", this.onTooltipFocusOut);
+      this.el.addEventListener("keydown", this.onTooltipKeydown);
+      this.applyTooltipState();
+    },
+
+    beforeUpdate(toEl) {
+      toEl.dataset.opalTooltipOpen = this.tooltipOpen ? "true" : "false";
+    },
+
+    updated() {
+      this.applyTooltipState();
+    },
+
+    reconnected() {
+      this.applyTooltipState();
+    },
+
+    destroyed() {
+      this.el.removeEventListener("mouseenter", this.onTooltipMouseEnter);
+      this.el.removeEventListener("mouseleave", this.onTooltipMouseLeave);
+      this.el.removeEventListener("focusin", this.onTooltipFocusIn);
+      this.el.removeEventListener("focusout", this.onTooltipFocusOut);
+      this.el.removeEventListener("keydown", this.onTooltipKeydown);
+      this.clearTooltipTimer();
+    },
+
+    tooltipContent() {
+      return this.el.querySelector("[data-opal-tooltip-content]");
+    },
+
+    tooltipDelay() {
+      const value = Number.parseInt(this.el.dataset.opalTooltipDelay || "", 10);
+      return Number.isFinite(value) && value >= 0 ? value : 300;
+    },
+
+    scheduleTooltip() {
+      this.clearTooltipTimer();
+      const delay = this.tooltipDelay();
+      if (delay === 0) {
+        this.showTooltip();
+        return;
+      }
+      this.tooltipTimer = window.setTimeout(() => {
+        this.tooltipTimer = null;
+        this.showTooltip();
+      }, delay);
+    },
+
+    showTooltip() {
+      this.clearTooltipTimer();
+      this.tooltipOpen = true;
+      this.applyTooltipState();
+    },
+
+    hideTooltip() {
+      this.clearTooltipTimer();
+      this.tooltipOpen = false;
+      this.applyTooltipState();
+    },
+
+    clearTooltipTimer() {
+      if (this.tooltipTimer) window.clearTimeout(this.tooltipTimer);
+      this.tooltipTimer = null;
+    },
+
+    applyTooltipState() {
+      const content = this.tooltipContent();
+      if (!(content instanceof HTMLElement)) return;
+      content.hidden = !this.tooltipOpen;
+      this.el.dataset.opalTooltipOpen = this.tooltipOpen ? "true" : "false";
+    }
+  };
+
   if (!hooks.OpalToast) hooks.OpalToast = {
     mounted() {
       this.toastTimer = null;

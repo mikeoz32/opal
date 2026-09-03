@@ -41,7 +41,8 @@ The initial component families are:
 - field, input, textarea, select, checkbox, radio, and switch;
 - composable table elements;
 - native modal dialog;
-- dropdown menu, tabs, toast, and toast region.
+- dropdown menu, tabs, toast, and toast region;
+- accordion, tooltip, and pagination.
 
 Opal ships a minified stylesheet generated with Tailwind CSS. The source scans
 complete class literals in `src/opal/ui`, does not include Tailwind Preflight,
@@ -53,9 +54,11 @@ Interactive primitives use a separate dependency-free browser-hook asset.
 Applications opt into that asset inline or through the cacheable UI route and
 load it before the LiveView client. The native dialog primitive uses the hook
 only to synchronize top-layer, close-request, and focus behavior; its open
-state remains application-owned. Dropdown visibility is local ephemeral state;
-tab selection and toast presence remain application-owned. Their hooks provide
-keyboard focus, DOM-morph continuity, and optional dismissal timers.
+state remains application-owned. Dropdown and tooltip visibility are local
+ephemeral state; accordion expansion, tab selection, pagination parameters,
+and toast presence remain application-owned. Their hooks provide keyboard
+focus, DOM-morph continuity, and optional dismissal timers. Pagination uses
+the upstream `data-phx-link` live-patch contract and does not need a hook.
 
 Component state remains application-owned. Interactive overlay components may
 later use the existing LiveView hook contract for focus management, keyboard
@@ -71,6 +74,8 @@ behavior that genuinely requires server-owned state.
 - Production use does not require Node because generated CSS is committed and
   embedded at Crystal compile time.
 - Contributors need Node only when UI class literals or theme sources change.
+- The bundled theme removes component transition and animation durations for
+  users who request reduced motion.
 - The precompiled theme is intentionally a baseline. Applications that require
   design-token or utility-level customization should own the Tailwind build.
 - Interactive components require browser-level keyboard, focus, reconnect, and

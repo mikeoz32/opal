@@ -65,7 +65,8 @@ library source to the application stylesheet:
 
 Never construct Tailwind class names from partial user values. Component
 variants use enums and map to complete class literals so Tailwind can detect
-them statically.
+them statically. The bundled theme disables component animation and transition
+durations when the browser requests reduced motion.
 
 ## Actions and feedback
 
@@ -261,6 +262,96 @@ Manual dismiss emits `reason: "button"`; automatic dismiss emits
 used only for manual dismissal, when the focused close button is removed by
 the server patch. Omit `auto_dismiss_ms` for persistent important messages.
 
+## Accordions
+
+Accordion expansion belongs to the application view. Render each heading and
+panel from the current set of expanded values:
+
+```crystal
+expanded = @expanded_sections.includes?("checks")
+trigger = LF::UI.accordion_trigger(
+  "Release checks",
+  id: "checks-trigger",
+  panel_id: "checks-panel",
+  expanded: expanded,
+  toggle_event: "toggle_section",
+  value: "checks"
+)
+panel = LF::UI.accordion_panel(
+  "All required checks passed.",
+  id: "checks-panel",
+  labelled_by: "checks-trigger",
+  expanded: expanded
+)
+item = LF::UI.accordion_item(
+  LF::LiveView::HTML.raw(trigger.to_html + panel.to_html)
+)
+
+LF::UI.accordion(item, id: "release-accordion", label: "Release preparation")
+```
+
+The toggle event receives the configured value as `item`; validate it before
+changing application state. `OpalAccordion` moves focus with ArrowUp,
+ArrowDown, Home, and End. Enter and Space retain native button behavior and
+send the normal `phx-click`. Expansion is not constrained to one panel, so the
+view can implement either single- or multi-panel policy.
+
+## Tooltips
+
+`tooltip` renders a button trigger with an associated `role="tooltip"`
+description. Its visibility is local presentation state and survives a
+compatible LiveView DOM morph:
+
+```crystal
+LF::UI.tooltip(
+  "?",
+  "Only validated releases can be published.",
+  id: "release-help",
+  trigger_label: "About release readiness",
+  position: LF::UI::TooltipPosition::Right,
+  delay_ms: 150
+)
+```
+
+The `OpalTooltip` hook shows the description on keyboard focus or delayed
+hover, hides it on blur or pointer exit, and supports Escape without moving
+focus. `trigger_attributes` can add normal `phx-*`, `data-*`, and `aria-*`
+bindings to the generated button. Tooltip content should remain descriptive
+and non-interactive.
+
+## Pagination
+
+Pagination is composable and works with ordinary document links or Phoenix
+same-view live patches:
+
+```crystal
+items = LF::UI.pagination_link(
+  "Previous",
+  "/projects?page=1",
+  label: "Previous page",
+  disabled: @page == 1,
+  live_patch: true
+).to_html + LF::UI.pagination_link(
+  "2",
+  "/projects?page=2",
+  label: "Page 2",
+  current: @page == 2,
+  live_patch: true
+).to_html
+
+LF::UI.pagination(
+  LF::LiveView::HTML.raw(items),
+  label: "Project pages"
+)
+```
+
+`current` emits `aria-current="page"`; disabled links omit `href` and live
+navigation metadata. `live_patch: true` requires a local absolute resource and
+emits upstream `data-phx-link="patch"`. Set `replace: true` only when the new
+page should replace the current browser history entry. The destination must
+still match the current LiveView route and the view must derive page state in
+`handle_params`. Use `pagination_ellipsis` for omitted ranges.
+
 ## Forms
 
 Text controls render their label, required marker, hint, error, and ARIA
@@ -319,11 +410,12 @@ Normal text is HTML escaped. Pass `LF::LiveView::Rendered` or an explicit
 ## Stateful behavior
 
 UI primitives are not `LF::LiveView::Component` subclasses. Buttons, fields,
-cards, badges, tables, dialogs, dropdowns, tabs, and toasts do not own connection
-state and therefore should not consume component identities. Application views
-own selected tabs, dialog state, notification lists, and menu action results.
-Hooks own only transient focus, visibility, and timer behavior and restore it
-after compatible DOM morphs.
+cards, badges, tables, dialogs, dropdowns, tabs, toasts, accordions, tooltips,
+and pagination do not own connection state and therefore should not consume
+component identities. Application views own selected tabs, accordion
+expansion, pagination parameters, dialog state, notification lists, and menu
+action results. Hooks own only transient focus, visibility, and timer behavior
+and restore it after compatible DOM morphs.
 
 See [the UI showcase](../examples/ui_showcase/README.md) for a runnable page
 covering every primitive family and LiveView validation updates.

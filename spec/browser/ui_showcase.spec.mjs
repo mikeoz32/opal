@@ -7,10 +7,13 @@ test("renders the compiled UI theme and primitive families", async ({page}) => {
 
   await expect(page).toHaveTitle("Opal UI showcase");
   await expect(page.locator("#opal-live-root")).toHaveClass(/phx-connected/);
-  await expect(page.locator('[data-opal-ui="card"]')).toHaveCount(5);
+  await expect(page.locator('[data-opal-ui="card"]')).toHaveCount(6);
   await expect(page.locator('[data-opal-ui="button"]')).toHaveCount(9);
   await expect(page.locator('[data-opal-ui="dropdown-item"]')).toHaveCount(3);
   await expect(page.locator('[data-opal-ui="tab"]')).toHaveCount(3);
+  await expect(page.locator('[data-opal-ui="accordion-trigger"]')).toHaveCount(4);
+  await expect(page.locator('[data-opal-ui="tooltip"]')).toHaveCount(1);
+  await expect(page.locator('[data-opal-ui="pagination-link"]')).toHaveCount(7);
   await expect(page.locator('[data-opal-ui="table"]')).toBeVisible();
   await expect(page.locator('[data-opal-ui="input"]')).toBeVisible();
 
@@ -20,6 +23,8 @@ test("renders the compiled UI theme and primitive families", async ({page}) => {
   await expect(page.locator("#release-dialog")).toHaveAttribute("phx-hook", "OpalDialog");
   await expect(page.locator("#release-actions")).toHaveAttribute("phx-hook", "OpalDropdown");
   await expect(page.locator("#release-tabs")).toHaveAttribute("phx-hook", "OpalTabs");
+  await expect(page.locator("#release-accordion")).toHaveAttribute("phx-hook", "OpalAccordion");
+  await expect(page.locator("#accordion-help")).toHaveAttribute("phx-hook", "OpalTooltip");
   // Flex/grid items blockify inline-level display values in computed style.
   await expect(button).toHaveCSS("display", "flex");
   await expect(button).toHaveCSS("background-color", "oklch(0.546 0.245 262.881)");
@@ -27,6 +32,9 @@ test("renders the compiled UI theme and primitive families", async ({page}) => {
 
   await page.emulateMedia({colorScheme: "dark"});
   await expect(page.locator("body")).toHaveCSS("background-color", "rgb(2, 6, 23)");
+
+  await page.emulateMedia({colorScheme: "dark", reducedMotion: "reduce"});
+  await expect(page.locator("#checks-accordion-trigger span[aria-hidden]")).toHaveCSS("transition-duration", "0s");
 });
 
 test("keeps dialog state on the server and handles modal focus semantics", async ({page}) => {
@@ -136,6 +144,93 @@ test("keeps tab selection on the server and supports arrow navigation", async ({
   await expect(settings).toHaveAttribute("aria-selected", "true");
   await expect(settings).toBeFocused();
   await expect(page.locator("#settings-panel")).toBeVisible();
+});
+
+test("keeps accordion expansion on the server and moves focus between headings", async ({page}) => {
+  await page.goto("/");
+
+  const checks = page.locator("#checks-accordion-trigger");
+  const artifacts = page.locator("#artifacts-accordion-trigger");
+  const rollback = page.locator("#rollback-accordion-trigger");
+  const archived = page.locator("#archived-accordion-trigger");
+
+  await expect(checks).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator("#checks-accordion-panel")).toBeVisible();
+  await expect(artifacts).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator("#artifacts-accordion-panel")).toBeHidden();
+  await expect(archived).toBeDisabled();
+
+  await checks.focus();
+  await page.keyboard.press("ArrowDown");
+  await expect(artifacts).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(artifacts).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator("#artifacts-accordion-panel")).toBeVisible();
+  await expect(artifacts).toBeFocused();
+
+  await page.keyboard.press("End");
+  await expect(rollback).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(rollback).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator("#rollback-accordion-panel")).toBeVisible();
+
+  await checks.click();
+  await expect(checks).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator("#checks-accordion-panel")).toBeHidden();
+});
+
+test("shows a local tooltip for focus and hover across a LiveView patch", async ({page}) => {
+  await page.goto("/");
+
+  const tooltip = page.locator("#accordion-help-content");
+  const trigger = page.locator("#accordion-help-trigger");
+
+  await expect(trigger).toHaveAttribute("aria-describedby", "accordion-help-content");
+  await expect(tooltip).toHaveAttribute("role", "tooltip");
+  await expect(tooltip).toBeHidden();
+
+  await trigger.focus();
+  await expect(tooltip).toBeVisible();
+  await page.locator("#profile-name").evaluate(element => {
+    element.value = "Tooltip patch";
+    element.dispatchEvent(new Event("input", {bubbles: true}));
+  });
+  await expect(page.locator("#profile-role-error")).toHaveText("Choose a role");
+  await expect(trigger).toBeFocused();
+  await expect(tooltip).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await expect(tooltip).toBeHidden();
+  await expect(trigger).toBeFocused();
+
+  await trigger.evaluate(element => element.blur());
+  await trigger.hover();
+  await expect(tooltip).toBeVisible();
+  await page.mouse.move(0, 0);
+  await expect(tooltip).toBeHidden();
+});
+
+test("patches pagination state into the URL and restores it with Back", async ({page}) => {
+  await page.goto("/");
+
+  const root = page.locator("#opal-live-root");
+  await root.evaluate(element => { window.__opalPaginationRoot = element; });
+  await expect(page.locator("#pagination-status")).toHaveText("Page 1 of 5");
+  await expect(page.getByRole("link", {name: "Previous page"})).not.toHaveAttribute("href");
+  await expect(page.getByRole("link", {name: "Page 1"})).toHaveAttribute("aria-current", "page");
+
+  await page.getByRole("link", {name: "Page 2"}).click();
+  await expect(page).toHaveURL(/\?page=2$/);
+  await expect(page.locator("#pagination-status")).toHaveText("Page 2 of 5");
+  await expect(page.getByRole("link", {name: "Page 2"})).toHaveAttribute("aria-current", "page");
+  await expect.poll(
+    () => root.evaluate(element => element === window.__opalPaginationRoot),
+  ).toBe(true);
+
+  await page.goBack();
+  await expect(page).toHaveURL("http://127.0.0.1:8085/");
+  await expect(page.locator("#pagination-status")).toHaveText("Page 1 of 5");
+  await expect(page.getByRole("link", {name: "Page 1"})).toHaveAttribute("aria-current", "page");
 });
 
 test("dismisses server-owned toast notifications manually and on timeout", async ({page}) => {
