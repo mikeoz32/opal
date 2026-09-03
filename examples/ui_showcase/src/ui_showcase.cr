@@ -2,8 +2,27 @@ require "opal"
 require "opal/ui"
 require "opal/autoconfig/http"
 
+record UIShowcaseRelease,
+  id : String,
+  version : String,
+  channel : String,
+  status : String,
+  checks : Int32
+
 @[LF::LiveView::Page("/")]
 class UIShowcaseLive < LF::LiveView::View
+  RELEASES = [
+    UIShowcaseRelease.new("release-140", "1.4.0", "Stable", "Ready", 18),
+    UIShowcaseRelease.new("release-150-rc2", "1.5.0-rc.2", "Candidate", "Testing", 14),
+    UIShowcaseRelease.new("release-139", "1.3.9", "Stable", "Ready", 18),
+    UIShowcaseRelease.new("release-160-dev", "1.6.0-dev", "Nightly", "Blocked", 9),
+    UIShowcaseRelease.new("release-138", "1.3.8", "Stable", "Archived", 18),
+    UIShowcaseRelease.new("release-150-rc1", "1.5.0-rc.1", "Candidate", "Archived", 16),
+    UIShowcaseRelease.new("release-159-dev", "1.5.9-dev", "Nightly", "Testing", 12),
+    UIShowcaseRelease.new("release-137", "1.3.7", "Stable", "Archived", 18),
+  ]
+  DATA_TABLE_PAGE_SIZE = 3
+
   @name = ""
   @role = ""
   @validation_count = 0
@@ -20,10 +39,23 @@ class UIShowcaseLive < LF::LiveView::View
   @last_toast_dismiss_reason = ""
   @expanded_sections = Set{"checks"}
   @current_page = 1
+  @release_page = 1
+  @release_sort = "version"
+  @release_sort_direction = LF::UI::DataTableSortDirection::Descending
+  @selected_releases = Set(String).new
+  @data_table_state = "ready"
+  @inspected_release = ""
 
   def handle_params(context : LF::LiveView::ParamsContext) : Nil
     page = context.query_params["page"]?.try(&.to_i?) || 1
     @current_page = page.clamp(1, 5)
+
+    sort = context.query_params["table_sort"]? || "version"
+    @release_sort = {"version", "channel", "status", "checks"}.includes?(sort) ? sort : "version"
+    direction = context.query_params["table_dir"]? || "desc"
+    @release_sort_direction = direction == "asc" ? LF::UI::DataTableSortDirection::Ascending : LF::UI::DataTableSortDirection::Descending
+    release_page = context.query_params["table_page"]?.try(&.to_i?) || 1
+    @release_page = release_page.clamp(1, release_total_pages)
   end
 
   def handle_event(event : String, value : JSON::Any) : Nil
@@ -69,6 +101,36 @@ class UIShowcaseLive < LF::LiveView::View
           @expanded_sections.add(section)
         end
       end
+    when "sort_releases"
+      sort = string_value(value, "sort")
+      direction = string_value(value, "direction")
+      if {"version", "channel", "status", "checks"}.includes?(sort) && {"asc", "desc"}.includes?(direction)
+        push_patch(release_table_path(1, sort, direction))
+      end
+    when "toggle_release"
+      release_id = string_value(value, "row")
+      if RELEASES.any? { |release| release.id == release_id }
+        if @selected_releases.includes?(release_id)
+          @selected_releases.delete(release_id)
+        else
+          @selected_releases.add(release_id)
+        end
+      end
+    when "toggle_release_page"
+      visible_ids = release_page_rows.map(&.id)
+      if !visible_ids.empty? && visible_ids.all? { |id| @selected_releases.includes?(id) }
+        visible_ids.each { |id| @selected_releases.delete(id) }
+      else
+        visible_ids.each { |id| @selected_releases.add(id) }
+      end
+    when "clear_release_selection"
+      @selected_releases.clear
+    when "inspect_release"
+      release_id = string_value(value, "release")
+      @inspected_release = RELEASES.find { |release| release.id == release_id }.try(&.version) || ""
+    when "set_data_table_state"
+      state = string_value(value, "state")
+      @data_table_state = state if {"ready", "loading", "empty", "error"}.includes?(state)
     else
       super
     end
@@ -409,40 +471,194 @@ class UIShowcaseLive < LF::LiveView::View
   end
 
   private def table_card : LF::LiveView::Rendered
-    head = LF::UI.table_head(
-      LF::UI.table_row(
-        LF::LiveView::HTML.raw(
-          LF::UI.table_header("Component").to_html +
-          LF::UI.table_header("Kind").to_html +
-          LF::UI.table_header("Status").to_html
-        )
-      )
-    )
-    rows = String.build do |html|
+    state_controls = String.build do |html|
       {
-        "Button"     => "Action",
-        "Input"      => "Form",
-        "Table"      => "Data",
-        "Accordion"  => "Disclosure",
-        "Tooltip"    => "Overlay",
-        "Pagination" => "Navigation",
-      }.each do |name, kind|
-        cells = LF::UI.table_cell(name).to_html +
-                LF::UI.table_cell(kind).to_html +
-                LF::UI.table_cell(LF::UI.badge("Ready", tone: LF::UI::Tone::Success)).to_html
-        html << LF::UI.table_row(LF::LiveView::HTML.raw(cells)).to_html
+        "ready"   => "Rows",
+        "loading" => "Loading",
+        "empty"   => "Empty",
+        "error"   => "Error",
+      }.each do |state, label|
+        html << LF::UI.button(
+          label,
+          size: LF::UI::Size::Small,
+          variant: @data_table_state == state ? LF::UI::ButtonVariant::Solid : LF::UI::ButtonVariant::Outline,
+          tone: state == "error" ? LF::UI::Tone::Danger : LF::UI::Tone::Neutral,
+          attributes: {
+            "phx-click"       => "set_data_table_state",
+            "phx-value-state" => state,
+            "aria-pressed"    => (@data_table_state == state).to_s,
+            "id"              => "data-table-state-#{state}",
+          }
+        ).to_html
       end
     end
-    table = LF::UI.table(
-      LF::LiveView::HTML.raw(head.to_html + LF::UI.table_body(LF::LiveView::HTML.raw(rows)).to_html),
-      caption: "UI primitive implementation status"
+    table = release_data_table
+    inspected = if @inspected_release.blank?
+                  LF::LiveView::Rendered.opaque("")
+                else
+                  LF::LiveView::HTML.rendered(
+                    %(<output id="inspected-release" aria-live="polite">Inspecting #{@inspected_release}</output>)
+                  )
+                end
+    header = LF::UI.card_header(
+      LF::LiveView::HTML.raw(
+        LF::UI.card_title("Server-driven DataTable").to_html +
+        LF::UI.card_description("Typed columns, URL-backed sorting and pagination, keyed rows, selection, actions, and explicit states.").to_html
+      )
     )
-    header = LF::UI.card_header(LF::UI.card_title("Component status"))
-    body = LF::UI.card_body(table)
+    body = LF::UI.card_body(
+      LF::LiveView::HTML.rendered(<<-HTML)
+        <div class="showcase-stack">
+          <div class="showcase-actions" aria-label="Data table example states">#{LF::LiveView::HTML.raw(state_controls)}</div>
+          #{inspected}
+          #{table}
+        </div>
+      HTML
+    )
     LF::UI.card(
       LF::LiveView::HTML.raw(header.to_html + body.to_html),
-      class_name: "showcase-wide"
+      class_name: "showcase-wide",
+      attributes: {"id" => "data-table-card"}
     )
+  end
+
+  private def release_data_table : LF::LiveView::Rendered
+    columns = [
+      LF::UI::DataTableColumn(UIShowcaseRelease).new(
+        "version",
+        "Version",
+        sortable: true,
+        row_header: true
+      ) { |release| LF::LiveView::HTML.rendered(%(#{release.version})) },
+      LF::UI::DataTableColumn(UIShowcaseRelease).new("channel", "Channel", sortable: true) do |release|
+        LF::LiveView::HTML.rendered(%(#{release.channel}))
+      end,
+      LF::UI::DataTableColumn(UIShowcaseRelease).new("status", "Status", sortable: true) do |release|
+        LF::UI.badge(release.status, tone: release_status_tone(release.status))
+      end,
+      LF::UI::DataTableColumn(UIShowcaseRelease).new(
+        "checks",
+        "Checks",
+        alignment: LF::UI::DataTableColumnAlignment::End,
+        sortable: true
+      ) { |release| LF::LiveView::HTML.rendered(%(#{release.checks}/18)) },
+      LF::UI::DataTableColumn(UIShowcaseRelease).new(
+        "actions",
+        "Actions",
+        alignment: LF::UI::DataTableColumnAlignment::End
+      ) do |release|
+        LF::UI.button(
+          "Inspect",
+          size: LF::UI::Size::Small,
+          variant: LF::UI::ButtonVariant::Ghost,
+          attributes: {
+            "phx-click"         => "inspect_release",
+            "phx-value-release" => release.id,
+            "aria-label"        => "Inspect release #{release.version}",
+          }
+        )
+      end,
+    ]
+    ready = @data_table_state == "ready"
+    rows = ready ? release_page_rows : [] of UIShowcaseRelease
+    page_info = ready ? LF::UI::DataTablePageInfo.new(@release_page, DATA_TABLE_PAGE_SIZE, RELEASES.size) : nil
+    pagination = ready ? release_table_pagination : nil
+    bulk_actions = LF::UI.button(
+      "Clear selection",
+      size: LF::UI::Size::Small,
+      variant: LF::UI::ButtonVariant::Outline,
+      tone: LF::UI::Tone::Neutral,
+      attributes: {"id" => "clear-release-selection", "phx-click" => "clear_release_selection"}
+    )
+
+    LF::UI.data_table(
+      rows,
+      columns,
+      id: "release-data-table",
+      caption: "Release candidates",
+      row_key: ->(release : UIShowcaseRelease) { release.id },
+      sort_key: @release_sort,
+      sort_direction: @release_sort_direction,
+      sort_event: "sort_releases",
+      selected_keys: @selected_releases,
+      select_event: "toggle_release",
+      select_all_event: "toggle_release_page",
+      selection_label: ->(release : UIShowcaseRelease) { "release #{release.version}" },
+      bulk_actions: bulk_actions,
+      page_info: page_info,
+      pagination: pagination,
+      loading: @data_table_state == "loading",
+      empty_message: "No releases match the current filters.",
+      error_message: @data_table_state == "error" ? "Release data could not be loaded." : nil
+    )
+  end
+
+  private def release_page_rows : Array(UIShowcaseRelease)
+    sorted = RELEASES.sort_by do |release|
+      case @release_sort
+      when "channel" then release.channel
+      when "status"  then release.status
+      when "checks"  then release.checks.to_s.rjust(3, '0')
+      else                release.version
+      end
+    end
+    sorted.reverse! if @release_sort_direction.descending?
+    offset = (@release_page - 1) * DATA_TABLE_PAGE_SIZE
+    sorted[offset, DATA_TABLE_PAGE_SIZE]? || [] of UIShowcaseRelease
+  end
+
+  private def release_table_pagination : LF::LiveView::Rendered
+    links = String.build do |html|
+      html << LF::UI.pagination_link(
+        "Previous",
+        release_table_path(@release_page - 1),
+        label: "Previous release table page",
+        disabled: @release_page == 1,
+        live_patch: true
+      ).to_html
+      1.upto(release_total_pages) do |page|
+        html << LF::UI.pagination_link(
+          page.to_s,
+          release_table_path(page),
+          label: "Release table page #{page}",
+          current: @release_page == page,
+          live_patch: true
+        ).to_html
+      end
+      html << LF::UI.pagination_link(
+        "Next",
+        release_table_path(@release_page + 1),
+        label: "Next release table page",
+        disabled: @release_page == release_total_pages,
+        live_patch: true
+      ).to_html
+    end
+    LF::UI.pagination(
+      LF::LiveView::HTML.raw(links),
+      label: "Release table pages",
+      attributes: {"id" => "release-table-pagination"}
+    )
+  end
+
+  private def release_table_path(
+    page : Int32,
+    sort : String = @release_sort,
+    direction : String = @release_sort_direction.parameter_value,
+  ) : String
+    "/?page=#{@current_page}&table_page=#{page}&table_sort=#{sort}&table_dir=#{direction}"
+  end
+
+  private def release_total_pages : Int32
+    (RELEASES.size + DATA_TABLE_PAGE_SIZE - 1) // DATA_TABLE_PAGE_SIZE
+  end
+
+  private def release_status_tone(status : String) : LF::UI::Tone
+    case status
+    when "Ready"   then LF::UI::Tone::Success
+    when "Testing" then LF::UI::Tone::Warning
+    when "Blocked" then LF::UI::Tone::Danger
+    else                LF::UI::Tone::Neutral
+    end
   end
 
   private def advanced_components_card : LF::LiveView::Rendered

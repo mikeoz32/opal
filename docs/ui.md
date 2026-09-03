@@ -390,6 +390,79 @@ The switch is a button with `role="switch"`; update its `checked` argument from
 a LiveView event. It deliberately does not hide a form input or create client-
 owned state.
 
+## Data tables
+
+`data_table` is a typed, server-driven composition over the table and
+pagination primitives. It renders rows supplied by the application and never
+queries a repository itself:
+
+```crystal
+record ProjectRow, id : String, name : String, status : String
+
+columns = [
+  LF::UI::DataTableColumn(ProjectRow).new(
+    "name",
+    "Name",
+    sortable: true,
+    row_header: true
+  ) { |project| LF::LiveView::HTML.rendered(%(#{project.name})) },
+  LF::UI::DataTableColumn(ProjectRow).new("status", "Status") do |project|
+    LF::UI.badge(project.status)
+  end,
+]
+
+LF::UI.data_table(
+  page.items,
+  columns,
+  id: "projects",
+  caption: "Projects",
+  row_key: ->(project : ProjectRow) { project.id },
+  sort_key: @sort,
+  sort_direction: @direction,
+  sort_event: "sort_projects",
+  selected_keys: @selected_project_ids,
+  select_event: "toggle_project",
+  select_all_event: "toggle_project_page",
+  selection_label: ->(project : ProjectRow) { "project #{project.name}" },
+  bulk_actions: LF::UI.button(
+    "Archive selected",
+    attributes: {"phx-click" => "archive_projects"}
+  ),
+  page_info: LF::UI::DataTablePageInfo.new(
+    page.number,
+    page.page_size,
+    page.total_items
+  ),
+  pagination: project_pagination
+)
+```
+
+Column render blocks return `LF::LiveView::Rendered`, so they can safely
+interpolate normal escaped values or compose badges, buttons, and links. Mark
+at most one column as `row_header`; it renders as `<th scope="row">`. Stable,
+unique `row_key` values let LiveView encode the body as a native Phoenix keyed
+comprehension instead of replacing retained rows.
+
+Sortable headers emit the configured `sort_event` with validated candidates in
+`sort` and `direction` (`asc` or `desc`). The view must whitelist both fields,
+derive its ordered query from them, and normally call `push_patch` so sorting is
+represented in the URL and works with Back/Forward. Pagination stays
+composable: pass the existing `pagination` result, usually using live-patch
+links, rather than giving the DataTable access to a repository or router.
+
+Selection controls use `role="checkbox"` and send a row key as `row`; the
+select-all event applies only to the currently supplied rows. `selected_keys`
+may include identifiers from other pages, which makes cross-page bulk
+selection application-owned. Bulk action markup appears whenever at least one
+key is selected.
+
+For an `LF::Data::Page(T)`, map `number`, `page_size`, and `total_items` into
+`DataTablePageInfo` as shown above. This small UI value deliberately avoids a
+compile-time dependency from `opal/ui` to `opal/data`. Pass an empty row array
+with `loading: true`, `error_message:`, or the default/custom `empty_message`
+to render accessible explicit states. A loading table exposes
+`aria-busy="true"`.
+
 ## Tables
 
 Tables use composable `table`, `table_head`, `table_body`, `table_row`,
@@ -410,12 +483,13 @@ Normal text is HTML escaped. Pass `LF::LiveView::Rendered` or an explicit
 ## Stateful behavior
 
 UI primitives are not `LF::LiveView::Component` subclasses. Buttons, fields,
-cards, badges, tables, dialogs, dropdowns, tabs, toasts, accordions, tooltips,
-and pagination do not own connection state and therefore should not consume
-component identities. Application views own selected tabs, accordion
-expansion, pagination parameters, dialog state, notification lists, and menu
-action results. Hooks own only transient focus, visibility, and timer behavior
-and restore it after compatible DOM morphs.
+cards, badges, tables, DataTables, dialogs, dropdowns, tabs, toasts, accordions,
+tooltips, and pagination do not own connection state and therefore should not
+consume component identities. Application views own selected tabs, accordion
+expansion, pagination and DataTable parameters, selected row identifiers,
+dialog state, notification lists, and menu action results. Hooks own only
+transient focus, visibility, and timer behavior and restore it after compatible
+DOM morphs.
 
 See [the UI showcase](../examples/ui_showcase/README.md) for a runnable page
 covering every primitive family and LiveView validation updates.

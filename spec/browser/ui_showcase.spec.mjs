@@ -8,13 +8,14 @@ test("renders the compiled UI theme and primitive families", async ({page}) => {
   await expect(page).toHaveTitle("Opal UI showcase");
   await expect(page.locator("#opal-live-root")).toHaveClass(/phx-connected/);
   await expect(page.locator('[data-opal-ui="card"]')).toHaveCount(6);
-  await expect(page.locator('[data-opal-ui="button"]')).toHaveCount(9);
+  await expect(page.locator('[data-opal-ui="button"]')).toHaveCount(16);
   await expect(page.locator('[data-opal-ui="dropdown-item"]')).toHaveCount(3);
   await expect(page.locator('[data-opal-ui="tab"]')).toHaveCount(3);
   await expect(page.locator('[data-opal-ui="accordion-trigger"]')).toHaveCount(4);
   await expect(page.locator('[data-opal-ui="tooltip"]')).toHaveCount(1);
-  await expect(page.locator('[data-opal-ui="pagination-link"]')).toHaveCount(7);
+  await expect(page.locator('[data-opal-ui="pagination-link"]')).toHaveCount(12);
   await expect(page.locator('[data-opal-ui="table"]')).toBeVisible();
+  await expect(page.locator('[data-opal-ui="data-table"]')).toBeVisible();
   await expect(page.locator('[data-opal-ui="input"]')).toBeVisible();
 
   const button = page.locator("#deployment-toggle");
@@ -217,12 +218,12 @@ test("patches pagination state into the URL and restores it with Back", async ({
   await root.evaluate(element => { window.__opalPaginationRoot = element; });
   await expect(page.locator("#pagination-status")).toHaveText("Page 1 of 5");
   await expect(page.getByRole("link", {name: "Previous page"})).not.toHaveAttribute("href");
-  await expect(page.getByRole("link", {name: "Page 1"})).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("link", {name: "Page 1", exact: true})).toHaveAttribute("aria-current", "page");
 
-  await page.getByRole("link", {name: "Page 2"}).click();
+  await page.getByRole("link", {name: "Page 2", exact: true}).click();
   await expect(page).toHaveURL(/\?page=2$/);
   await expect(page.locator("#pagination-status")).toHaveText("Page 2 of 5");
-  await expect(page.getByRole("link", {name: "Page 2"})).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("link", {name: "Page 2", exact: true})).toHaveAttribute("aria-current", "page");
   await expect.poll(
     () => root.evaluate(element => element === window.__opalPaginationRoot),
   ).toBe(true);
@@ -230,7 +231,64 @@ test("patches pagination state into the URL and restores it with Back", async ({
   await page.goBack();
   await expect(page).toHaveURL("http://127.0.0.1:8085/");
   await expect(page.locator("#pagination-status")).toHaveText("Page 1 of 5");
-  await expect(page.getByRole("link", {name: "Page 1"})).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("link", {name: "Page 1", exact: true})).toHaveAttribute("aria-current", "page");
+});
+
+test("drives DataTable sorting, paging, selection, actions, and states from LiveView", async ({page}) => {
+  await page.goto("/");
+
+  const dataTable = page.locator("#release-data-table");
+  const versionHeader = dataTable.locator('thead th[data-column="version"]');
+  const versionSort = dataTable.locator('[data-opal-ui="data-table-sort"][phx-value-sort="version"]');
+  const selectAll = dataTable.getByRole("checkbox", {name: "Select all visible rows"});
+
+  await expect(dataTable.locator("tbody tr")).toHaveCount(3);
+  await expect(dataTable.locator("#release-data-table-page-summary")).toHaveText("Showing 1–3 of 8");
+  await expect(versionHeader).toHaveAttribute("aria-sort", "descending");
+
+  await versionSort.click();
+  await expect(page).toHaveURL(/table_page=1&table_sort=version&table_dir=asc$/);
+  await expect(versionHeader).toHaveAttribute("aria-sort", "ascending");
+  await expect(dataTable.locator("tbody tr").first()).toHaveAttribute("data-row-key", "release-137");
+
+  await page.goBack();
+  await expect(page).toHaveURL("http://127.0.0.1:8085/");
+  await expect(versionHeader).toHaveAttribute("aria-sort", "descending");
+
+  const firstSelection = dataTable.locator('tbody [data-opal-ui="data-table-selection"]').first();
+  await firstSelection.click();
+  await expect(firstSelection).toHaveAttribute("aria-checked", "true");
+  await expect(dataTable.locator("#release-data-table-selection-status")).toHaveText("1 selected");
+  await expect(page.locator("#clear-release-selection")).toBeVisible();
+
+  await selectAll.click();
+  await expect(dataTable.getByRole("checkbox", {name: "Deselect all visible rows"})).toHaveAttribute("aria-checked", "true");
+  await expect(dataTable.locator("#release-data-table-selection-status")).toHaveText("3 selected");
+
+  await page.getByRole("link", {name: "Release table page 2"}).click();
+  await expect(page).toHaveURL(/table_page=2/);
+  await expect(dataTable.locator("#release-data-table-page-summary")).toHaveText("Showing 4–6 of 8");
+  await expect(dataTable.locator("tbody tr")).toHaveCount(3);
+  await dataTable.getByRole("button", {name: /^Inspect release/}).first().click();
+  await expect(page.locator("#inspected-release")).toContainText("Inspecting");
+
+  await page.locator("#clear-release-selection").click();
+  await expect(dataTable.locator("#release-data-table-selection-status")).toHaveText("0 selected");
+  await expect(page.locator("#clear-release-selection")).toHaveCount(0);
+
+  await page.locator("#data-table-state-loading").click();
+  await expect(dataTable.locator("table")).toHaveAttribute("aria-busy", "true");
+  await expect(dataTable.locator('[data-state="loading"]')).toContainText("Loading rows");
+
+  await page.locator("#data-table-state-empty").click();
+  await expect(dataTable.locator('[data-state="empty"]')).toContainText("No releases match");
+
+  await page.locator("#data-table-state-error").click();
+  await expect(dataTable.locator('[data-state="error"] [role="alert"]')).toContainText("could not be loaded");
+
+  await page.locator("#data-table-state-ready").click();
+  await expect(dataTable.locator("tbody tr")).toHaveCount(3);
+  await expect(dataTable.locator("table")).toHaveAttribute("aria-busy", "false");
 });
 
 test("dismisses server-owned toast notifications manually and on timeout", async ({page}) => {

@@ -42,7 +42,9 @@ The initial component families are:
 - composable table elements;
 - native modal dialog;
 - dropdown menu, tabs, toast, and toast region;
-- accordion, tooltip, and pagination.
+- accordion, tooltip, and pagination;
+- typed server-driven data tables composed over table and pagination
+  primitives.
 
 Opal ships a minified stylesheet generated with Tailwind CSS. The source scans
 complete class literals in `src/opal/ui`, does not include Tailwind Preflight,
@@ -56,9 +58,18 @@ load it before the LiveView client. The native dialog primitive uses the hook
 only to synchronize top-layer, close-request, and focus behavior; its open
 state remains application-owned. Dropdown and tooltip visibility are local
 ephemeral state; accordion expansion, tab selection, pagination parameters,
-and toast presence remain application-owned. Their hooks provide keyboard
+toast presence, data-table ordering, row selection, and failure/loading state
+remain application-owned. Their hooks provide keyboard
 focus, DOM-morph continuity, and optional dismissal timers. Pagination uses
 the upstream `data-phx-link` live-patch contract and does not need a hook.
+
+Data tables accept application-loaded rows, typed column renderers, stable row
+keys, optional paging metadata, and already-rendered pagination. They never
+open transactions or execute queries. This keeps `opal/ui` independent from
+the optional Data package and lets the same component consume repository
+pages, API responses, or in-memory collections. Rows use native Phoenix keyed
+comprehensions; sorting and selection use normal `phx-*` events and remain
+server-owned. No DataTable-specific browser hook is required.
 
 Component state remains application-owned. Interactive overlay components may
 later use the existing LiveView hook contract for focus management, keyboard
@@ -80,3 +91,5 @@ behavior that genuinely requires server-owned state.
   design-token or utility-level customization should own the Tailwind build.
 - Interactive components require browser-level keyboard, focus, reconnect, and
   DOM-morph tests.
+- DataTable callers must validate sort keys and selection identifiers before
+  applying them to application state or typed queries.

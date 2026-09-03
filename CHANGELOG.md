@@ -30,7 +30,10 @@ All notable changes to Opal are documented in this file.
   `Allow` metadata, and application error-body mapping;
 - optional accessible UI primitives with a precompiled Tailwind theme,
   including dialogs, dropdowns, tabs, toasts, accordions, tooltips, and
-  LiveNavigation-aware pagination.
+  LiveNavigation-aware pagination;
+- typed server-driven DataTable composition with keyed rows, sortable headers,
+  selection and bulk actions, repository-agnostic page metadata, and explicit
+  loading, empty, and error states.
 
 ### Changed
 

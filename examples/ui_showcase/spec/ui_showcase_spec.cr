@@ -30,6 +30,13 @@ describe UIShowcaseLive do
     initial.should contain(%(data-opal-ui="pagination"))
     initial.should contain(%(data-phx-link="patch"))
     initial.should contain("Page 1 of 5")
+    initial.should contain(%(data-opal-ui="data-table"))
+    initial.should contain(%(id="release-data-table"))
+    initial.should contain(%(aria-sort="descending"))
+    initial.should contain(%(phx-click="sort_releases"))
+    initial.should contain(%(phx-click="toggle_release"))
+    initial.should contain(%(phx-click="toggle_release_page"))
+    initial.should contain("Showing 1–3 of 8")
 
     view.__opal_handle_event(nil, "toggle_notifications", JSON.parse("{}"))
     view.__opal_handle_event(nil, "toggle_deployment", JSON.parse("{}"))
@@ -86,11 +93,51 @@ describe UIShowcaseLive do
     accordion_expanded.should contain(%(id="artifacts-accordion-trigger"))
     accordion_expanded.should contain(%(aria-expanded="true"))
 
+    view.__opal_handle_event(nil, "toggle_release", JSON.parse(%({"row":"release-160-dev"})))
+    selected = view.__opal_render.to_html
+    selected.should contain(%(id="release-data-table-row-release-160-dev"))
+    selected.should contain(%(data-selected="true"))
+    selected.should contain("1 selected")
+    selected.should contain(%(id="clear-release-selection"))
+
+    view.__opal_handle_event(nil, "clear_release_selection", JSON.parse("{}"))
+    cleared = view.__opal_render.to_html
+    cleared.should contain("0 selected")
+    cleared.should_not contain(%(id="clear-release-selection"))
+
+    view.__opal_handle_event(nil, "set_data_table_state", JSON.parse(%({"state":"loading"})))
+    loading = view.__opal_render.to_html
+    loading.should contain(%(data-state="loading"))
+    loading.should contain(%(aria-busy="true"))
+
+    view.__opal_handle_event(nil, "set_data_table_state", JSON.parse(%({"state":"empty"})))
+    empty = view.__opal_render.to_html
+    empty.should contain(%(data-state="empty"))
+    empty.should contain("No releases match the current filters.")
+
+    view.__opal_handle_event(nil, "set_data_table_state", JSON.parse(%({"state":"error"})))
+    failed = view.__opal_render.to_html
+    failed.should contain(%(data-state="error"))
+    failed.should contain(%(role="alert"))
+
+    view.__opal_handle_event(nil, "set_data_table_state", JSON.parse(%({"state":"ready"})))
+
     view.__opal_handle_params(LF::LiveView::ParamsContext.new({} of String => String, "/?page=3"))
     paged = view.__opal_render.to_html
     paged.should contain("Page 3 of 5")
     paged.should contain(%(href="/?page=3"))
     paged.should contain(%(aria-current="page"))
+
+    view.__opal_handle_params(
+      LF::LiveView::ParamsContext.new(
+        {} of String => String,
+        "/?page=3&table_page=2&table_sort=checks&table_dir=asc"
+      )
+    )
+    data_paged = view.__opal_render.to_html
+    data_paged.should contain("Showing 4–6 of 8")
+    data_paged.should contain(%(data-column="checks" aria-sort="ascending"))
+    data_paged.should contain(%(aria-label="Release table page 2"))
   ensure
     view.try(&.__opal_disconnect)
   end

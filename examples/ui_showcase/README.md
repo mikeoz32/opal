@@ -7,7 +7,10 @@ native modal dialog with Escape, backdrop, DOM-patch, and focus behavior. It
 also demonstrates a keyboard-navigable dropdown, server-controlled tabs, and
 manual plus timed toast dismissal. Accordion expansion and pagination remain
 server-owned, pagination uses Phoenix live patches and browser history, and
-tooltip visibility remains local across compatible DOM morphs.
+tooltip visibility remains local across compatible DOM morphs. The DataTable
+example adds typed columns, keyed rows, URL-backed sorting and pagination,
+cross-page selection, bulk and row actions, plus loading, empty, and error
+states without querying from the UI component.
 
 From this directory:
 

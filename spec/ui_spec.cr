@@ -1,6 +1,8 @@
 require "./spec_helper"
 require "../src/opal/ui"
 
+record UIDataTableSpecRow, id : String, name : String, score : Int32
+
 describe LF::UI do
   it "renders typed buttons and safely extends their attributes" do
     html = LF::UI.button(
@@ -358,6 +360,144 @@ describe LF::UI do
     end
     expect_raises(ArgumentError, "UI pagination live patch href must be a local absolute resource") do
       LF::UI.pagination_link("External", "https://example.com", live_patch: true)
+    end
+  end
+
+  it "renders a typed server-driven data table" do
+    rows = [
+      UIDataTableSpecRow.new("alpha", "Alpha <one>", 12),
+      UIDataTableSpecRow.new("beta", "Beta", 8),
+    ]
+    columns = [
+      LF::UI::DataTableColumn(UIDataTableSpecRow).new(
+        "name",
+        "Name",
+        sortable: true,
+        row_header: true
+      ) { |row| LF::LiveView::HTML.rendered(%(#{row.name})) },
+      LF::UI::DataTableColumn(UIDataTableSpecRow).new(
+        "score",
+        "Score",
+        alignment: LF::UI::DataTableColumnAlignment::End,
+        sortable: true
+      ) { |row| LF::LiveView::HTML.rendered(%(#{row.score})) },
+    ]
+    pages = LF::UI.pagination(
+      LF::UI.pagination_link("2", "/?page=2", current: true, live_patch: true),
+      label: "Result pages"
+    )
+    html = LF::UI.data_table(
+      rows,
+      columns,
+      id: "results",
+      caption: "Search <results>",
+      row_key: ->(row : UIDataTableSpecRow) { row.id },
+      sort_key: "score",
+      sort_direction: LF::UI::DataTableSortDirection::Descending,
+      sort_event: "sort_results",
+      selected_keys: Set{"alpha"},
+      select_event: "toggle_result",
+      select_all_event: "toggle_results",
+      selection_label: ->(row : UIDataTableSpecRow) { "result #{row.name}" },
+      bulk_actions: LF::UI.button("Archive", attributes: {"phx-click" => "archive_results"}),
+      page_info: LF::UI::DataTablePageInfo.new(2, 2, 5),
+      pagination: pages
+    ).to_html
+
+    html.should contain(%(id="results"))
+    html.should contain(%(data-opal-ui="data-table"))
+    html.should contain("Search &lt;results&gt;")
+    html.should contain(%(aria-sort="descending"))
+    html.should contain(%(phx-click="sort_results"))
+    html.should contain(%(phx-value-sort="score"))
+    html.should contain(%(phx-value-direction="asc"))
+    html.should contain(%(aria-checked="mixed"))
+    html.should contain(%(phx-click="toggle_result"))
+    html.should contain(%(phx-value-row="alpha"))
+    html.should contain(%(id="results-row-alpha"))
+    html.should contain(%(data-selected="true"))
+    html.should contain(%(<th))
+    html.should contain(%(scope="row"))
+    html.should contain("Alpha &lt;one&gt;")
+    html.should contain("1 selected")
+    html.should contain(%(phx-click="archive_results"))
+    html.should contain("Showing 3–4 of 5")
+    html.should contain(%(data-phx-link="patch"))
+  end
+
+  it "renders data table loading, empty, and error states" do
+    columns = [
+      LF::UI::DataTableColumn(UIDataTableSpecRow).new("name", "Name") do |row|
+        LF::LiveView::HTML.rendered(%(#{row.name}))
+      end,
+    ]
+    row_key = ->(row : UIDataTableSpecRow) { row.id }
+
+    loading = LF::UI.data_table(
+      [] of UIDataTableSpecRow,
+      columns,
+      id: "loading-results",
+      caption: "Loading results",
+      row_key: row_key,
+      loading: true
+    ).to_html
+    loading.should contain(%(aria-busy="true"))
+    loading.should contain(%(data-state="loading"))
+    loading.should contain("Loading rows…")
+
+    empty = LF::UI.data_table(
+      [] of UIDataTableSpecRow,
+      columns,
+      id: "empty-results",
+      caption: "Empty results",
+      row_key: row_key,
+      empty_message: "Nothing matched."
+    ).to_html
+    empty.should contain(%(data-state="empty"))
+    empty.should contain("Nothing matched.")
+
+    failed = LF::UI.data_table(
+      [] of UIDataTableSpecRow,
+      columns,
+      id: "failed-results",
+      caption: "Failed results",
+      row_key: row_key,
+      error_message: "Could not load <results>."
+    ).to_html
+    failed.should contain(%(data-state="error"))
+    failed.should contain(%(role="alert"))
+    failed.should contain("Could not load &lt;results&gt;.")
+  end
+
+  it "rejects invalid data table contracts" do
+    column = LF::UI::DataTableColumn(UIDataTableSpecRow).new("name", "Name", sortable: true) do |row|
+      LF::LiveView::HTML.rendered(%(#{row.name}))
+    end
+    rows = [
+      UIDataTableSpecRow.new("duplicate", "First", 1),
+      UIDataTableSpecRow.new("duplicate", "Second", 2),
+    ]
+    row_key = ->(row : UIDataTableSpecRow) { row.id }
+
+    expect_raises(ArgumentError, "UI data table sortable columns require a sort event") do
+      LF::UI.data_table(rows.first(1), [column], id: "results", caption: "Results", row_key: row_key)
+    end
+    expect_raises(ArgumentError, "UI data table row and select-all events must be provided together") do
+      LF::UI.data_table(
+        rows.first(1),
+        [column],
+        id: "results",
+        caption: "Results",
+        row_key: row_key,
+        sort_event: "sort",
+        select_event: "select"
+      )
+    end
+    expect_raises(ArgumentError, "UI data table row keys must be unique") do
+      LF::UI.data_table(rows, [column], id: "results", caption: "Results", row_key: row_key, sort_event: "sort")
+    end
+    expect_raises(ArgumentError, "UI data table page size must be positive") do
+      LF::UI::DataTablePageInfo.new(1, 0, 10)
     end
   end
 
