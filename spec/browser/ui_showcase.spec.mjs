@@ -1,0 +1,330 @@
+import {expect, test} from "@playwright/test";
+
+test.use({baseURL: "http://127.0.0.1:8085"});
+
+test("renders the compiled UI theme and primitive families", async ({page}) => {
+  await page.goto("/");
+
+  await expect(page).toHaveTitle("Opal UI showcase");
+  await expect(page.locator("#opal-live-root")).toHaveClass(/phx-connected/);
+  await expect(page.locator('[data-opal-ui="card"]')).toHaveCount(6);
+  await expect(page.locator('[data-opal-ui="button"]')).toHaveCount(16);
+  await expect(page.locator('[data-opal-ui="dropdown-item"]')).toHaveCount(3);
+  await expect(page.locator('[data-opal-ui="tab"]')).toHaveCount(3);
+  await expect(page.locator('[data-opal-ui="accordion-trigger"]')).toHaveCount(4);
+  await expect(page.locator('[data-opal-ui="tooltip"]')).toHaveCount(1);
+  await expect(page.locator('[data-opal-ui="pagination-link"]')).toHaveCount(12);
+  await expect(page.locator('[data-opal-ui="table"]')).toBeVisible();
+  await expect(page.locator('[data-opal-ui="data-table"]')).toBeVisible();
+  await expect(page.locator('[data-opal-ui="input"]')).toBeVisible();
+
+  const button = page.locator("#deployment-toggle");
+  await expect(button).toHaveAttribute("phx-click", "toggle_deployment");
+  await expect(button).not.toHaveAttribute("data-opal-click");
+  await expect(page.locator("#release-dialog")).toHaveAttribute("phx-hook", "OpalDialog");
+  await expect(page.locator("#release-actions")).toHaveAttribute("phx-hook", "OpalDropdown");
+  await expect(page.locator("#release-tabs")).toHaveAttribute("phx-hook", "OpalTabs");
+  await expect(page.locator("#release-accordion")).toHaveAttribute("phx-hook", "OpalAccordion");
+  await expect(page.locator("#accordion-help")).toHaveAttribute("phx-hook", "OpalTooltip");
+  // Flex/grid items blockify inline-level display values in computed style.
+  await expect(button).toHaveCSS("display", "flex");
+  await expect(button).toHaveCSS("background-color", "oklch(0.546 0.245 262.881)");
+  await expect(page.locator('[data-opal-ui-theme]')).toHaveCount(1);
+
+  await page.emulateMedia({colorScheme: "dark"});
+  await expect(page.locator("body")).toHaveCSS("background-color", "rgb(2, 6, 23)");
+
+  await page.emulateMedia({colorScheme: "dark", reducedMotion: "reduce"});
+  await expect(page.locator("#checks-accordion-trigger span[aria-hidden]")).toHaveCSS("transition-duration", "0s");
+});
+
+test("keeps dialog state on the server and handles modal focus semantics", async ({page}) => {
+  await page.goto("/");
+
+  const opener = page.locator("#open-release-dialog");
+  const dialog = page.locator("#release-dialog");
+  const close = page.locator("#close-release-dialog");
+
+  await expect(dialog).not.toBeVisible();
+  await opener.click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toHaveAttribute("aria-labelledby", "release-dialog-title");
+  await expect(dialog).toHaveAttribute("aria-describedby", "release-dialog-description");
+  await expect(close).toBeFocused();
+
+  await page.locator("#refresh-release-dialog").click();
+  await expect(dialog).toBeVisible();
+  await expect(page.locator("#dialog-revision")).toHaveText("Dialog update 1");
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).not.toBeVisible();
+  await expect(page.locator("#dialog-close-reason")).toHaveText("Closed by escape");
+  await expect(opener).toBeFocused();
+
+  await opener.click();
+  await expect(dialog).toBeVisible();
+  await page.mouse.click(4, 4);
+  await expect(dialog).not.toBeVisible();
+  await expect(page.locator("#dialog-close-reason")).toHaveText("Closed by backdrop");
+  await expect(opener).toBeFocused();
+});
+
+test("updates alert and switch state through LiveView", async ({page}) => {
+  await page.goto("/");
+
+  const status = page.locator("#deployment-status");
+  const toggle = page.locator("#deployment-toggle");
+  const notifications = page.locator("#notifications-switch");
+
+  await expect(status).toContainText("Deployment pending");
+  await toggle.click();
+  await expect(status).toContainText("Ready to deploy");
+  await expect(toggle).toContainText("Mark pending");
+
+  await expect(notifications).toHaveAttribute("aria-checked", "true");
+  await notifications.click();
+  await expect(notifications).toHaveAttribute("aria-checked", "false");
+});
+
+test("operates a dropdown menu with roving keyboard focus", async ({page}) => {
+  await page.goto("/");
+
+  const trigger = page.locator("#release-actions-trigger");
+  const menu = page.locator("#release-actions-menu");
+  const checks = page.locator("#menu-run-checks");
+  const tag = page.locator("#menu-create-tag");
+
+  await expect(trigger).toHaveAttribute("aria-expanded", "false");
+  await expect(menu).toBeHidden();
+  await trigger.click();
+  await expect(trigger).toHaveAttribute("aria-expanded", "true");
+  await expect(menu).toBeVisible();
+  await expect(checks).toBeFocused();
+
+  await page.locator("#profile-name").evaluate(element => {
+    element.value = "Morph update";
+    element.dispatchEvent(new Event("input", {bubbles: true}));
+  });
+  await expect(page.locator("#profile-role-error")).toHaveText("Choose a role");
+  await expect(menu).toBeVisible();
+  await expect(checks).toBeFocused();
+
+  await page.keyboard.press("ArrowDown");
+  await expect(tag).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(menu).toBeHidden();
+  await expect(trigger).toHaveAttribute("aria-expanded", "false");
+  await expect(trigger).toBeFocused();
+  await expect(page.locator("#menu-action-result")).toHaveText("Selected tag");
+
+  await trigger.click();
+  await expect(checks).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+  await expect(trigger).toBeFocused();
+});
+
+test("keeps tab selection on the server and supports arrow navigation", async ({page}) => {
+  await page.goto("/");
+
+  const overview = page.locator("#overview-tab");
+  const activity = page.locator("#activity-tab");
+  const settings = page.locator("#settings-tab");
+
+  await expect(overview).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator("#overview-panel")).toBeVisible();
+  await expect(page.locator("#activity-panel")).toBeHidden();
+
+  await overview.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(activity).toHaveAttribute("aria-selected", "true");
+  await expect(activity).toBeFocused();
+  await expect(page.locator("#activity-panel")).toBeVisible();
+
+  await page.keyboard.press("End");
+  await expect(settings).toHaveAttribute("aria-selected", "true");
+  await expect(settings).toBeFocused();
+  await expect(page.locator("#settings-panel")).toBeVisible();
+});
+
+test("keeps accordion expansion on the server and moves focus between headings", async ({page}) => {
+  await page.goto("/");
+
+  const checks = page.locator("#checks-accordion-trigger");
+  const artifacts = page.locator("#artifacts-accordion-trigger");
+  const rollback = page.locator("#rollback-accordion-trigger");
+  const archived = page.locator("#archived-accordion-trigger");
+
+  await expect(checks).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator("#checks-accordion-panel")).toBeVisible();
+  await expect(artifacts).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator("#artifacts-accordion-panel")).toBeHidden();
+  await expect(archived).toBeDisabled();
+
+  await checks.focus();
+  await page.keyboard.press("ArrowDown");
+  await expect(artifacts).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(artifacts).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator("#artifacts-accordion-panel")).toBeVisible();
+  await expect(artifacts).toBeFocused();
+
+  await page.keyboard.press("End");
+  await expect(rollback).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(rollback).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator("#rollback-accordion-panel")).toBeVisible();
+
+  await checks.click();
+  await expect(checks).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator("#checks-accordion-panel")).toBeHidden();
+});
+
+test("shows a local tooltip for focus and hover across a LiveView patch", async ({page}) => {
+  await page.goto("/");
+
+  const tooltip = page.locator("#accordion-help-content");
+  const trigger = page.locator("#accordion-help-trigger");
+
+  await expect(trigger).toHaveAttribute("aria-describedby", "accordion-help-content");
+  await expect(tooltip).toHaveAttribute("role", "tooltip");
+  await expect(tooltip).toBeHidden();
+
+  await trigger.focus();
+  await expect(tooltip).toBeVisible();
+  await page.locator("#profile-name").evaluate(element => {
+    element.value = "Tooltip patch";
+    element.dispatchEvent(new Event("input", {bubbles: true}));
+  });
+  await expect(page.locator("#profile-role-error")).toHaveText("Choose a role");
+  await expect(trigger).toBeFocused();
+  await expect(tooltip).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await expect(tooltip).toBeHidden();
+  await expect(trigger).toBeFocused();
+
+  await trigger.evaluate(element => element.blur());
+  await trigger.hover();
+  await expect(tooltip).toBeVisible();
+  await page.mouse.move(0, 0);
+  await expect(tooltip).toBeHidden();
+});
+
+test("patches pagination state into the URL and restores it with Back", async ({page}) => {
+  await page.goto("/");
+
+  const root = page.locator("#opal-live-root");
+  await root.evaluate(element => { window.__opalPaginationRoot = element; });
+  await expect(page.locator("#pagination-status")).toHaveText("Page 1 of 5");
+  await expect(page.getByRole("link", {name: "Previous page"})).not.toHaveAttribute("href");
+  await expect(page.getByRole("link", {name: "Page 1", exact: true})).toHaveAttribute("aria-current", "page");
+
+  await page.getByRole("link", {name: "Page 2", exact: true}).click();
+  await expect(page).toHaveURL(/\?page=2$/);
+  await expect(page.locator("#pagination-status")).toHaveText("Page 2 of 5");
+  await expect(page.getByRole("link", {name: "Page 2", exact: true})).toHaveAttribute("aria-current", "page");
+  await expect.poll(
+    () => root.evaluate(element => element === window.__opalPaginationRoot),
+  ).toBe(true);
+
+  await page.goBack();
+  await expect(page).toHaveURL("http://127.0.0.1:8085/");
+  await expect(page.locator("#pagination-status")).toHaveText("Page 1 of 5");
+  await expect(page.getByRole("link", {name: "Page 1", exact: true})).toHaveAttribute("aria-current", "page");
+});
+
+test("drives DataTable sorting, paging, selection, actions, and states from LiveView", async ({page}) => {
+  await page.goto("/");
+
+  const dataTable = page.locator("#release-data-table");
+  const versionHeader = dataTable.locator('thead th[data-column="version"]');
+  const versionSort = dataTable.locator('[data-opal-ui="data-table-sort"][phx-value-sort="version"]');
+  const selectAll = dataTable.getByRole("checkbox", {name: "Select all visible rows"});
+
+  await expect(dataTable.locator("tbody tr")).toHaveCount(3);
+  await expect(dataTable.locator("#release-data-table-page-summary")).toHaveText("Showing 1–3 of 8");
+  await expect(versionHeader).toHaveAttribute("aria-sort", "descending");
+
+  await versionSort.click();
+  await expect(page).toHaveURL(/table_page=1&table_sort=version&table_dir=asc$/);
+  await expect(versionHeader).toHaveAttribute("aria-sort", "ascending");
+  await expect(dataTable.locator("tbody tr").first()).toHaveAttribute("data-row-key", "release-137");
+
+  await page.goBack();
+  await expect(page).toHaveURL("http://127.0.0.1:8085/");
+  await expect(versionHeader).toHaveAttribute("aria-sort", "descending");
+
+  const firstSelection = dataTable.locator('tbody [data-opal-ui="data-table-selection"]').first();
+  await firstSelection.click();
+  await expect(firstSelection).toHaveAttribute("aria-checked", "true");
+  await expect(dataTable.locator("#release-data-table-selection-status")).toHaveText("1 selected");
+  await expect(page.locator("#clear-release-selection")).toBeVisible();
+
+  await selectAll.click();
+  await expect(dataTable.getByRole("checkbox", {name: "Deselect all visible rows"})).toHaveAttribute("aria-checked", "true");
+  await expect(dataTable.locator("#release-data-table-selection-status")).toHaveText("3 selected");
+
+  await page.getByRole("link", {name: "Release table page 2"}).click();
+  await expect(page).toHaveURL(/table_page=2/);
+  await expect(dataTable.locator("#release-data-table-page-summary")).toHaveText("Showing 4–6 of 8");
+  await expect(dataTable.locator("tbody tr")).toHaveCount(3);
+  await dataTable.getByRole("button", {name: /^Inspect release/}).first().click();
+  await expect(page.locator("#inspected-release")).toContainText("Inspecting");
+
+  await page.locator("#clear-release-selection").click();
+  await expect(dataTable.locator("#release-data-table-selection-status")).toHaveText("0 selected");
+  await expect(page.locator("#clear-release-selection")).toHaveCount(0);
+
+  await page.locator("#data-table-state-loading").click();
+  await expect(dataTable.locator("table")).toHaveAttribute("aria-busy", "true");
+  await expect(dataTable.locator('[data-state="loading"]')).toContainText("Loading rows");
+
+  await page.locator("#data-table-state-empty").click();
+  await expect(dataTable.locator('[data-state="empty"]')).toContainText("No releases match");
+
+  await page.locator("#data-table-state-error").click();
+  await expect(dataTable.locator('[data-state="error"] [role="alert"]')).toContainText("could not be loaded");
+
+  await page.locator("#data-table-state-ready").click();
+  await expect(dataTable.locator("tbody tr")).toHaveCount(3);
+  await expect(dataTable.locator("table")).toHaveAttribute("aria-busy", "false");
+});
+
+test("dismisses server-owned toast notifications manually and on timeout", async ({page}) => {
+  await page.goto("/");
+
+  const show = page.locator("#show-release-toast");
+  await show.click();
+  let toast = page.locator('[data-opal-ui="toast"]');
+  await expect(toast).toBeVisible();
+  await expect(toast).toContainText("Release ready");
+  await toast.locator('[data-opal-toast-dismiss]').click();
+  await expect(toast).toHaveCount(0);
+  await expect(page.locator("#toast-dismiss-result")).toHaveText("Toast dismissed by button");
+  await expect(show).toBeFocused();
+
+  await show.click();
+  toast = page.locator('[data-opal-ui="toast"]');
+  await expect(toast).toBeVisible();
+  await expect(toast).toHaveCount(0, {timeout: 7_000});
+  await expect(page.locator("#toast-dismiss-result")).toHaveText("Toast dismissed by timeout");
+});
+
+test("renders server validation and submits an accessible form", async ({page}) => {
+  await page.goto("/");
+
+  const name = page.locator("#profile-name");
+  const role = page.locator("#profile-role");
+
+  await name.fill("x");
+  await name.fill("");
+  await expect(page.locator("#profile-name-error")).toContainText("Name is required");
+  await expect(name).toHaveAttribute("aria-invalid", "true");
+
+  await name.fill("Mike");
+  await role.selectOption("admin");
+  await page.locator("#save-profile").click();
+  await expect(page.locator("#saved-status")).toContainText("Saved");
+  await expect(name).toHaveValue("Mike");
+});

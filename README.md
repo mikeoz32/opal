@@ -14,6 +14,7 @@ It is built on top of Crystal's standard `HTTP::Handler` stack and focuses on:
 - optional compile-time application bootstrap
 - transaction-local persistence with compile-time entity and query contracts
 - server-rendered interactive pages with an Opal-owned LiveView runtime
+- optional accessible UI primitives with a precompiled Tailwind theme
 
 ## Status
 
@@ -39,7 +40,7 @@ shards install
 
 ## Core API
 
-Opal exposes seven independent layers:
+Opal exposes eight independent layers:
 
 1. `LF::HTTP::Router`
    Low-level router with explicit handlers.
@@ -62,6 +63,11 @@ Opal exposes seven independent layers:
 7. `LF::LiveView`
    Server-owned interactive pages over Opal's native WebSocket transport, with
    pinned Phoenix/LiveView browser packages prebundled into the shard.
+
+8. `require "opal/ui"`
+   Optional stateless actions, feedback, cards, form controls, tables,
+   dialogs, disclosure/navigation primitives, and overlays with a precompiled
+   Tailwind theme.
 
 ## Basic Router
 
@@ -326,7 +332,7 @@ class CounterLive < LF::LiveView::View
 
   def render : LF::LiveView::Rendered
     LF::LiveView::HTML.rendered(
-      %(<button id="counter" data-opal-click="increment">#{@count}</button>)
+      %(<button id="counter" phx-click="increment">#{@count}</button>)
     )
   end
 end
@@ -340,6 +346,38 @@ Configure `live_view.secret` with at least 32 bytes. See the
 keyed comprehensions, nested stateful components and child LiveViews, streams,
 live navigation, JavaScript hooks, security, forms, reconnect, manual assembly,
 and current feature boundaries.
+
+## UI Primitives
+
+The optional UI layer returns normal LiveView structural renders and keeps
+state in the application view:
+
+```crystal
+require "opal/ui"
+
+LF::UI.button(
+  "Save",
+  type: "submit",
+  tone: LF::UI::Tone::Primary,
+  attributes: {"phx-click" => "save"}
+)
+
+LF::UI.input(
+  "Email",
+  id: "email",
+  name: "email",
+  type: "email",
+  error: @email_error,
+  required: true
+)
+```
+
+Use `LF::UI.stylesheet_tag` for a zero-setup embedded theme. Interactive
+primitives such as dialogs, dropdowns, tabs, toasts, accordions, and tooltips
+additionally load `LF::UI.hook_script_tag` before the LiveView client;
+pagination can use upstream Phoenix live patches without another hook. Both
+assets also have cacheable mounted routes. See the
+[UI guide](docs/ui.md) and runnable [UI showcase](examples/ui_showcase/README.md).
 
 ## DI Container
 
@@ -649,6 +687,11 @@ The repository includes these examples:
   Phoenix-free LiveView counter with constructor DI, query-param mount, click,
   debounced change, submit, title updates, reconnect, and HTML escaping.
 
+- [examples/ui_showcase](examples/ui_showcase/)
+  Tailwind-based `LF::UI` showcase covering typed variants, accessible forms,
+  validation, switches, feedback, cards, tables, modal dialogs, dropdown menus,
+  tabs, and toast notifications.
+
 Run them with:
 
 ```bash
@@ -683,6 +726,14 @@ For the standalone LiveView example, run commands from
 shards install
 crystal spec --no-color
 crystal run src/live_view_counter_example.cr
+```
+
+For the UI showcase, run commands from `examples/ui_showcase`:
+
+```bash
+shards install
+crystal spec --no-color
+crystal run src/ui_showcase_example.cr
 ```
 
 Repository contributors can run the real-browser compatibility suite from the

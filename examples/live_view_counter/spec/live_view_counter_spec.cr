@@ -22,7 +22,7 @@ describe CounterLive do
     rendered.should contain(%(id="right-nested-component"))
     rendered.should contain(%(data-phx-link="patch"))
     rendered.should contain(%(data-phx-component="1"))
-    rendered.should contain(%(data-opal-hook="CounterHook"))
+    rendered.should contain(%(phx-hook="CounterHook"))
     view.title.should eq("Counter 3 · Opal")
   ensure
     view.try(&.__opal_disconnect)

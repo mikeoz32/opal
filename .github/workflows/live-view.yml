@@ -39,11 +39,33 @@ jobs:
         working-directory: examples/live_view_counter
         run: shards build --release
 
+      - name: Install UI showcase dependencies
+        working-directory: examples/ui_showcase
+        run: shards install
+
+      - name: Check UI showcase dependency resolution
+        working-directory: examples/ui_showcase
+        run: shards check
+
+      - name: Run UI showcase specs
+        working-directory: examples/ui_showcase
+        run: crystal spec --no-color
+
+      - name: Build UI showcase release target
+        working-directory: examples/ui_showcase
+        run: shards build --release
+
       - name: Install browser-test dependencies
         run: npm ci
 
       - name: Verify bundled upstream LiveView client
         run: npm run check:live-view-client
+
+      - name: Check generated UI theme
+        run: npm run check:ui-css
+
+      - name: Check UI browser hooks
+        run: npm run check:ui-hooks
 
       - name: Install Chromium
         run: npx playwright install --with-deps chromium

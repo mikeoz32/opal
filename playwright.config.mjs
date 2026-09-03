@@ -14,11 +14,20 @@ export default defineConfig({
     },
     trace: "retain-on-failure",
   },
-  webServer: {
-    command: "./bin/live_view_counter_example",
-    cwd: "./examples/live_view_counter",
-    url: "http://127.0.0.1:8084/",
-    reuseExistingServer: !process.env.CI,
-    timeout: 30_000,
-  },
+  webServer: [
+    {
+      command: "./bin/live_view_counter_example",
+      cwd: "./examples/live_view_counter",
+      url: "http://127.0.0.1:8084/",
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000,
+    },
+    {
+      command: "./bin/ui_showcase_example",
+      cwd: "./examples/ui_showcase",
+      url: "http://127.0.0.1:8085/",
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000,
+    },
+  ],
 });

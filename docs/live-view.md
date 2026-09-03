@@ -26,9 +26,9 @@ class CounterLive < LF::LiveView::View
 
   def render : LF::LiveView::Rendered
     LF::LiveView::HTML.rendered(<<-HTML)
-      <button data-opal-click="decrement">-</button>
+      <button phx-click="decrement">-</button>
       <output id="counter-value">#{@count}</output>
-      <button data-opal-click="increment">+</button>
+      <button phx-click="increment">+</button>
     HTML
   end
 end
@@ -99,10 +99,10 @@ operations inside `handle_event`; browser event payloads are untrusted input.
 
 ## Events and forms
 
-Click values use `data-opal-value-*`:
+Click values use `phx-value-*`:
 
 ```html
-<button data-opal-click="delete" data-opal-value-id="42">Delete</button>
+<button phx-click="delete" phx-value-id="42">Delete</button>
 ```
 
 The event receives a JSON object:
@@ -121,19 +121,18 @@ end
 Forms serialize successful fields by name. Repeated names become arrays:
 
 ```html
-<form data-opal-change="validate"
-      data-opal-debounce="200"
-      data-opal-submit="save">
+<form phx-change="validate"
+      phx-debounce="200"
+      phx-submit="save">
   <input name="title" value="...">
   <button type="submit">Save</button>
 </form>
 ```
 
-`data-opal-change` reacts to `change`, or debounced `input` when
-`data-opal-debounce` is present. These names are retained through LiveSocket's
-supported `bindingPrefix`; DOM patching, focused controls, debounce/throttle,
-loading states, reconnect, and form recovery are handled by upstream
-`phoenix_live_view`.
+`phx-change` reacts to `change`, or debounced `input` when
+`phx-debounce` is present. These are the upstream LiveSocket binding names;
+DOM patching, focused controls, debounce/throttle, loading states, reconnect,
+and form recovery are handled by upstream `phoenix_live_view`.
 
 ## JavaScript hooks and custom events
 
@@ -142,7 +141,7 @@ expressed as server-rendered HTML. Every hook element must have a unique,
 stable DOM `id`:
 
 ```html
-<div id="sales-chart" data-opal-hook="SalesChart"></div>
+<div id="sales-chart" phx-hook="SalesChart"></div>
 ```
 
 Define the registry before Opal's client module loads. A custom
@@ -312,7 +311,7 @@ class CounterComponent < LF::LiveView::Component
     LF::LiveView::HTML.rendered(<<-HTML)
       <section id="counter-#{id}">
         <span>#{@label}: #{@count}</span>
-        <button data-opal-click="increment" data-opal-target="#{myself}">+</button>
+        <button phx-click="increment" phx-target="#{myself}">+</button>
       </section>
     HTML
   end
@@ -320,7 +319,7 @@ end
 ```
 
 Opal adds the upstream `data-phx-component` and `data-phx-view` ownership
-markers to the component root. Put `data-opal-target="#{myself}"` on each
+markers to the component root. Put `phx-target="#{myself}"` on each
 binding that should dispatch to the component; targets are not inherited from
 an ancestor element.
 
@@ -373,7 +372,7 @@ def render : LF::LiveView::Rendered
 end
 ```
 
-Place `data-opal-target="#{myself}"` on each click, change, or submit binding
+Place `phx-target="#{myself}"` on each click, change, or submit binding
 that belongs to the component. Upstream LiveView does not inherit a target
 from an ancestor. Events without a target continue to run `View#handle_event`.
 
@@ -473,8 +472,8 @@ should not resend retained entries at all.
 
 The stream API maintains large or frequently changing ordered collections in
 the connection runtime instead of application view fields. Give the container
-a unique `id` and set `data-opal-update="stream"`; the binding prefix maps this
-to Phoenix LiveView's native stream DOM behavior. Queue initial operations from
+a unique `id` and set `phx-update="stream"` to use Phoenix LiveView's native
+stream DOM behavior. Queue initial operations from
 `mount` and expose the collection with `stream_contents`:
 
 ```crystal
@@ -489,7 +488,7 @@ end
 def render : LF::LiveView::Rendered
   notifications = stream_contents("notifications")
   LF::LiveView::HTML.rendered(
-    %(<ul id="notifications" data-opal-update="stream">#{notifications}</ul>)
+    %(<ul id="notifications" phx-update="stream">#{notifications}</ul>)
   )
 end
 
