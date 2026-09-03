@@ -69,6 +69,10 @@ Opal exposes eight independent layers:
    dialogs, disclosure/navigation primitives, and overlays with a precompiled
    Tailwind theme.
 
+9. `require "opal/security"`
+   Optional authentication context, API-key and signed-session authenticators,
+   authorization guards, and CSRF protection built on the HTTP policy pipeline.
+
 ## Basic Router
 
 ```crystal

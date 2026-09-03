@@ -356,11 +356,18 @@ module LF::HTTP::AutoConfig
       end
 
       app = @app_builder.call(context)
-      handler = ::HTTP::Server.build_middleware([
+      handlers = [
         ::HTTP::LogHandler.new,
-        LF::HTTP::DI::WebSocketScopeHandler.new(context, "websocket", @websocket_connections),
-        app,
-      ])
+      ] of ::HTTP::Handler
+      if context.registered?("http_autoconfig_middleware")
+        handlers << context.resolve(
+          "http_autoconfig_middleware",
+          LF::HTTP::AutoConfigMiddleware
+        )
+      end
+      handlers << LF::HTTP::DI::WebSocketScopeHandler.new(context, "websocket", @websocket_connections)
+      handlers << app
+      handler = ::HTTP::Server.build_middleware(handlers)
       requests = ConnectionDrainHandler.new(handler, context)
       @requests = requests
       @server = DrainingHttpServer.new(requests)

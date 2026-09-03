@@ -24,6 +24,7 @@ module LF::HTTP::DI
         previous_scope = context.dependency_scope
         previous_upgrade = context.websocket_upgrade
         context.dependency_scope = scope
+        context.dependency_scope_initializer.try(&.call(scope))
         context.websocket_upgrade = LF::HTTP::WebSocketUpgrade.new(io, @connections)
 
         begin

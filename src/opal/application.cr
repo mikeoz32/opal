@@ -36,6 +36,13 @@ module LF
       @container.resolve(name, type)
     end
 
+    # Returns whether an application extension or configuration registered a
+    # bean under this exact name. Extensions use explicit names for optional
+    # integration points so they do not need reflection or service discovery.
+    def registered?(name : String) : Bool
+      @container.has_key?(name)
+    end
+
     def register_bean(*, name : String, scope : String = "singleton", type : T.class, &factory : DI::Container -> T) : Nil forall T
       @container.add_bean(name: name, scope: scope, type: type, &factory)
     end

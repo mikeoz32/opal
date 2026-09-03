@@ -9,6 +9,7 @@
 !/docs/data/
 !/docs/data/**
 !/docs/live-view.md
+!/docs/security.md
 !/docs/ui.md
 /.cache/
 /.worktree/
