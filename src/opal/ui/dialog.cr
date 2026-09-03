@@ -34,7 +34,7 @@ module LF::UI
       "aria-modal"                      => "true",
       "aria-labelledby"                 => labelled_by,
       "data-opal-ui"                    => "dialog",
-      "data-opal-hook"                  => "OpalDialog",
+      "phx-hook"                        => "OpalDialog",
       "data-opal-dialog-open"           => open.to_s,
       "data-opal-dialog-close-event"    => close_event,
       "data-opal-dialog-close-escape"   => close_on_escape.to_s,

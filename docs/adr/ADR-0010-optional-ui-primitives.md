@@ -28,9 +28,10 @@ Primitives are module functions that return structural
 connection state.
 
 Variants use the `Tone`, `Size`, and `ButtonVariant` enums. Component-owned
-HTML attributes have typed arguments. Extension attributes are limited to safe
-global names and `data-*` / `aria-*`; inline event handlers and unknown URL
-schemes are rejected.
+HTML attributes have typed arguments. Extension attributes are limited to
+upstream `phx-*` bindings, safe global names, and `data-*` / `aria-*`; legacy
+LiveView binding names, inline event handlers, and unknown URL schemes are
+rejected.
 
 The initial component families are:
 

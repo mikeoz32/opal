@@ -29,6 +29,42 @@ module LF::UI
   }
   private ATTRIBUTE_NAME = /\A[a-zA-Z_:][a-zA-Z0-9:._-]*\z/
 
+  private LEGACY_LIVE_VIEW_BINDINGS = Set{
+    "data-opal-auto-recover",
+    "data-opal-blur",
+    "data-opal-click",
+    "data-opal-click-away",
+    "data-opal-change",
+    "data-opal-connected",
+    "data-opal-debounce",
+    "data-opal-disable-with",
+    "data-opal-disconnected",
+    "data-opal-drop-target",
+    "data-opal-focus",
+    "data-opal-hook",
+    "data-opal-key",
+    "data-opal-keydown",
+    "data-opal-keyup",
+    "data-opal-mounted",
+    "data-opal-no-unused-field",
+    "data-opal-patch-focused",
+    "data-opal-progress",
+    "data-opal-remove",
+    "data-opal-submit",
+    "data-opal-target",
+    "data-opal-throttle",
+    "data-opal-track-static",
+    "data-opal-trigger-action",
+    "data-opal-update",
+    "data-opal-viewport-bottom",
+    "data-opal-viewport-overrun-target",
+    "data-opal-viewport-top",
+    "data-opal-window-blur",
+    "data-opal-window-focus",
+    "data-opal-window-keydown",
+    "data-opal-window-keyup",
+  }
+
   private def component_attributes(
     base_classes : String,
     class_name : String?,
@@ -63,14 +99,19 @@ module LF::UI
 
   private def validate_custom_attribute!(name : String) : Nil
     normalized = name.downcase
+    if LEGACY_LIVE_VIEW_BINDINGS.includes?(normalized) || normalized.starts_with?("data-opal-value-")
+      replacement = normalized.sub("data-opal-", "phx-")
+      raise ArgumentError.new("Legacy UI LiveView binding '#{name}'; use '#{replacement}'")
+    end
     valid = ATTRIBUTE_NAME.matches?(name) && (
       SAFE_GLOBAL_ATTRIBUTES.includes?(normalized) ||
       normalized.starts_with?("aria-") ||
-      normalized.starts_with?("data-")
+      normalized.starts_with?("data-") ||
+      normalized.starts_with?("phx-")
     )
     unless valid
       raise ArgumentError.new(
-        "Unsafe UI attribute '#{name}'; use a typed argument, data-*, aria-*, or a safe global attribute"
+        "Unsafe UI attribute '#{name}'; use a typed argument, phx-*, data-*, aria-*, or a safe global attribute"
       )
     end
   end

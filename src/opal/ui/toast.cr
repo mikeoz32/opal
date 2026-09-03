@@ -63,7 +63,7 @@ module LF::UI
       "data-ui-tone" => tone_name(tone),
     }
     if dismiss_event
-      fixed["data-opal-hook"] = "OpalToast"
+      fixed["phx-hook"] = "OpalToast"
       fixed["data-opal-toast-dismiss-event"] = dismiss_event
       auto_dismiss_ms.try { |duration| fixed["data-opal-toast-duration"] = duration.to_s }
       return_focus.try { |value| fixed["data-opal-toast-return-focus"] = value }

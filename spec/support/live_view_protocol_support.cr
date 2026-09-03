@@ -13,7 +13,7 @@ class LiveViewSpecCounter < LF::LiveView::View
   def render : LF::LiveView::Rendered
     connected = @connected ? "yes" : "no"
     LF::LiveView::HTML.rendered(
-      %(<button id="spec-counter" data-opal-click="increment">#{@count}</button><span>#{connected}</span>)
+      %(<button id="spec-counter" phx-click="increment">#{@count}</button><span>#{connected}</span>)
     )
   end
 
@@ -164,7 +164,7 @@ class LiveViewSpecNestedComponent < LF::LiveView::Component
 
   def render : LF::LiveView::Rendered
     LF::LiveView::HTML.rendered(
-      %(<button id="nested-component-#{@owner.downcase}" data-opal-target="#{myself}" data-opal-click="increment_nested">#{@owner} nested:#{@count}</button>)
+      %(<button id="nested-component-#{@owner.downcase}" phx-target="#{myself}" phx-click="increment_nested">#{@owner} nested:#{@count}</button>)
     )
   end
 
@@ -308,7 +308,7 @@ class LiveViewSpecComponent < LF::LiveView::Component
              end
 
     LF::LiveView::HTML.rendered(
-      %(<section id="component-#{id}" data-opal-target="#{myself}"><button data-opal-click="increment">#{@label}:#{@count}</button><button data-opal-click="toggle_nested">toggle nested</button>#{nested}</section>)
+      %(<section id="component-#{id}" phx-target="#{myself}"><button phx-click="increment">#{@label}:#{@count}</button><button phx-click="toggle_nested">toggle nested</button>#{nested}</section>)
     )
   end
 
@@ -352,7 +352,7 @@ class LiveViewSpecHooks < LF::LiveView::View
 
   def render : LF::LiveView::Rendered
     LF::LiveView::HTML.rendered(
-      %(<output id="hook-state" data-opal-hook="SpecHook">#{@message}</output>)
+      %(<output id="hook-state" phx-hook="SpecHook">#{@message}</output>)
     )
   end
 end
@@ -382,7 +382,7 @@ class LiveViewSpecComponents < LF::LiveView::View
             end
 
     LF::LiveView::HTML.rendered(
-      %(<section>#{left}#{right}<button data-opal-click="toggle_right">toggle</button></section>)
+      %(<section>#{left}#{right}<button phx-click="toggle_right">toggle</button></section>)
     )
   end
 end
@@ -413,7 +413,7 @@ class LiveViewSpecStreams < LF::LiveView::View
   def render : LF::LiveView::Rendered
     contents = stream_contents("spec-stream")
     LF::LiveView::HTML.rendered(
-      %(<ul id="spec-stream" data-opal-update="stream">#{contents}</ul>)
+      %(<ul id="spec-stream" phx-update="stream">#{contents}</ul>)
     )
   end
 
@@ -494,7 +494,7 @@ class LiveViewSpecGrandchild < LF::LiveView::View
 
   def render : LF::LiveView::Rendered
     LF::LiveView::HTML.rendered(
-      %(<button id="spec-grandchild-button" data-opal-click="increment_grandchild">#{@label}:#{@count}</button>)
+      %(<button id="spec-grandchild-button" phx-click="increment_grandchild">#{@label}:#{@count}</button>)
     )
   end
 
@@ -548,7 +548,7 @@ class LiveViewSpecChild < LF::LiveView::View
                    ""
                  end
     LF::LiveView::HTML.rendered(
-      %(<section><button id="spec-child-button" data-opal-click="increment_child">#{@label}:#{@count}</button>#{grandchild}</section>)
+      %(<section><button id="spec-child-button" phx-click="increment_child">#{@label}:#{@count}</button>#{grandchild}</section>)
     )
   end
 
@@ -581,7 +581,7 @@ class LiveViewSpecChildren < LF::LiveView::View
               ""
             end
     LF::LiveView::HTML.rendered(
-      %(<main><button id="spec-parent-button" data-opal-click="increment_parent">Parent:#{@count}</button>#{child}<button data-opal-click="toggle_child">toggle child</button></main>)
+      %(<main><button id="spec-parent-button" phx-click="increment_parent">Parent:#{@count}</button>#{child}<button phx-click="toggle_child">toggle child</button></main>)
     )
   end
 end

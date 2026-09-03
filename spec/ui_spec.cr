@@ -11,7 +11,7 @@ describe LF::UI do
       type: "submit",
       disabled: true,
       class_name: "w-full",
-      attributes: {"id" => "save", "data-opal-click" => "save"}
+      attributes: {"id" => "save", "phx-click" => "save"}
     ).to_html
 
     html.should contain(%(data-opal-ui="button"))
@@ -20,7 +20,7 @@ describe LF::UI do
     html.should contain(" disabled")
     html.should contain("border-red-300")
     html.should contain("w-full")
-    html.should contain(%(data-opal-click="save"))
+    html.should contain(%(phx-click="save"))
     html.should contain("Save &lt;draft&gt;")
   end
 
@@ -48,6 +48,15 @@ describe LF::UI do
     end
     expect_raises(ArgumentError, "must use its typed component argument") do
       LF::UI.button("Bad", attributes: {"type" => "submit"})
+    end
+    expect_raises(ArgumentError, "Legacy UI LiveView binding 'data-opal-click'; use 'phx-click'") do
+      LF::UI.button("Old binding", attributes: {"data-opal-click" => "save"})
+    end
+    expect_raises(ArgumentError, "Legacy UI LiveView binding 'data-opal-value-id'; use 'phx-value-id'") do
+      LF::UI.button("Old value", attributes: {"data-opal-value-id" => "42"})
+    end
+    expect_raises(ArgumentError, "Legacy UI LiveView binding 'data-opal-window-keydown'; use 'phx-window-keydown'") do
+      LF::UI.button("Old key binding", attributes: {"data-opal-window-keydown" => "close"})
     end
   end
 
@@ -78,7 +87,7 @@ describe LF::UI do
     )
     body = LF::UI.dialog_body("Version <1.0>")
     footer = LF::UI.dialog_footer(
-      LF::UI.button("Cancel", attributes: {"data-opal-click" => "close_publish"})
+      LF::UI.button("Cancel", attributes: {"phx-click" => "close_publish"})
     )
     html = LF::UI.dialog(
       LF::LiveView::HTML.raw(header.to_html + body.to_html + footer.to_html),
@@ -88,7 +97,7 @@ describe LF::UI do
       described_by: "publish-description",
       close_event: "close_publish",
       return_focus: "publish-button",
-      attributes: {"data-opal-target" => "7"}
+      attributes: {"phx-target" => "7"}
     ).to_html
 
     html.should contain(%(<dialog))
@@ -97,11 +106,11 @@ describe LF::UI do
     html.should contain(%(aria-modal="true"))
     html.should contain(%(aria-labelledby="publish-title"))
     html.should contain(%(aria-describedby="publish-description"))
-    html.should contain(%(data-opal-hook="OpalDialog"))
+    html.should contain(%(phx-hook="OpalDialog"))
     html.should contain(%(data-opal-dialog-open="true"))
     html.should contain(%(data-opal-dialog-close-escape="true"))
     html.should contain(%(data-opal-dialog-return-focus="publish-button"))
-    html.should contain(%(data-opal-target="7"))
+    html.should contain(%(phx-target="7"))
     html.should contain(%(data-opal-ui="dialog-panel"))
     html.should contain("Version &lt;1.0&gt;")
   end
@@ -139,13 +148,13 @@ describe LF::UI do
       id: "release-dropdown"
     ).to_html
 
-    html.should contain(%(data-opal-hook="OpalDropdown"))
+    html.should contain(%(phx-hook="OpalDropdown"))
     html.should contain(%(aria-haspopup="menu"))
     html.should contain(%(aria-expanded="false"))
     html.should contain(%(role="menu"))
     html.should contain(%(aria-labelledby="release-trigger"))
-    html.should contain(%(data-opal-click="run_action"))
-    html.should contain(%(data-opal-value-item="checks"))
+    html.should contain(%(phx-click="run_action"))
+    html.should contain(%(phx-value-item="checks"))
     html.should contain(%(href="https://example.com/docs?a=1&amp;b=2"))
     html.should contain(" hidden")
     html.should contain(" disabled")
@@ -198,12 +207,12 @@ describe LF::UI do
       id: "release-tabs"
     ).to_html
 
-    html.should contain(%(data-opal-hook="OpalTabs"))
+    html.should contain(%(phx-hook="OpalTabs"))
     html.should contain(%(role="tablist"))
     html.should contain(%(aria-label="Release details"))
     html.should contain(%(aria-selected="true"))
     html.should contain(%(aria-controls="overview-panel"))
-    html.should contain(%(data-opal-value-tab="activity"))
+    html.should contain(%(phx-value-tab="activity"))
     html.should contain(%(<section class=))
     html.should contain(%(role="tabpanel"))
     html.should contain(%(id="activity-panel"))
@@ -225,7 +234,7 @@ describe LF::UI do
 
     html.should contain(%(role="region"))
     html.should contain(%(aria-live="polite"))
-    html.should contain(%(data-opal-hook="OpalToast"))
+    html.should contain(%(phx-hook="OpalToast"))
     html.should contain(%(data-opal-toast-dismiss-event="dismiss_toast"))
     html.should contain(%(data-opal-toast-duration="5000"))
     html.should contain(%(data-opal-toast-return-focus="show-toast"))
@@ -257,7 +266,7 @@ describe LF::UI do
       hint: "Work address",
       error: "Already <used>",
       required: true,
-      attributes: {"data-opal-change" => "validate"}
+      attributes: {"phx-change" => "validate"}
     ).to_html
 
     input.should contain(%(<label for="email"))
@@ -267,7 +276,7 @@ describe LF::UI do
     input.should contain(" required")
     input.should contain(%(value="&lt;mike@example.com&gt;"))
     input.should contain("Already &lt;used&gt;")
-    input.should contain(%(data-opal-change="validate"))
+    input.should contain(%(phx-change="validate"))
 
     textarea = LF::UI.textarea(
       "Notes",
@@ -319,7 +328,7 @@ describe LF::UI do
       "Automatic updates",
       id: "automatic-updates",
       checked: true,
-      attributes: {"data-opal-click" => "toggle_updates"}
+      attributes: {"phx-click" => "toggle_updates"}
     ).to_html
     switch.should contain(%(role="switch"))
     switch.should contain(%(aria-checked="true"))

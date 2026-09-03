@@ -130,7 +130,7 @@ class UIShowcaseLive < LF::LiveView::View
     actions = String.build do |html|
       html << LF::UI.button(
         @deployment_ready ? "Mark pending" : "Mark ready",
-        attributes: {"id" => "deployment-toggle", "data-opal-click" => "toggle_deployment"}
+        attributes: {"id" => "deployment-toggle", "phx-click" => "toggle_deployment"}
       ).to_html
       html << LF::UI.button(
         "Secondary",
@@ -145,7 +145,7 @@ class UIShowcaseLive < LF::LiveView::View
       html << LF::UI.button(
         "Open release dialog",
         variant: LF::UI::ButtonVariant::Outline,
-        attributes: {"id" => "open-release-dialog", "data-opal-click" => "open_release_dialog"}
+        attributes: {"id" => "open-release-dialog", "phx-click" => "open_release_dialog"}
       ).to_html
       html << LF::UI.link_button(
         "Documentation",
@@ -252,7 +252,7 @@ class UIShowcaseLive < LF::LiveView::View
         "Real-time notifications",
         id: "notifications-switch",
         checked: @notifications,
-        attributes: {"data-opal-click" => "toggle_notifications"}
+        attributes: {"phx-click" => "toggle_notifications"}
       ).to_html
       html << %(<div class="showcase-form-actions">)
       html << LF::UI.button("Save profile", type: "submit", attributes: {"id" => "save-profile"}).to_html
@@ -266,7 +266,7 @@ class UIShowcaseLive < LF::LiveView::View
       html << "</div>"
     end
     form = LF::LiveView::HTML.raw(<<-HTML)
-      <form class="showcase-form" data-opal-change="validate_profile" data-opal-debounce="100" data-opal-submit="save_profile">
+      <form class="showcase-form" phx-change="validate_profile" phx-debounce="100" phx-submit="save_profile">
         #{controls}
       </form>
     HTML
@@ -359,7 +359,7 @@ class UIShowcaseLive < LF::LiveView::View
       html << LF::UI.button(
         "Show notification",
         variant: LF::UI::ButtonVariant::Outline,
-        attributes: {"id" => "show-release-toast", "data-opal-click" => "show_release_toast"}
+        attributes: {"id" => "show-release-toast", "phx-click" => "show_release_toast"}
       ).to_html
       unless @last_menu_action.blank?
         html << LF::UI.badge(
@@ -441,15 +441,15 @@ class UIShowcaseLive < LF::LiveView::View
         LF::UI.button(
           "Refresh preview",
           variant: LF::UI::ButtonVariant::Outline,
-          attributes: {"id" => "refresh-release-dialog", "data-opal-click" => "refresh_release_dialog"}
+          attributes: {"id" => "refresh-release-dialog", "phx-click" => "refresh_release_dialog"}
         ).to_html +
         LF::UI.button(
           "Close dialog",
           attributes: {
-            "id"                     => "close-release-dialog",
-            "autofocus"              => "",
-            "data-opal-click"        => "close_release_dialog",
-            "data-opal-value-reason" => "button",
+            "id"               => "close-release-dialog",
+            "autofocus"        => "",
+            "phx-click"        => "close_release_dialog",
+            "phx-value-reason" => "button",
           }
         ).to_html
       )

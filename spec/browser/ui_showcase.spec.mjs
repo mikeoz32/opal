@@ -15,6 +15,11 @@ test("renders the compiled UI theme and primitive families", async ({page}) => {
   await expect(page.locator('[data-opal-ui="input"]')).toBeVisible();
 
   const button = page.locator("#deployment-toggle");
+  await expect(button).toHaveAttribute("phx-click", "toggle_deployment");
+  await expect(button).not.toHaveAttribute("data-opal-click");
+  await expect(page.locator("#release-dialog")).toHaveAttribute("phx-hook", "OpalDialog");
+  await expect(page.locator("#release-actions")).toHaveAttribute("phx-hook", "OpalDropdown");
+  await expect(page.locator("#release-tabs")).toHaveAttribute("phx-hook", "OpalTabs");
   // Flex/grid items blockify inline-level display values in computed style.
   await expect(button).toHaveCSS("display", "flex");
   await expect(button).toHaveCSS("background-color", "oklch(0.546 0.245 262.881)");

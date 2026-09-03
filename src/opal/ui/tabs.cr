@@ -12,9 +12,9 @@ module LF::UI
       class_name,
       attributes,
       {
-        "id"             => id,
-        "data-opal-ui"   => "tabs",
-        "data-opal-hook" => "OpalTabs",
+        "id"           => id,
+        "data-opal-ui" => "tabs",
+        "phx-hook"     => "OpalTabs",
       }
     )
     LF::LiveView::HTML.rendered(%(<div#{attrs}>#{content}</div>))
@@ -73,16 +73,16 @@ module LF::UI
                       "border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-100"
                     end
     fixed = {
-      "id"                  => id,
-      "type"                => "button",
-      "role"                => "tab",
-      "aria-selected"       => selected.to_s,
-      "aria-controls"       => panel_id,
-      "tabindex"            => selected ? "0" : "-1",
-      "data-opal-ui"        => "tab",
-      "data-opal-tab"       => "",
-      "data-opal-click"     => select_event,
-      "data-opal-value-tab" => value || id,
+      "id"            => id,
+      "type"          => "button",
+      "role"          => "tab",
+      "aria-selected" => selected.to_s,
+      "aria-controls" => panel_id,
+      "tabindex"      => selected ? "0" : "-1",
+      "data-opal-ui"  => "tab",
+      "data-opal-tab" => "",
+      "phx-click"     => select_event,
+      "phx-value-tab" => value || id,
     }
     booleans = disabled ? ["disabled"] : [] of String
     attrs = component_attributes(

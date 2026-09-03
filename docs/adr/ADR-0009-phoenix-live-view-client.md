@@ -35,11 +35,12 @@ server contract:
 - nested child LiveViews multiplexed as independent channels on one socket;
 - `live_patch` and `live_redirect` with current-URL reconnect mounts.
 
-The client uses the supported `bindingPrefix: "data-opal-"`, preserving
-`data-opal-click`, change, submit, debounce, value, target, and hook bindings.
-Phoenix's hard-coded live-link attributes remain `data-phx-link` and
-`data-phx-link-state`. The endpoint is configured at `/_opal/live`; Phoenix
-opens its transport at `/_opal/live/websocket?vsn=2.0.0`.
+The client uses Phoenix's default `phx-*` bindings directly: `phx-click`,
+`phx-change`, `phx-submit`, `phx-debounce`, `phx-value-*`, `phx-target`,
+`phx-hook`, and `phx-update`. Phoenix's hard-coded live-link attributes remain
+`data-phx-link` and `data-phx-link-state`. The endpoint is configured at
+`/_opal/live`; Phoenix opens its transport at
+`/_opal/live/websocket?vsn=2.0.0`.
 
 The signed mount value establishes route identity. On every join, including
 reconnect after history or BFCache restoration, the server validates the

@@ -331,7 +331,7 @@ class CounterLive < LF::LiveView::View
 
   def render : LF::LiveView::Rendered
     LF::LiveView::HTML.rendered(
-      %(<button id="counter" data-opal-click="increment">#{@count}</button>)
+      %(<button id="counter" phx-click="increment">#{@count}</button>)
     )
   end
 end
@@ -358,7 +358,7 @@ LF::UI.button(
   "Save",
   type: "submit",
   tone: LF::UI::Tone::Primary,
-  attributes: {"data-opal-click" => "save"}
+  attributes: {"phx-click" => "save"}
 )
 
 LF::UI.input(

@@ -33,5 +33,7 @@ All notable changes to Opal are documented in this file.
 
 - minimum supported Crystal version is 1.21.0;
 - framework package boundaries keep HTTP, Application, DI, and Data optional;
+- LiveView markup uses upstream `phx-*` bindings directly instead of a custom
+  `data-opal-*` binding prefix;
 - incomplete extension stops preserve dependent extensions and root DI until a
   safe shutdown retry.

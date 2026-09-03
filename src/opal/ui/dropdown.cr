@@ -21,7 +21,7 @@ module LF::UI
       {
         "id"                      => id,
         "data-opal-ui"            => "dropdown",
-        "data-opal-hook"          => "OpalDropdown",
+        "phx-hook"                => "OpalDropdown",
         "data-opal-dropdown-open" => "false",
       }
     )
@@ -103,8 +103,8 @@ module LF::UI
       "data-opal-ui"            => "dropdown-item",
       "data-opal-dropdown-item" => "",
     }
-    event.try { |name| fixed["data-opal-click"] = name }
-    value.try { |item| fixed["data-opal-value-item"] = item }
+    event.try { |name| fixed["phx-click"] = name }
+    value.try { |item| fixed["phx-value-item"] = item }
     booleans = disabled ? ["disabled"] : [] of String
     attrs = component_attributes(DROPDOWN_ITEM, class_name, attributes, fixed, booleans)
     LF::LiveView::HTML.rendered(%(<button#{attrs}>#{content}</button>))

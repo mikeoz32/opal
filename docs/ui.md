@@ -75,7 +75,7 @@ LF::UI.button(
   type: "submit",
   tone: LF::UI::Tone::Primary,
   size: LF::UI::Size::Medium,
-  attributes: {"data-opal-click" => "save"}
+  attributes: {"phx-click" => "save"}
 )
 
 LF::UI.link_button(
@@ -142,8 +142,8 @@ footer = LF::UI.dialog_footer(
     "Close",
     attributes: {
       "autofocus" => "",
-      "data-opal-click" => "close_publish",
-      "data-opal-value-reason" => "button",
+      "phx-click" => "close_publish",
+      "phx-value-reason" => "button",
     }
   )
 )
@@ -277,7 +277,7 @@ LF::UI.input(
   hint: "Use your work address.",
   error: @email_error,
   required: true,
-  attributes: {"data-opal-change" => "validate_email"}
+  attributes: {"phx-change" => "validate_email"}
 )
 ```
 
@@ -309,8 +309,9 @@ screen-reader-only content, and `table_header` requires a valid HTML scope.
 
 Every component accepts `class_name` and a string attribute map. Typed
 arguments own structural attributes such as `type`, `href`, `disabled`, `id`,
-and `name`. The extension map accepts safe global attributes plus `data-*` and
-`aria-*`; it rejects inline event handlers and arbitrary attributes.
+and `name`. The extension map accepts upstream `phx-*` bindings, safe global
+attributes, `data-*`, and `aria-*`; it rejects legacy `data-opal-*` LiveView
+bindings, inline event handlers, and arbitrary attributes.
 
 Normal text is HTML escaped. Pass `LF::LiveView::Rendered` or an explicit
 `LF::LiveView::HTML::Safe` value only for trusted nested markup.
