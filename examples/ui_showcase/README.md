@@ -1,0 +1,28 @@
+# Opal UI Showcase
+
+This runnable LiveView demonstrates the optional `LF::UI` primitives and the
+precompiled Tailwind theme. It covers actions, feedback, cards, accessible form
+controls, validation, switches, composable tables, and a server-controlled
+native modal dialog with Escape, backdrop, DOM-patch, and focus behavior. It
+also demonstrates a keyboard-navigable dropdown, server-controlled tabs, and
+manual plus timed toast dismissal. Accordion expansion and pagination remain
+server-owned, pagination uses Phoenix live patches and browser history, and
+tooltip visibility remains local across compatible DOM morphs. The DataTable
+example adds typed columns, keyed rows, URL-backed sorting and pagination,
+cross-page selection, bulk and row actions, plus loading, empty, and error
+states without querying from the UI component.
+
+From this directory:
+
+```bash
+shards install
+crystal spec --no-color
+crystal run src/ui_showcase_example.cr
+```
+
+Open <http://127.0.0.1:8085/>.
+
+The example embeds `LF::UI.stylesheet_tag` and `LF::UI.hook_script_tag` in its
+document for a zero-setup quick start. Production applications may instead
+call `LF::UI.mount_assets` while constructing their router and use
+`LF::UI.stylesheet_link` plus `LF::UI.hook_script_link` for cacheable assets.

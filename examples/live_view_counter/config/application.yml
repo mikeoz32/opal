@@ -1,0 +1,9 @@
+http:
+  host: 127.0.0.1
+  port: 8084
+
+live_view:
+  # Use a secret manager or environment-specific generated value in production.
+  secret: development-live-view-secret-32-bytes
+  join_timeout_ms: 10000
+  idle_timeout_ms: 75000

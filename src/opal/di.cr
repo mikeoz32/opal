@@ -133,8 +133,9 @@ module LF::DI
     end
 
     def destroy_if_disposable : Nil
-      disposable = @instance.as?(Disposable)
-      disposable.try(&.destroy)
+      if disposable = @instance.as?(Disposable)
+        disposable.destroy
+      end
     end
   end
 

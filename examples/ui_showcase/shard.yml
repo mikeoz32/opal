@@ -1,0 +1,17 @@
+name: ui_showcase_example
+version: 0.1.0
+
+authors:
+  - Opal Example
+
+dependencies:
+  opal:
+    path: ../..
+
+targets:
+  ui_showcase_example:
+    main: src/ui_showcase_example.cr
+
+crystal: ">= 1.21.0"
+
+license: MIT

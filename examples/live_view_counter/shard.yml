@@ -1,0 +1,17 @@
+name: live_view_counter_example
+version: 0.1.0
+
+authors:
+  - Opal Example
+
+dependencies:
+  opal:
+    path: ../..
+
+targets:
+  live_view_counter_example:
+    main: src/live_view_counter_example.cr
+
+crystal: ">= 1.21.0"
+
+license: MIT

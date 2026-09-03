@@ -1826,6 +1826,122 @@ describe "LF::HTTP::Router" do
       body.should eq(method)
     end
   end
+
+  it "registers websocket routes" do
+    router = LF::HTTP::Router.new
+
+    router.ws("/chat") do |_ws, _params|
+    end
+  end
+
+  it "rejects an HTTP route when a websocket route uses the same path" do
+    router = LF::HTTP::Router.new
+    router.ws("/chat") { |_ws, _params| }
+
+    expect_raises(LF::HTTP::RouteConflictError) do
+      router.get("/chat") { |_ctx, _params| }
+    end
+  end
+
+  it "rejects a websocket route when an HTTP route uses the same path" do
+    router = LF::HTTP::Router.new
+    router.get("/chat") { |_ctx, _params| }
+
+    expect_raises(LF::HTTP::RouteConflictError) do
+      router.ws("/chat") { |_ws, _params| }
+    end
+  end
+
+  it "rejects duplicate websocket routes" do
+    router = LF::HTTP::Router.new
+    router.ws("/chat") { |_ws, _params| }
+
+    expect_raises(LF::HTTP::RouteConflictError) do
+      router.ws("/chat") { |_ws, _params| }
+    end
+  end
+
+  it "detects websocket and HTTP conflicts across parameter names and slashes" do
+    router = LF::HTTP::Router.new
+    router.ws("/chat/:id") { |_ws, _params| }
+
+    expect_raises(LF::HTTP::RouteConflictError) do
+      router.get("//chat/:name/") { |_ctx, _params| }
+    end
+  end
+
+  it "returns 426 for a non-upgrade request to a websocket route" do
+    router = LF::HTTP::Router.new
+    router.ws("/chat") { |_ws, _params| }
+
+    io = IO::Memory.new
+    request = HTTP::Request.new("GET", "/chat")
+    response = HTTP::Server::Response.new(io)
+    context = HTTP::Server::Context.new(request, response)
+
+    router.call(context)
+    response.close
+
+    response.status.should eq(HTTP::Status::UPGRADE_REQUIRED)
+    response.headers["Upgrade"].should eq("websocket")
+    io.to_s.split("\r\n\r\n", 2)[1].should eq("Upgrade Required")
+  end
+
+  it "upgrades websocket routes and passes route parameters to the callback" do
+    router = LF::HTTP::Router.new
+    router.ws("/chat/:id") do |ws, params|
+      ws.on_message do |message|
+        ws.send("#{params["id"]}: #{message}")
+      end
+    end
+
+    server = HTTP::Server.new([router])
+    address = server.bind_tcp("127.0.0.1", 0)
+    listening = Channel(Nil).new
+    spawn do
+      listening.send(nil)
+      server.listen
+    end
+    listening.receive
+    Fiber.yield
+
+    client = HTTP::WebSocket.new("127.0.0.1", "/chat/42", port: address.port)
+    client.send("hello")
+    client.receive.should eq("42: hello")
+    client.close
+  ensure
+    server.try(&.close)
+  end
+
+  it "negotiates a configured websocket subprotocol" do
+    router = LF::HTTP::Router.new
+    router.ws("/chat", protocols: ["chat.v1"]) { |_ws, _params| }
+
+    server = HTTP::Server.new([router])
+    address = server.bind_tcp("127.0.0.1", 0)
+    listening = Channel(Nil).new
+    spawn do
+      listening.send(nil)
+      server.listen
+    end
+    listening.receive
+    Fiber.yield
+
+    protocol = HTTP::WebSocket::Protocol.new(
+      "127.0.0.1",
+      "/chat",
+      address.port,
+      nil,
+      HTTP::Headers.new,
+      ["chat.v1"]
+    )
+    websocket = HTTP::WebSocket.new(protocol)
+
+    protocol.protocol.should eq("chat.v1")
+  ensure
+    websocket.try(&.close)
+    server.try(&.close)
+  end
 end
 
 describe "LF::HTTP::App" do
@@ -2185,6 +2301,88 @@ describe LF::HTTP::DI::RequestScopeHandler do
       handler.call(context)
     end
 
+    context.dependency_scope.should be_nil
+    root.shutdown
+  end
+end
+
+describe LF::HTTP::DI::WebSocketScopeHandler do
+  it "does not create a websocket scope for a non-upgrade request" do
+    root = LF::DI::DefaultContainer.new
+    handler = LF::HTTP::DI::WebSocketScopeHandler.new(TestScopeProvider.new(root))
+    handler.next = ->(_context : HTTP::Server::Context) { }
+    context = HTTP::Server::Context.new(
+      HTTP::Request.new("GET", "/chat"),
+      HTTP::Server::Response.new(IO::Memory.new)
+    )
+
+    handler.call(context)
+
+    context.dependency_scope.should be_nil
+    root.shutdown
+  end
+
+  it "wraps the native upgrade handler with a websocket scope" do
+    TestDisposableCounterBean.reset
+    root = LF::DI::DefaultContainer.new
+    root.add_bean(name: "connection_resource", scope: "websocket", type: TestDisposableCounterBean) do |_ctx|
+      TestDisposableCounterBean.new
+    end
+
+    provider = TestScopeProvider.new(root)
+    websocket_scope_handler = LF::HTTP::DI::WebSocketScopeHandler.new(provider)
+    observed_scope = ""
+
+    websocket_scope_handler.next = ->(context : HTTP::Server::Context) {
+      context.response.upgrade_handler = ->(_io : IO) {
+        scope = context.dependency_scope.not_nil!
+        observed_scope = scope.scope
+        scope.resolve("connection_resource", TestDisposableCounterBean)
+      }
+    }
+
+    request = HTTP::Request.new("GET", "/chat")
+    request.headers["Upgrade"] = "websocket"
+    request.headers["Connection"] = "Upgrade"
+    context = HTTP::Server::Context.new(request, HTTP::Server::Response.new(IO::Memory.new))
+
+    websocket_scope_handler.call(context)
+    context.response.upgrade_handler.not_nil!.call(IO::Memory.new)
+
+    observed_scope.should eq("websocket")
+    provider.entered_scopes.should eq(["websocket"])
+    TestDisposableCounterBean.destroy_calls.should eq(1)
+    context.dependency_scope.should be_nil
+    root.shutdown
+  end
+
+  it "closes the websocket scope when the downstream handler fails" do
+    TestDisposableCounterBean.reset
+    root = LF::DI::DefaultContainer.new
+    root.add_bean(name: "connection_resource", scope: "websocket", type: TestDisposableCounterBean) do |_ctx|
+      TestDisposableCounterBean.new
+    end
+
+    handler = LF::HTTP::DI::WebSocketScopeHandler.new(root)
+    handler.next = ->(context : HTTP::Server::Context) {
+      context.response.upgrade_handler = ->(_io : IO) {
+        context.dependency_scope.not_nil!.resolve("connection_resource", TestDisposableCounterBean)
+        raise "websocket handler failed"
+      }
+    }
+
+    request = HTTP::Request.new("GET", "/chat")
+    request.headers["Upgrade"] = "websocket"
+    request.headers["Connection"] = "Upgrade"
+    context = HTTP::Server::Context.new(request, HTTP::Server::Response.new(IO::Memory.new))
+
+    handler.call(context)
+
+    expect_raises(Exception, "websocket handler failed") do
+      context.response.upgrade_handler.not_nil!.call(IO::Memory.new)
+    end
+
+    TestDisposableCounterBean.destroy_calls.should eq(1)
     context.dependency_scope.should be_nil
     root.shutdown
   end

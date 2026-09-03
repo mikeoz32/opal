@@ -13,11 +13,14 @@ It is built on top of Crystal's standard `HTTP::Handler` stack and focuses on:
 - scoped dependency injection with deterministic lifecycle cleanup
 - optional compile-time application bootstrap
 - transaction-local persistence with compile-time entity and query contracts
+- server-rendered interactive pages with an Opal-owned LiveView runtime
+- optional accessible UI primitives with a precompiled Tailwind theme
 
 ## Status
 
-The routing, HTTP binding, DI lifecycle, Application compiler, and Data
-persistence/migration contracts are covered by specs in this repository.
+The routing, native WebSocket, LiveView, HTTP binding, DI lifecycle,
+Application compiler, and Data persistence/migration contracts are covered by
+specs in this repository.
 
 ## Installation
 
@@ -37,7 +40,7 @@ shards install
 
 ## Core API
 
-Opal exposes six independent layers:
+Opal exposes eight independent layers:
 
 1. `LF::HTTP::Router`
    Low-level router with explicit handlers.
@@ -56,6 +59,15 @@ Opal exposes six independent layers:
 
 6. `require "opal/data"` and `require "opal/autoconfig/data"`
    Explicit persistence APIs with optional Application-owned DataSource setup.
+
+7. `LF::LiveView`
+   Server-owned interactive pages over Opal's native WebSocket transport, with
+   pinned Phoenix/LiveView browser packages prebundled into the shard.
+
+8. `require "opal/ui"`
+   Optional stateless actions, feedback, cards, form controls, tables,
+   dialogs, disclosure/navigation primitives, and overlays with a precompiled
+   Tailwind theme.
 
 ## Basic Router
 
@@ -178,6 +190,12 @@ end
 The order is global → controller → action → parameter. Interceptors unwind in
 reverse order; filters search action → controller → global.
 
+For `@[LF::HTTP::Controller::WebSocket]` actions, global, controller, and action
+guards run before the HTTP upgrade, so the same direct annotations can reject
+the handshake with `403`. Pipes, interceptors, and filters retain their HTTP
+action semantics; use explicit WebSocket message validation inside the
+connection handler.
+
 Global policies are optional. With HTTP autoconfiguration, put their annotations
 on the `@[LF::Application]` class. A manually assembled standalone application
 can use a separate annotation owner only when it actually needs global policies:
@@ -250,6 +268,116 @@ server = HTTP::Server.new([
   app,
 ])
 ```
+
+WebSocket controller actions use the same route discovery and expose the raw
+Crystal socket. They may use callbacks:
+
+```crystal
+@[LF::HTTP::Controller::WebSocket("/chat")]
+def chat(ws : HTTP::WebSocket) : Nil
+  ws.on_message { |message| ws.send("echo: #{message}") }
+end
+```
+
+Or they may use an explicit synchronous receive loop in the action body:
+
+```crystal
+@[LF::HTTP::Controller::WebSocket("/echo")]
+def echo(ws : HTTP::WebSocket) : Nil
+  while message = ws.receive?
+    ws.send("echo: #{message}")
+  end
+end
+```
+
+These are two handler styles for the same WebSocket route type. Avoid mixing a
+manual `receive` loop and receive callbacks on one socket unless double
+processing is intentional. A finite synchronous action must call `ws.close`;
+returning alone hands control back to Crystal's `HTTP::WebSocketHandler`,
+which then starts its callback-mode `ws.run` loop.
+
+A standalone server that exposes WebSocket controller routes needs both scope
+handlers, in this order:
+
+```crystal
+connections = LF::HTTP::WebSocketConnectionRegistry.new
+server = HTTP::Server.new([
+  LF::HTTP::DI::WebSocketScopeHandler.new(root, "websocket", connections),
+  LF::HTTP::DI::RequestScopeHandler.new(root),
+  app,
+])
+```
+
+On shutdown, close the server, call `connections.shutdown(timeout_ms)`, and
+only then shut down the root container so active connection scopes exit first.
+
+## LiveView
+
+Opal LiveView provides interactive server-rendered pages with a prebundled
+upstream Phoenix LiveView browser runtime. Application projects need neither
+Elixir/Phoenix nor an npm asset pipeline. A page owns state for one WebSocket
+connection:
+
+```crystal
+@[LF::LiveView::Page("/counter")]
+class CounterLive < LF::LiveView::View
+  @count = 0
+
+  def handle_event(event : String, value : JSON::Any) : Nil
+    case event
+    when "increment" then @count += 1
+    else                    super
+    end
+  end
+
+  def render : LF::LiveView::Rendered
+    LF::LiveView::HTML.rendered(
+      %(<button id="counter" phx-click="increment">#{@count}</button>)
+    )
+  end
+end
+```
+
+With HTTP autoconfiguration, Opal discovers annotated pages, constructor-
+injects dependencies into separate request and WebSocket instances, serves the
+initial HTML and `/_opal/live.js`, and mounts the socket at `/_opal/live`.
+Configure `live_view.secret` with at least 32 bytes. See the
+[LiveView guide](docs/live-view.md) for lifecycle, structural rendering,
+keyed comprehensions, nested stateful components and child LiveViews, streams,
+live navigation, JavaScript hooks, security, forms, reconnect, manual assembly,
+and current feature boundaries.
+
+## UI Primitives
+
+The optional UI layer returns normal LiveView structural renders and keeps
+state in the application view:
+
+```crystal
+require "opal/ui"
+
+LF::UI.button(
+  "Save",
+  type: "submit",
+  tone: LF::UI::Tone::Primary,
+  attributes: {"phx-click" => "save"}
+)
+
+LF::UI.input(
+  "Email",
+  id: "email",
+  name: "email",
+  type: "email",
+  error: @email_error,
+  required: true
+)
+```
+
+Use `LF::UI.stylesheet_tag` for a zero-setup embedded theme. Interactive
+primitives such as dialogs, dropdowns, tabs, toasts, accordions, and tooltips
+additionally load `LF::UI.hook_script_tag` before the LiveView client;
+pagination can use upstream Phoenix live patches without another hook. Both
+assets also have cacheable mounted routes. See the
+[UI guide](docs/ui.md) and runnable [UI showcase](examples/ui_showcase/README.md).
 
 ## DI Container
 
@@ -409,6 +537,11 @@ missing explicit file is an error.
 http:
   host: 127.0.0.1
   port: 8080
+
+live_view:
+  secret: replace-with-a-generated-production-secret
+  join_timeout_ms: 10000
+  idle_timeout_ms: 75000
 ```
 
 ```crystal
@@ -474,11 +607,14 @@ TodoApplication.run_http
 
 At compile time Opal discovers `LF::HTTP::Controller` includers in
 fully-qualified name order. At startup it builds the controller route table,
-the standard log and request-scope handlers, and an `HTTP::Server`. The server
+the log and WebSocket handlers, connection-drain-owned request scopes, and an
+`HTTP::Server`. The server
 uses `http.host` (`0.0.0.0` by default), `http.port` (`8080` by default), and
-the positive `http.drain_timeout_ms` (`30000` by default). `run_http` blocks in
-`HTTP::Server#listen`; process termination closes the server before application
-DI shutdown.
+the positive `http.drain_timeout_ms` (`30000` by default). WebSocket connections
+receive `1001 Going Away` and have `http.websocket.shutdown_timeout_ms` (`5000`
+by default) to close before their transport is forced closed. `run_http` blocks
+in `HTTP::Server#listen`; process termination closes the server before
+application DI shutdown.
 
 Shutdown closes listeners and idle keep-alive sockets, then waits through the
 configured deadline for response output and upgraded connection work. A
@@ -547,6 +683,15 @@ The repository includes these examples:
   locking, rollback behavior, manual HTTP, and Application + DI +
   controller-discovery HTTP.
 
+- [examples/live_view_counter](examples/live_view_counter/)
+  Phoenix-free LiveView counter with constructor DI, query-param mount, click,
+  debounced change, submit, title updates, reconnect, and HTML escaping.
+
+- [examples/ui_showcase](examples/ui_showcase/)
+  Tailwind-based `LF::UI` showcase covering typed variants, accessible forms,
+  validation, switches, feedback, cards, tables, modal dialogs, dropdown menus,
+  tabs, and toast notifications.
+
 Run them with:
 
 ```bash
@@ -573,6 +718,27 @@ crystal run src/data_layer_example_cli.cr
 crystal run src/data_layer_example_http_cli.cr
 crystal run src/data_layer_example_application_cli.cr
 ```
+
+For the standalone LiveView example, run commands from
+`examples/live_view_counter`:
+
+```bash
+shards install
+crystal spec --no-color
+crystal run src/live_view_counter_example.cr
+```
+
+For the UI showcase, run commands from `examples/ui_showcase`:
+
+```bash
+shards install
+crystal spec --no-color
+crystal run src/ui_showcase_example.cr
+```
+
+Repository contributors can run the real-browser compatibility suite from the
+repository root with `npm ci`, `npx playwright install --with-deps chromium`,
+`npm run check:live-view-client`, and `npm run test:live-view-browser`.
 
 ## Route Matching Rules
 
@@ -603,6 +769,7 @@ plain text; collections are not auto-serialized.
 ### HTTP layer
 
 - `LF::HTTP::BadRequest`
+- `LF::HTTP::Forbidden`
 - `LF::HTTP::NotFound`
 - `LF::HTTP::InternalServerError`
 

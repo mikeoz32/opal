@@ -1,0 +1,74 @@
+name: LiveView compatibility
+
+on:
+  workflow_dispatch:
+
+jobs:
+  live-view:
+    name: LiveView server and browser
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Install Crystal
+        uses: crystal-lang/install-crystal@v1
+        with:
+          crystal: 1.21.0
+
+      - name: Install Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install example dependencies
+        working-directory: examples/live_view_counter
+        run: shards install
+
+      - name: Check example dependency resolution
+        working-directory: examples/live_view_counter
+        run: shards check
+
+      - name: Run example specs
+        working-directory: examples/live_view_counter
+        run: crystal spec --no-color
+
+      - name: Build example release target
+        working-directory: examples/live_view_counter
+        run: shards build --release
+
+      - name: Install UI showcase dependencies
+        working-directory: examples/ui_showcase
+        run: shards install
+
+      - name: Check UI showcase dependency resolution
+        working-directory: examples/ui_showcase
+        run: shards check
+
+      - name: Run UI showcase specs
+        working-directory: examples/ui_showcase
+        run: crystal spec --no-color
+
+      - name: Build UI showcase release target
+        working-directory: examples/ui_showcase
+        run: shards build --release
+
+      - name: Install browser-test dependencies
+        run: npm ci
+
+      - name: Verify bundled upstream LiveView client
+        run: npm run check:live-view-client
+
+      - name: Check generated UI theme
+        run: npm run check:ui-css
+
+      - name: Check UI browser hooks
+        run: npm run check:ui-hooks
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run LiveView browser specs
+        run: npm run test:live-view-browser

@@ -1,6 +1,7 @@
 require "http/server"
 require "../../opal"
 require "sync/mutex"
+require "../live_view/autoconfig"
 
 module LF::AutoConfig
   annotation HTTP
@@ -42,6 +43,7 @@ module LF::HTTP::AutoConfig
     @output_finished = false
     @upgraded = false
     @reported = false
+    @scope_released = false
     @lock = Mutex.new
 
     def initialize(
@@ -58,7 +60,11 @@ module LF::HTTP::AutoConfig
         @upgraded = upgraded
         report?
       end
-      finish if report
+      if upgraded
+        release_scope
+      elsif report
+        finish
+      end
     end
 
     def output_finished : Nil
@@ -85,14 +91,29 @@ module LF::HTTP::AutoConfig
     private def finish : Nil
       scope_error : Exception? = nil
       begin
-        @scope.exit
+        release_scope
       rescue error : Exception
         scope_error = error
       ensure
-        @context.dependency_scope = nil
         @requests.request_finished(@connection)
       end
       raise scope_error.as(Exception) if scope_error
+    end
+
+    private def release_scope : Nil
+      release = @lock.synchronize do
+        next false if @scope_released
+        @scope_released = true
+      end
+      return unless release
+
+      begin
+        @scope.exit
+      ensure
+        if @context.dependency_scope.same?(@scope)
+          @context.dependency_scope = nil
+        end
+      end
     end
   end
 
@@ -300,6 +321,7 @@ module LF::HTTP::AutoConfig
     getter configured_host = "0.0.0.0"
     getter configured_port = 8080
     getter configured_drain_timeout = 30.seconds
+    getter websocket_shutdown_timeout_ms = 5000
 
     @server : DrainingHttpServer?
     @requests : ConnectionDrainHandler?
@@ -310,6 +332,7 @@ module LF::HTTP::AutoConfig
     @stop_in_progress = false
     @stop_complete = false
     @stop_error : Exception?
+    @websocket_connections = LF::HTTP::WebSocketConnectionRegistry.new
 
     def initialize(&@app_builder : LF::ApplicationContext -> LF::HTTP::App)
     end
@@ -321,10 +344,12 @@ module LF::HTTP::AutoConfig
         @configured_host = config.get("http.host", "0.0.0.0")
         @configured_port = config.get("http.port", 8080)
         drain_timeout_ms = config.get("http.drain_timeout_ms", 30_000)
+        @websocket_shutdown_timeout_ms = config.get("http.websocket.shutdown_timeout_ms", 5000)
         unless 0 <= @configured_port <= 65_535
           raise "http.port must be between 0 and 65535"
         end
         raise "http.drain_timeout_ms must be positive" unless drain_timeout_ms > 0
+        raise "http.websocket.shutdown_timeout_ms must be non-negative" if @websocket_shutdown_timeout_ms < 0
         @configured_drain_timeout = drain_timeout_ms.milliseconds
       rescue error : Exception
         raise ConfigurationError.new(error.message || error.class.to_s)
@@ -333,6 +358,7 @@ module LF::HTTP::AutoConfig
       app = @app_builder.call(context)
       handler = ::HTTP::Server.build_middleware([
         ::HTTP::LogHandler.new,
+        LF::HTTP::DI::WebSocketScopeHandler.new(context, "websocket", @websocket_connections),
         app,
       ])
       requests = ConnectionDrainHandler.new(handler, context)
@@ -409,6 +435,11 @@ module LF::HTTP::AutoConfig
             deadline = Time.instant + @configured_drain_timeout
             current_server = @server
             current_server.try(&.close) unless current_server.try(&.closed?)
+            websocket_budget_ms = Math.min(
+              @websocket_shutdown_timeout_ms.to_i64,
+              @configured_drain_timeout.total_milliseconds.to_i64
+            ).to_i
+            @websocket_connections.shutdown(websocket_budget_ms)
             if requests = @requests
               active = requests.drain_until(deadline)
               unless active == 0
@@ -447,6 +478,7 @@ module LF::HTTP::AutoConfig
           {% for controller in controllers %}
             {{ controller }}.setup_routes(router, application_context, {{ global_owner }})
           {% end %}
+          LF::LiveView::AutoConfig.mount(router, application_context, {{ global_owner }})
         end
       end
     )
