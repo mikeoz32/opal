@@ -88,7 +88,9 @@ Use a repository when an operation is a reusable domain query:
 ```crystal
 source.transaction do |manager|
   todos = LF::Data::Repository(Todo).new(manager)
-  todos.where { |todo| todo.title.like("%release%") }.to_a
+  todos.query
+    .where(Todo::Fields.title.like("%release%"))
+    .to_a
 end
 ```
 
