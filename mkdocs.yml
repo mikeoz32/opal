@@ -1,0 +1,121 @@
+# yaml-language-server: $schema=https://squidfunk.github.io/mkdocs-material/schema.json
+site_name: Opal
+site_description: A modular HTTP, data, LiveView, UI, and security toolkit for Crystal.
+site_url: https://mikeoz32.github.io/opal/
+repo_name: mikeoz32/opal
+repo_url: https://github.com/mikeoz32/opal
+edit_uri: edit/main/docs/
+site_dir: build/docs/site
+strict: true
+
+not_in_nav: |
+  plans/**
+
+copyright: Copyright &copy; 2026 Mike Oz
+
+theme:
+  name: material
+  language: en
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: opal
+      toggle:
+        icon: material/weather-sunny
+        name: Use dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/weather-night
+        name: Use light mode
+  features:
+    - announce.dismiss
+    - content.action.edit
+    - content.code.annotate
+    - content.code.copy
+    - content.tabs.link
+    - navigation.footer
+    - navigation.indexes
+    - navigation.path
+    - navigation.sections
+    - navigation.tabs
+    - navigation.top
+    - search.highlight
+    - search.share
+    - search.suggest
+    - toc.follow
+
+plugins:
+  - search
+  - tags
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+
+extra_css:
+  - stylesheets/extra.css
+
+nav:
+  - Overview: index.md
+  - Get started:
+      - Introduction: getting-started/index.md
+      - Install Opal: getting-started/installation.md
+      - Your first HTTP API: tutorials/first-api.md
+      - Your first database-backed API: tutorials/todo-api.md
+      - Your first LiveView page: tutorials/live-view-counter.md
+  - Guides:
+      - Application and configuration: guides/application.md
+      - Dependency injection: guides/dependency-injection.md
+      - HTTP controllers and policies: guides/http-controllers.md
+      - WebSockets: guides/websockets.md
+      - LiveView: live-view.md
+      - UI components: ui.md
+      - Security: security.md
+  - Data:
+      - Overview: data/getting-started.md
+      - Entities: data/entities.md
+      - Queries: data/queries.md
+      - Transactions and repositories: data/transactions-and-repositories.md
+      - Relationships and cascades: data/relationships.md
+      - Migrations and locks: data/migrations.md
+      - Schema diff and generation: data/schema-generation.md
+      - Dialects: data/dialects.md
+      - Raw SQL and converters: data/raw-sql-and-converters.md
+      - Autoconfiguration: data/autoconfiguration.md
+  - Reference:
+      - Module selection: reference/modules.md
+      - Runtime contracts: reference/runtime-contracts.md
+      - Crystal API reference: reference/api.md
+  - Architecture:
+      - ADR index: adr/README.md
+      - DI lifecycle: adr/ADR-0001-di-bean-lifecycle-callbacks.md
+      - Application bootstrap: adr/ADR-0002-application-bootstrap-layer.md
+      - Application context and extensions: adr/ADR-0003-application-context-extensions-and-config.md
+      - HTTP autoconfiguration: adr/ADR-0004-http-application-autoconfiguration.md
+      - Data layer: adr/ADR-0005-crystal-native-data-layer.md
+      - WebSocket routes: adr/ADR-0006-native-websocket-routes.md
+      - LiveView: adr/ADR-0007-opal-live-view.md
+      - Controller pipeline: adr/ADR-0008-http-controller-execution-pipeline.md
+      - Phoenix client: adr/ADR-0009-phoenix-live-view-client.md
+      - UI primitives: adr/ADR-0010-optional-ui-primitives.md
+  - Contributing: contributing.md

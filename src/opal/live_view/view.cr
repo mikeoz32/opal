@@ -41,12 +41,22 @@ module LF::LiveView
     end
   end
 
+  # Base class for one server-owned LiveView page instance.
+  #
+  # Opal creates a disconnected instance for the initial HTTP render and a
+  # distinct connected instance for the WebSocket lifecycle. State belongs to
+  # that instance, not to the view class or an application singleton. Browser
+  # event payloads are untrusted and authorization must be repeated in connected
+  # `#mount`.
   abstract class View
     ROOT_COMPONENT_CID  = ConnectionRuntime::ROOT_COMPONENT_CID
     MAX_COMPONENT_DEPTH = ConnectionRuntime::MAX_COMPONENT_DEPTH
 
     @runtime = ConnectionRuntime.new
 
+    # Runs after each disconnected or connected view instance is created.
+    # `context.connected?` distinguishes the WebSocket lifecycle from the
+    # initial HTML render.
     def mount(context : MountContext) : Nil
     end
 
@@ -55,8 +65,13 @@ module LF::LiveView
     def handle_params(context : ParamsContext) : Nil
     end
 
+    # Returns structural `Rendered` HTML or a compatible string render. Prefer
+    # `HTML.rendered` so Opal can retain a stable template and update only
+    # changed dynamic positions.
     abstract def render : RenderResult
 
+    # Handles a browser `phx-*` event on the connection fiber. Override this
+    # method and call `super` for unknown events to preserve the error contract.
     def handle_event(event : String, value : JSON::Any) : Nil
       raise UnknownEventError.new(event)
     end

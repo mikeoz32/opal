@@ -1,5 +1,12 @@
 module LF
   module Data
+    # Owns a database pool, selected dialect, transaction boundary, and optional
+    # statement/transaction listeners.
+    #
+    # `DataSource.open` owns and closes the `DB::Database` it creates. Passing
+    # an existing database to `#new` borrows it by default. Every
+    # `EntityManager` is created inside `#transaction` and closes before that
+    # block returns; do not cache, inject, or reuse it afterwards.
     class DataSource
       private record TransactionValue(T), value : T
 
@@ -9,6 +16,9 @@ module LF
 
       @dispatcher : Internal::ListenerDispatcher
 
+      # Opens a database URL and initializes each checked-out connection with
+      # the selected dialect. The caller owns the returned source and must call
+      # `#close` when it is not application-owned by autoconfiguration.
       def self.open(
         url : URI | String,
         *,
@@ -43,6 +53,8 @@ module LF
         @dispatcher = Internal::ListenerDispatcher.new(listeners)
       end
 
+      # Closes an owned database pool. Calling this method is idempotent.
+      # Borrowed databases remain open.
       def close : Nil
         return if closed?
 
@@ -50,6 +62,13 @@ module LF
         @closed = true
       end
 
+      # Runs one explicit unit of work. Opal flushes pending entity operations
+      # before committing and rolls back if the block or flush raises.
+      #
+      # The yielded manager is valid only inside this block. After a rollback,
+      # discard entities obtained from that manager because generated IDs or
+      # optimistic-lock versions may have changed in memory before the database
+      # transaction was undone.
       def transaction(& : EntityManager -> T) : T forall T
         ensure_open(:transaction)
 
@@ -58,6 +77,9 @@ module LF
         end
       end
 
+      # Reads the live schema through a dialect that supports schema inspection.
+      # This is read-only and is the input to explicit schema-diff and migration
+      # source generation; it never synchronizes or mutates the database.
       def inspect_schema(
         ignored_tables : Set(String) = Set(String).new,
       ) : Schema::Snapshot

@@ -1,0 +1,3 @@
+# Keep the documentation generator within the current Material major release.
+# It includes MkDocs and the plugins configured in mkdocs.yml.
+mkdocs-material==9.*

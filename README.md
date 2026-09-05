@@ -16,6 +16,21 @@ It is built on top of Crystal's standard `HTTP::Handler` stack and focuses on:
 - server-rendered interactive pages with an Opal-owned LiveView runtime
 - optional accessible UI primitives with a precompiled Tailwind theme
 
+## Documentation
+
+The documentation site contains progressive tutorials, feature guides, Data
+and security references, architectural decisions, and generated Crystal API
+documentation. Start at [`docs/index.md`](docs/index.md), or build a local
+static preview with:
+
+```bash
+python3 -m venv .venv-docs
+.venv-docs/bin/python -m pip install -r requirements-docs.txt
+PATH="$PWD/.venv-docs/bin:$PATH" scripts/serve_docs.sh
+```
+
+The server prints a local URL (by default `http://127.0.0.1:8000`).
+
 ## Status
 
 The routing, native WebSocket, LiveView, HTTP binding, DI lifecycle,
@@ -40,7 +55,7 @@ shards install
 
 ## Core API
 
-Opal exposes eight independent layers:
+Opal exposes nine independent layers:
 
 1. `LF::HTTP::Router`
    Low-level router with explicit handlers.

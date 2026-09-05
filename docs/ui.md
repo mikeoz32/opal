@@ -491,5 +491,5 @@ dialog state, notification lists, and menu action results. Hooks own only
 transient focus, visibility, and timer behavior and restore it after compatible
 DOM morphs.
 
-See [the UI showcase](../examples/ui_showcase/README.md) for a runnable page
+See [the UI showcase](https://github.com/mikeoz32/opal/tree/main/examples/ui_showcase) for a runnable page
 covering every primitive family and LiveView validation updates.

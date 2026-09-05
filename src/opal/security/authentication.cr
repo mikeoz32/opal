@@ -4,6 +4,7 @@ require "set"
 require "./error"
 
 module LF::Security
+  # The credential scheme that produced an `Authentication` result.
   enum AuthenticationMethod
     Anonymous
     APIKey
@@ -38,11 +39,19 @@ module LF::Security
       @claims.dup
     end
 
+    # Returns whether this principal has the exact application authority.
+    # Authorities are explicit strings, not inferred from issuer-specific
+    # claims, so application authorization remains portable across authenticators.
     def authorized_for?(authority : String) : Bool
       @authorities.includes?(authority)
     end
   end
 
+  # Immutable authentication result created by an `Authenticator`.
+  #
+  # Session authentication can carry a CSRF token. API-key and bearer-token
+  # authentication intentionally cannot, because CSRF is a browser-cookie
+  # concern rather than a credential presented explicitly by the client.
   class Authentication
     getter principal : Principal?
     getter method : AuthenticationMethod
@@ -95,6 +104,11 @@ module LF::Security
     abstract def authenticate(request : ::HTTP::Request) : Authentication?
   end
 
+  # Tries authenticators in order.
+  #
+  # An authenticator returns `nil` only when its credential is absent. A present
+  # but invalid credential raises, preventing a malformed API key or bearer
+  # token from silently falling through to anonymous access.
   class AuthenticatorChain < Authenticator
     def initialize(@authenticators : Array(Authenticator))
       raise ConfigurationError.new("Authentication chain must contain at least one authenticator") if @authenticators.empty?
@@ -110,6 +124,9 @@ module LF::Security
     end
   end
 
+  # Compares two equal-length secrets without an early-exit byte comparison.
+  # This is used for credentials such as API keys; callers must still reject a
+  # length mismatch before treating the supplied value as authenticated.
   def self.secure_compare(expected : String, supplied : String) : Bool
     return false unless expected.bytesize == supplied.bytesize
 
