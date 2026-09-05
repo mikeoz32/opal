@@ -1,0 +1,3461 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A modular HTTP, data, LiveView, UI, and security toolkit for Crystal.">
+      
+      
+      
+        <link rel="canonical" href="https://mikeoz32.github.io/opal/adr/ADR-0005-crystal-native-data-layer/">
+      
+      
+        <link rel="prev" href="../ADR-0004-http-application-autoconfiguration/">
+      
+      
+        <link rel="next" href="../ADR-0006-native-websocket-routes/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Data layer - Opal</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="opal" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#adr-0005-crystal-native-data-mapper-and-explicit-unit-of-work" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Opal" class="md-header__button md-logo" aria-label="Opal" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Opal
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Data layer
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="opal" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Use dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Use dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0-7 2.39 3.42C13.65 5.15 12.84 5 12 5s-1.65.15-2.39.42zM3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29zm.02 10 1.76-3.77a7.131 7.131 0 0 0 2.38 4.14zM20.65 7l-1.77 3.79a7.02 7.02 0 0 0-2.38-4.15zm-.01 10-4.14.36c.59-.51 1.12-1.14 1.54-1.86.42-.73.69-1.5.83-2.29zM12 22l-2.41-3.44c.74.27 1.55.44 2.41.44.82 0 1.63-.17 2.37-.44z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Use light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Use light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m17.75 4.09-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94L12.44 4l1.06-3 1.06 3zm3.5 6.91-1.64 1.25.59 1.98-1.7-1.17-1.7 1.17.59-1.98L15.75 11l2.06-.05L18.5 9l.69 1.95zm-2.28 4.95c.83-.08 1.72 1.1 1.19 1.85-.32.45-.66.87-1.08 1.27C15.17 23 8.84 23 4.94 19.07c-3.91-3.9-3.91-10.24 0-14.14.4-.4.82-.76 1.27-1.08.75-.53 1.93.36 1.85 1.19-.27 2.86.69 5.83 2.89 8.02a9.96 9.96 0 0 0 8.02 2.89m-1.64 2.02a12.08 12.08 0 0 1-7.8-3.47c-2.17-2.19-3.33-5-3.49-7.82-2.81 3.14-2.7 7.96.31 10.98 3.02 3.01 7.84 3.12 10.98.31"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/mikeoz32/opal" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    mikeoz32/opal
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Overview
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../getting-started/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Get started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../guides/application/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Guides
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../data/getting-started/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Data
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../reference/modules/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../contributing/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Contributing
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Opal" class="md-nav__button md-logo" aria-label="Opal" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Opal
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/mikeoz32/opal" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    mikeoz32/opal
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../getting-started/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Get started
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Get started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Install Opal
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/first-api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Your first HTTP API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/todo-api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Your first database-backed API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/live-view-counter/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Your first LiveView page
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/application/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Application and configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/dependency-injection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependency injection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/http-controllers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    HTTP controllers and policies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/websockets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    WebSockets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../live-view/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    LiveView
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UI components
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Data
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../data/getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../data/entities/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Entities
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../data/queries/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Queries
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../data/transactions-and-repositories/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transactions and repositories
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../data/relationships/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Relationships and cascades
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../data/migrations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Migrations and locks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../data/schema-generation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Schema diff and generation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../data/dialects/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dialects
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../data/raw-sql-and-converters/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Raw SQL and converters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../data/autoconfiguration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Autoconfiguration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/modules/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Module selection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/runtime-contracts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runtime contracts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Crystal API reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Architecture
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ADR-0001-di-bean-lifecycle-callbacks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    DI lifecycle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ADR-0002-application-bootstrap-layer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Application bootstrap
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ADR-0003-application-context-extensions-and-config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Application context and extensions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ADR-0004-http-application-autoconfiguration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    HTTP autoconfiguration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data layer
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data layer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#context" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Context
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision-drivers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision Drivers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#considered-designs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Considered Designs
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Considered Designs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#active-record" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Active Record
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#stateless-data-mapper" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stateless Data Mapper
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#managed-persistence-context-with-dirty-checking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Managed Persistence Context with Dirty Checking
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#explicit-unit-of-work" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Explicit Unit of Work
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#package-boundaries" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Package Boundaries
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#datasource" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DataSource
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#entity-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Entity Model
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#compile-time-generation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Compile-Time Generation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#value-conversion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Value Conversion
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#entitymanager-and-entity-states" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EntityManager and Entity States
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#flush-and-transaction-semantics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Flush and Transaction Semantics
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#optimistic-locking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Optimistic Locking
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#relationships-and-cascades" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Relationships And Cascades
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#typed-query-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Typed Query Model
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#repository-convenience-api" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Repository Convenience API
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dialect-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dialect Architecture
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#migrations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Migrations
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#application-autoconfiguration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Application Autoconfiguration
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#observability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Observability
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#error-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Error Contract
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#performance-constraints" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance Constraints
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#consequences" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Consequences
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ADR-0006-native-websocket-routes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    WebSocket routes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ADR-0007-opal-live-view/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    LiveView
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ADR-0008-http-controller-execution-pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Controller pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ADR-0009-phoenix-live-view-client/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Phoenix client
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ADR-0010-optional-ui-primitives/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UI primitives
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#context" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Context
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision-drivers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision Drivers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#considered-designs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Considered Designs
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Considered Designs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#active-record" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Active Record
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#stateless-data-mapper" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stateless Data Mapper
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#managed-persistence-context-with-dirty-checking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Managed Persistence Context with Dirty Checking
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#explicit-unit-of-work" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Explicit Unit of Work
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#package-boundaries" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Package Boundaries
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#datasource" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DataSource
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#entity-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Entity Model
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#compile-time-generation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Compile-Time Generation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#value-conversion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Value Conversion
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#entitymanager-and-entity-states" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EntityManager and Entity States
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#flush-and-transaction-semantics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Flush and Transaction Semantics
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#optimistic-locking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Optimistic Locking
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#relationships-and-cascades" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Relationships And Cascades
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#typed-query-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Typed Query Model
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#repository-convenience-api" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Repository Convenience API
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dialect-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dialect Architecture
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#migrations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Migrations
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#application-autoconfiguration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Application Autoconfiguration
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#observability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Observability
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#error-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Error Contract
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#performance-constraints" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance Constraints
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#consequences" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Consequences
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+  <nav class="md-path" aria-label="Navigation" >
+    <ol class="md-path__list">
+      
+        
+  
+  
+    <li class="md-path__item">
+      <a href="../.." class="md-path__link">
+        
+  <span class="md-ellipsis">
+    Overview
+  </span>
+
+      </a>
+    </li>
+  
+
+      
+      
+        
+  
+  
+    
+    
+      <li class="md-path__item">
+        <a href="../" class="md-path__link">
+          
+  <span class="md-ellipsis">
+    Architecture
+  </span>
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ol>
+  </nav>
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/mikeoz32/opal/edit/main/docs/adr/ADR-0005-crystal-native-data-layer.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="adr-0005-crystal-native-data-mapper-and-explicit-unit-of-work">ADR-0005: Crystal-Native Data Mapper and Explicit Unit of Work<a class="headerlink" href="#adr-0005-crystal-native-data-mapper-and-explicit-unit-of-work" title="Permanent link">&para;</a></h1>
+<ul>
+<li>Status: Accepted</li>
+<li>Date: 2026-07-28</li>
+<li>Amended: 2026-08-30 (relationships, cascades, and repository conveniences)</li>
+<li>Deciders: Opal maintainers</li>
+<li>Extends: ADR-0002 and ADR-0003</li>
+<li>Related: <code>DB::Database</code>, <code>DB::Transaction</code>, <code>LF::ApplicationExtension</code></li>
+</ul>
+<h2 id="context">Context<a class="headerlink" href="#context" title="Permanent link">&para;</a></h2>
+<p>Opal needs a database layer that works for a small SQLite application without
+closing the path toward PostgreSQL and larger transactional applications.
+<code>crystal-db</code> already provides drivers, connection pooling, prepared statements,
+transactions, result sets, and driver-specific errors. It does not provide
+entity persistence, an identity map, typed query composition, schema
+migrations, or application bootstrap integration.</p>
+<p>The current Todo SQLite example owns <code>DB::Database</code> in an application service,
+creates its schema in a lifecycle callback, and repeats SQL and result-set
+mapping in a repository. This is explicit and understandable, but each
+application must rebuild resource ownership, transactions, mapping, generated
+IDs, concurrency checks, and migration history.</p>
+<p>An Active Record design is rejected. Entity classes must not obtain global
+database state or persistence methods such as <code>save</code>, <code>find</code>, and <code>delete</code>.
+Runtime discovery, implicit queries, dirty checking, and automatic schema
+synchronization would hide behavior and introduce work that Crystal can perform
+at compile time.</p>
+<p>A direct copy of JPA or SQLAlchemy is also rejected. Their names and concepts
+can inform boundaries, but their APIs and runtime behavior reflect Java and
+Python constraints. Opal should use Crystal modules, macros, static types,
+block-based resource management, and structural converter protocols.</p>
+<h2 id="decision-drivers">Decision Drivers<a class="headerlink" href="#decision-drivers" title="Permanent link">&para;</a></h2>
+<ul>
+<li>No global connection, entity, converter, listener, or repository registry.</li>
+<li>No dependency from <code>LF::DI</code> to Application or Data.</li>
+<li>No dependency from Data core to Application, DI, HTTP, or a concrete driver.</li>
+<li>SQL execution and transaction boundaries must remain observable.</li>
+<li>Static metadata and CRUD SQL must be generated at compile time.</li>
+<li>Query structure uses compile-time shape types by default; runtime values
+  remain bound parameters.</li>
+<li>Arbitrary runtime filter collections remain possible through an explicit
+  dynamic-query API.</li>
+<li>A transaction must own exactly one short-lived persistence context.</li>
+<li>The first release must avoid snapshots and automatic dirty checking.</li>
+<li>Proxy objects, lazy loading, and implicit relationship queries are permanent
+  non-goals; all database access remains explicit.</li>
+<li>Simple applications should need little setup, while manual construction must
+  remain available for standalone libraries and tests.</li>
+</ul>
+<h2 id="considered-designs">Considered Designs<a class="headerlink" href="#considered-designs" title="Permanent link">&para;</a></h2>
+<h3 id="active-record">Active Record<a class="headerlink" href="#active-record" title="Permanent link">&para;</a></h3>
+<p>Entities expose persistence methods and locate a global or class-level
+connection. This is concise for small applications but couples the domain model
+to infrastructure, hides resource ownership, complicates tests, and creates
+global mutable state. Rejected.</p>
+<h3 id="stateless-data-mapper">Stateless Data Mapper<a class="headerlink" href="#stateless-data-mapper" title="Permanent link">&para;</a></h3>
+<p>Repositories execute every insert, update, and delete immediately. This is
+explicit and small, but it cannot guarantee object identity within a
+transaction and provides no coherent place for generated IDs, optimistic
+locking, operation coalescing, or future batching. Rejected as the primary API;
+raw <code>crystal-db</code> remains available when this behavior is desired.</p>
+<h3 id="managed-persistence-context-with-dirty-checking">Managed Persistence Context with Dirty Checking<a class="headerlink" href="#managed-persistence-context-with-dirty-checking" title="Permanent link">&para;</a></h3>
+<p>Loaded entities are snapshotted and automatically updated at query or commit
+time. This resembles JPA but introduces hidden writes, snapshot memory,
+non-obvious flush rules, and mutation tracking overhead. Rejected for v1.</p>
+<h3 id="explicit-unit-of-work">Explicit Unit of Work<a class="headerlink" href="#explicit-unit-of-work" title="Permanent link">&para;</a></h3>
+<p>A transaction-local manager provides identity, typed loading, explicit
+<code>persist</code>/<code>remove</code>, and a queued flush. No SQL write occurs because a property
+was merely assigned. Accepted.</p>
+<h2 id="package-boundaries">Package Boundaries<a class="headerlink" href="#package-boundaries" title="Permanent link">&para;</a></h2>
+<p>The dependency direction is:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>crystal-db
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    ^
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    |
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>LF::Data
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    ^
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    |
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>LF::Data::Dialects::SQLite
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>LF::Application + LF::DI + LF::ConfigService + LF::Data
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    ^
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    |
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>LF::Data::AutoConfig
+</span></code></pre></div>
+<p><code>require "opal"</code> does not load the data layer. Applications opt into the core
+with:</p>
+<div class="language-crystal highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">require</span><span class="w"> </span><span class="s2">"opal/data"</span>
+</span></code></pre></div>
+<p>Application integration additionally requires:</p>
+<div class="language-crystal highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">require</span><span class="w"> </span><span class="s2">"opal/autoconfig/data"</span>
+</span></code></pre></div>
+<p>That adapter belongs to the separate application-bootstrap layer and is not
+part of the standalone Data core package described by this ADR.</p>
+<p>Manual SQLite use additionally loads the concrete dialect:</p>
+<div class="language-crystal highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">require</span><span class="w"> </span><span class="s2">"opal/data/dialects/sqlite"</span>
+</span></code></pre></div>
+<p>The concrete SQLite driver remains an application dependency:</p>
+<div class="language-crystal highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">require</span><span class="w"> </span><span class="s2">"sqlite3"</span>
+</span></code></pre></div>
+<p>The root Opal shard depends on <code>crystal-db</code> so <code>opal/data</code> can compile. It does
+not depend on <code>crystal-sqlite3</code> at runtime. SQLite is a development dependency
+for Opal integration tests and an explicit dependency of the Todo example.</p>
+<h2 id="datasource">DataSource<a class="headerlink" href="#datasource" title="Permanent link">&para;</a></h2>
+<p><code>LF::Data::DataSource</code> is the long-lived data entry point. It owns or borrows a
+<code>DB::Database</code>, stores a dialect instance and listener instances, and creates
+transaction-local entity managers.</p>
+<p>Two construction modes make ownership explicit:</p>
+<div class="language-crystal highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">source</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">LF</span><span class="o">::</span><span class="n">Data</span><span class="o">::</span><span class="n">DataSource</span><span class="o">.</span><span class="n">open</span><span class="p">(</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span><span class="n">url</span><span class="p">,</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span><span class="ss">dialect</span><span class="p">:</span><span class="w"> </span><span class="n">LF</span><span class="o">::</span><span class="n">Data</span><span class="o">::</span><span class="n">Dialects</span><span class="o">::</span><span class="n">SQLite</span><span class="o">.</span><span class="n">new</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="p">)</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="n">source</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">LF</span><span class="o">::</span><span class="n">Data</span><span class="o">::</span><span class="n">DataSource</span><span class="o">.</span><span class="n">new</span><span class="p">(</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">  </span><span class="n">database</span><span class="p">,</span>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="w">  </span><span class="ss">dialect</span><span class="p">:</span><span class="w"> </span><span class="n">LF</span><span class="o">::</span><span class="n">Data</span><span class="o">::</span><span class="n">Dialects</span><span class="o">::</span><span class="n">SQLite</span><span class="o">.</span><span class="n">new</span><span class="p">,</span>
+</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="w">  </span><span class="ss">owns_database</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span>
+</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="p">)</span>
+</span></code></pre></div>
+<p><code>open</code> owns and closes the created database. <code>new</code> borrows by default and does
+not close the supplied database. <code>close</code> is idempotent. Starting a transaction
+after close raises <code>LF::Data::ClosedDataSourceError</code>.</p>
+<p>Transactions use the Crystal block result as their return value:</p>
+<div class="language-crystal highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">source</span><span class="o">.</span><span class="n">transaction</span><span class="w"> </span><span class="k">do</span><span class="w"> </span><span class="o">|</span><span class="n">entity_manager</span><span class="o">|</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span><span class="c1"># application work</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="k">end</span>
+</span></code></pre></div>
+<p>The datasource delegates connection checkout, begin, commit, rollback, and
+prepared-statement caching to <code>crystal-db</code>. It does not retry transactions,
+change isolation, or introduce fiber-local transaction state in v1.</p>
+<p>The implementation holds an explicit <code>DB::Database#using_connection</code> scope and
+runs <code>DB::Connection#transaction</code> inside it. This lets <code>crystal-db</code> complete
+commit or rollback first, then closes the transaction-local <code>EntityManager</code>,
+and only then returns the connection to the pool. The transaction block is
+typed as <code>EntityManager</code> from the start; there is no intermediate public
+<code>TransactionManager</code> protocol that Plan 05 would need to replace.</p>
+<h2 id="entity-model">Entity Model<a class="headerlink" href="#entity-model" title="Permanent link">&para;</a></h2>
+<p>A persistent entity is a reference type that explicitly includes the mapping
+module:</p>
+<div class="language-crystal highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Todo</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span><span class="k">include</span><span class="w"> </span><span class="n">LF</span><span class="o">::</span><span class="n">Data</span><span class="o">::</span><span class="n">Entity</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">  </span><span class="o">@[</span><span class="nd">LF::Data::Id</span><span class="p">(</span><span class="ss">generated</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">)</span><span class="o">]</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">  </span><span class="bp">getter</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Int64?</span>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="w">  </span><span class="bp">property</span><span class="w"> </span><span class="n">title</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">String</span>
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="w">  </span><span class="bp">property</span><span class="w"> </span><span class="n">completed</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Bool</span>
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>
+</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="w">  </span><span class="o">@[</span><span class="nd">LF::Data::Version</span><span class="o">]</span>
+</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="w">  </span><span class="bp">getter</span><span class="w"> </span><span class="n">version</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Int64</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+</span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>
+</span><span id="__span-7-13"><a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a><span class="w">  </span><span class="k">def</span><span class="w"> </span><span class="nf">initialize</span><span class="p">(</span><span class="vi">@title</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="vi">@completed</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Bool</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span><span class="p">)</span>
+</span><span id="__span-7-14"><a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a><span class="w">  </span><span class="k">end</span>
+</span><span id="__span-7-15"><a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a><span class="k">end</span>
+</span></code></pre></div>
+<p>Persistent structs are rejected at compile time because copying a value would
+make identity-map and lifecycle semantics ambiguous. Structs remain valid query
+projections outside the entity manager.</p>
+<p>The default table name is the unqualified class name converted to exact
+<code>snake_case</code>: <code>Admin::AuditEvent</code> maps to <code>audit_event</code>. No pluralization or
+inflection is performed. An explicit <code>@[LF::Data::Table("audit_events")]</code>
+overrides the convention.</p>
+<p>All instance variables are persistent unless ignored. Their default column
+name is exact <code>snake_case</code>. <code>LF::Data::Column</code> supports:</p>
+<ul>
+<li><code>name</code>: explicit column name;</li>
+<li><code>ignore</code>: excludes an instance variable from mapping and writes;</li>
+<li><code>converter</code>: a type implementing the load/dump protocol.</li>
+</ul>
+<p>Exactly one instance variable must have <code>LF::Data::Id</code>. A single-column
+application-assigned ID may use any supported mapped scalar type. A generated
+ID is nilable before its first successful flush and is written through a
+generated framework-internal persistence method. Composite IDs are not
+supported in v1.</p>
+<p>The application-facing non-nil ID type is generated as entity metadata and is
+the exact type accepted by lookup and delete-by-ID operations. Generated
+<code>Int32?</code> and <code>Int64?</code> properties expose non-nil <code>Int32</code> and <code>Int64</code> lookup
+types; lifecycle nilability never permits a nil lookup. Converters validate the
+application-facing ID before producing the database identity-map value.</p>
+<p>An optional <code>LF::Data::Version</code> field is a non-nil <code>Int64</code> getter initialized to
+zero for new entities. It cannot also be the ID, be ignored, or define a
+converter. Application code does not receive a public version setter. The
+manager writes it through generated internal code.</p>
+<p>Entity hydration does not call the domain constructor. The macro generates a
+dedicated result-set constructor that allocates and initializes persistent
+state. This follows the separation used by Crystal serialization modules:
+domain construction validates new objects, while hydration restores persisted
+objects.</p>
+<p>Ignored fields must be nilable or declare an ivar default. Constructor-free
+hydration initializes them to nil or that default, preventing partially
+initialized entity instances.</p>
+<h2 id="compile-time-generation">Compile-Time Generation<a class="headerlink" href="#compile-time-generation" title="Permanent link">&para;</a></h2>
+<p>Including <code>LF::Data::Entity</code> generates:</p>
+<ul>
+<li>validated table, ID, version, and column metadata;</li>
+<li>a stable selected-column list;</li>
+<li>direct bind tuples for INSERT, UPDATE, DELETE, and find-by-ID;</li>
+<li>a result-set hydrator;</li>
+<li>internal generated-ID and version writers;</li>
+<li>an exact, non-nil lookup ID descriptor;</li>
+<li>typed field descriptors exposed through <code>Entity::Fields</code>.</li>
+</ul>
+<p>Compilation fails with an actionable entity and field name when:</p>
+<ul>
+<li>a struct includes <code>Entity</code>;</li>
+<li>zero or multiple ID fields exist;</li>
+<li>two properties map to the same column;</li>
+<li>a generated ID has an unsupported type or non-nil declaration;</li>
+<li>a version field is missing, nilable, not <code>Int64</code>, or publicly writable;</li>
+<li>a direct field type cannot be represented by <code>DB::Any</code>;</li>
+<li>a converter does not satisfy its typed load/dump calls.</li>
+</ul>
+<p>There is no global entity scan. Generic <code>EntityManager</code> methods compile only
+for the concrete entity types used by the executable.</p>
+<h2 id="value-conversion">Value Conversion<a class="headerlink" href="#value-conversion" title="Permanent link">&para;</a></h2>
+<p>Portable direct fields use the <code>DB::Any</code> types supported by <code>crystal-db</code>.
+Domain-specific values use a per-field converter:</p>
+<div class="language-crystal highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="k">module</span><span class="w"> </span><span class="nn">UUIDAsString</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span><span class="k">def</span><span class="w"> </span><span class="nc">self</span><span class="o">.</span><span class="nf">load</span><span class="p">(</span><span class="n">result</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">DB</span><span class="o">::</span><span class="n">ResultSet</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="no">UUID</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">    </span><span class="n">UUID</span><span class="o">.</span><span class="n">new</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">String</span><span class="p">))</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">  </span><span class="k">end</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="w">  </span><span class="k">def</span><span class="w"> </span><span class="nc">self</span><span class="o">.</span><span class="nf">dump</span><span class="p">(</span><span class="n">value</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="no">UUID</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">DB</span><span class="o">::</span><span class="n">Any</span>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="w">    </span><span class="n">value</span><span class="o">.</span><span class="n">to_s</span>
+</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="w">  </span><span class="k">end</span>
+</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="k">end</span>
+</span></code></pre></div>
+<p>Converters are stateless types referenced by metadata. There is no runtime
+converter registry. Generated dump code bypasses converters for nil property
+values. Because <code>DB::ResultSet</code> is forward-only, load converters consume their
+column directly and own nullable stored-value handling.</p>
+<h2 id="entitymanager-and-entity-states">EntityManager and Entity States<a class="headerlink" href="#entitymanager-and-entity-states" title="Permanent link">&para;</a></h2>
+<p><code>LF::Data::EntityManager</code> exists only inside one datasource transaction. It is
+not thread-safe, injectable as a singleton, or retained after the transaction
+block.</p>
+<p>The internal states are:</p>
+<ul>
+<li><code>New</code>: first seen through <code>persist</code>, not yet inserted;</li>
+<li><code>Managed</code>: loaded or successfully inserted, associated with this manager;</li>
+<li><code>Removed</code>: scheduled for deletion;</li>
+<li><code>Detached</code>: no longer eligible for managed writes;</li>
+<li>terminal manager: flush failed, transaction ended, or manager closed.</li>
+</ul>
+<p>The transition rules are:</p>
+<table>
+<thead>
+<tr>
+<th>Current state</th>
+<th><code>persist</code></th>
+<th><code>remove</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Unknown</td>
+<td>schedule INSERT as <code>New</code></td>
+<td>raise state error</td>
+</tr>
+<tr>
+<td>New</td>
+<td>coalesce, keep latest values</td>
+<td>cancel INSERT and detach</td>
+</tr>
+<tr>
+<td>Managed</td>
+<td>schedule/coalesce UPDATE</td>
+<td>schedule DELETE</td>
+</tr>
+<tr>
+<td>Removed</td>
+<td>raise state error</td>
+<td>no-op</td>
+</tr>
+<tr>
+<td>Detached</td>
+<td>raise detached error</td>
+<td>raise detached error</td>
+</tr>
+</tbody>
+</table>
+<p>An unknown object is always treated as new. The manager does not infer
+detached state from a non-nil assigned ID. If its ID already exists, the
+database uniqueness constraint fails. Updating detached input requires loading
+the managed entity first or using typed bulk DML.</p>
+<p>The identity map key consists of entity type plus converted primary-key value.
+<code>find</code> and entity queries return the existing managed instance when that key is
+already present. Result-set data does not silently overwrite an already managed
+instance.</p>
+<p><code>delete(T, id)</code> accepts the same exact lookup ID type as <code>find(T, id)</code>, loads or
+reuses the managed entity, and schedules its normal <code>remove</code> transition. It
+returns false when no row exists and does not bypass optimistic locking or
+flush ownership.</p>
+<p>Operations are coalesced per object identity and retain their first scheduling
+position. An UPDATE writes every persistent non-ID, non-version field because
+v1 has no dirty snapshots. Generated IDs are applied only after a successful
+INSERT statement.</p>
+<p>The manager implements heterogeneous scheduling with internal
+<code>TypedTrackedEntity(T)</code> wrappers. A wrapper stores the entity reference and
+lifecycle bookkeeping but no field snapshot or bind collection; concrete
+generated tuples are read only when that wrapper executes. Object state and
+database identity use separate manager-local hashes.</p>
+<p>The operation queue uses append-only nullable slots and a head cursor.
+Successful bulk flush is O(n) overall rather than repeatedly shifting an
+array. Cancelling a New entity may scan pending slots, which keeps the common
+flush path allocation-free and constant-time per completed operation.</p>
+<h2 id="flush-and-transaction-semantics">Flush and Transaction Semantics<a class="headerlink" href="#flush-and-transaction-semantics" title="Permanent link">&para;</a></h2>
+<p><code>persist</code> and <code>remove</code> do not execute SQL. <code>flush</code> executes queued operations.
+Entity queries never trigger a flush.</p>
+<p>On normal transaction-block return:</p>
+<ol>
+<li>the datasource calls <code>EntityManager#flush</code>;</li>
+<li><code>crystal-db</code> commits the transaction;</li>
+<li>the manager becomes closed;</li>
+<li>the block result is returned.</li>
+</ol>
+<p>On block or flush exception:</p>
+<ol>
+<li><code>crystal-db</code> rolls back;</li>
+<li>the manager becomes terminal;</li>
+<li>the original exception propagates;</li>
+<li>the connection returns to the pool.</li>
+</ol>
+<p>The manager cannot restore arbitrary user mutations after rollback. Generated
+ID and version changes are therefore applied only after their statement
+succeeds. A later transaction rollback can still occur after a successful
+explicit flush has advanced the in-memory version, so an application must
+discard every entity from a rolled-back manager. Such entities are invalid for
+reuse even when their in-memory values look usable; the manager is terminal
+after the failed transaction.</p>
+<p>An explicit <code>flush</code> is required when a generated ID or database-visible state
+is needed before block completion. Repeated successful flushes are allowed.
+After any flush failure, every manager operation raises
+<code>LF::Data::FailedEntityManagerError</code>.</p>
+<p>INSERT execution branches only on the dialect plan's <code>GeneratedKeySource</code>.
+<code>LastInsertId</code> consumes <code>DB::ExecResult#last_insert_id</code>; <code>ReturningRow</code> reads
+exactly one returned integer row. Assigned IDs use <code>None</code>. The generated ID is
+written and registered in the identity map only after successful statement
+execution.</p>
+<p>No nested transaction or savepoint API is provided in v1. Lower-level services
+compose transactionally by accepting the same manager argument.</p>
+<h2 id="optimistic-locking">Optimistic Locking<a class="headerlink" href="#optimistic-locking" title="Permanent link">&para;</a></h2>
+<p>For a versioned entity, hydration stores the loaded version in manager state.
+UPDATE uses:</p>
+<div class="language-sql highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="k">UPDATE</span><span class="w"> </span><span class="k">table</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="k">SET</span><span class="w"> </span><span class="n">columns</span><span class="p">...,</span><span class="w"> </span><span class="k">version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">version</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="k">WHERE</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="k">AND</span><span class="w"> </span><span class="k">version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">?</span>
+</span></code></pre></div>
+<p>DELETE also constrains ID and version. Exactly one affected row is required.
+Zero affected rows raise <code>LF::Data::OptimisticLockError</code>, mark the manager
+failed, and cause transaction rollback. A successful UPDATE increments both
+database and in-memory versions.</p>
+<p>SQLite may reject an overlapping stale read transaction when it attempts to
+upgrade to a writer after another connection commits. That native
+<code>database is locked</code> failure happens before compare-and-set row counts are
+available and remains a driver error; Opal does not relabel it as an optimistic
+conflict.</p>
+<h2 id="relationships-and-cascades">Relationships And Cascades<a class="headerlink" href="#relationships-and-cascades" title="Permanent link">&para;</a></h2>
+<p>Entity navigation properties may declare compile-time <code>BelongsTo</code>, <code>HasMany</code>,
+or <code>HasOne</code> metadata. Every declaration explicitly names a scalar foreign-key
+property. Navigation properties are excluded from stored columns, hydration,
+CRUD SQL, and query field descriptors; the scalar key remains the persistence
+and query contract.</p>
+<p>Hydration assigns nil to <code>belongs_to</code>/<code>has_one</code> navigation properties and an
+empty array to <code>has_many</code>. Opal never loads a relation implicitly. Repositories
+query related entities explicitly and attach them to the in-memory graph when
+that graph is needed.</p>
+<p><code>cascade_persist</code> enrolls new in-memory targets in the same manager. Managed
+targets are not implicitly scheduled for update. <code>cascade_remove</code> is supported
+only from <code>has_many</code> and <code>has_one</code> owners to targets that were explicitly loaded
+and are already managed by the same transaction. <code>belongs_to</code> remove cascade
+and orphan removal are rejected at compile time. Removing an object from a
+collection has no persistence effect.</p>
+<p>At flush, the manager derives a dependency graph from queued objects and their
+in-memory relationship references. Parent inserts precede dependent inserts;
+dependent deletes precede parent deletes. Independent operations preserve
+their first scheduling order. Cycles fail before queued SQL executes.</p>
+<p>Foreign-key DDL remains separate from EntityManager behavior. A typed
+<code>Relations</code> descriptor may be applied explicitly to a <code>Schema::TableBuilder</code>;
+it adds a normal foreign key, and <code>has_one</code> also adds uniqueness. It does not
+infer tables or columns, register entities globally, or generate database-level
+delete cascades.</p>
+<h2 id="typed-query-model">Typed Query Model<a class="headerlink" href="#typed-query-model" title="Permanent link">&para;</a></h2>
+<p>Entity macros generate typed field descriptors:</p>
+<div class="language-crystal highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">Todo</span><span class="o">::</span><span class="n">Fields</span><span class="o">.</span><span class="n">completed</span><span class="o">.</span><span class="n">eq</span><span class="p">(</span><span class="kc">false</span><span class="p">)</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="n">Todo</span><span class="o">::</span><span class="n">Fields</span><span class="o">.</span><span class="n">title</span><span class="o">.</span><span class="n">like</span><span class="p">(</span><span class="s2">"%opal%"</span><span class="p">)</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="n">Todo</span><span class="o">::</span><span class="n">Fields</span><span class="o">.</span><span class="n">id</span><span class="o">.</span><span class="n">in</span><span class="p">({</span><span class="mi">1_i64</span><span class="p">,</span><span class="w"> </span><span class="mi">2_i64</span><span class="p">})</span>
+</span></code></pre></div>
+<p>Supported v1 expressions are <code>eq</code>, <code>ne</code>, <code>lt</code>, <code>lte</code>, <code>gt</code>, <code>gte</code>, <code>in</code>,
+<code>is_nil</code>, <code>is_not_nil</code>, and <code>like</code>. Boolean expressions compose through
+explicit <code>and</code>, <code>or</code>, and <code>not</code> methods. Repeated <code>where</code> calls combine with
+AND.</p>
+<div class="language-crystal highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="n">todos</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">entity_manager</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">Todo</span><span class="p">)</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">  </span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">Todo</span><span class="o">::</span><span class="n">Fields</span><span class="o">.</span><span class="n">completed</span><span class="o">.</span><span class="n">eq</span><span class="p">(</span><span class="kc">false</span><span class="p">))</span>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">  </span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">Todo</span><span class="o">::</span><span class="n">Fields</span><span class="o">.</span><span class="n">title</span><span class="o">.</span><span class="n">like</span><span class="p">(</span><span class="s2">"%opal%"</span><span class="p">))</span>
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="w">  </span><span class="o">.</span><span class="n">order_by</span><span class="p">(</span><span class="n">Todo</span><span class="o">::</span><span class="n">Fields</span><span class="o">.</span><span class="n">id</span><span class="o">.</span><span class="n">desc</span><span class="p">)</span>
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="w">  </span><span class="o">.</span><span class="n">limit</span><span class="p">(</span><span class="mi">20</span><span class="p">)</span>
+</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="w">  </span><span class="o">.</span><span class="n">offset</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="w">  </span><span class="o">.</span><span class="n">to_a</span>
+</span></code></pre></div>
+<p>Terminal operations are <code>to_a</code>, <code>first?</code>, <code>count</code>, and <code>exists?</code>. Queries load
+complete entities using their generated selected-column list. Partial
+projection and join mapping are deferred.</p>
+<p>Every fluent operation changes the query's static type. For example, the query
+above has a shape equivalent to:</p>
+<div class="language-crystal highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="n">SelectQuery</span><span class="p">(</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="w">  </span><span class="n">Todo</span><span class="p">,</span>
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="w">  </span><span class="n">And</span><span class="p">(</span><span class="n">Eq</span><span class="p">(</span><span class="kp">typeof</span><span class="p">(</span><span class="n">Todo</span><span class="o">::</span><span class="n">Fields</span><span class="o">.</span><span class="n">completed</span><span class="p">)),</span><span class="w"> </span><span class="n">Like</span><span class="p">(</span><span class="kp">typeof</span><span class="p">(</span><span class="n">Todo</span><span class="o">::</span><span class="n">Fields</span><span class="o">.</span><span class="n">title</span><span class="p">))),</span>
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="w">  </span><span class="n">OrderBy</span><span class="p">(</span><span class="kp">typeof</span><span class="p">(</span><span class="n">Todo</span><span class="o">::</span><span class="n">Fields</span><span class="o">.</span><span class="n">id</span><span class="p">),</span><span class="w"> </span><span class="n">Desc</span><span class="p">),</span>
+</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="w">  </span><span class="n">WithLimit</span><span class="p">,</span>
+</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="w">  </span><span class="n">WithOffset</span>
+</span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="p">)</span>
+</span></code></pre></div>
+<p>Each descriptor type is
+<code>Field(EntityType, PropertyType, declaration_index)</code>. The numeric generic
+argument distinguishes fields at compile time and resolves the original ivar
+annotation without a runtime field-name or metadata registry.</p>
+<p>The expression structs store only runtime values. Data core's shared static
+plan compiler is installed into each concrete dialect and specializes for the
+entity and query-shape types. It applies that dialect's static policy and emits
+the final SQL string at compile time. The query generates a direct tuple of
+bind values in the same static order:</p>
+<div class="language-sql highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="k">SELECT</span><span class="w"> </span><span class="p">...</span><span class="w"> </span><span class="k">WHERE</span><span class="w"> </span><span class="ss">"completed"</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="k">AND</span><span class="w"> </span><span class="ss">"title"</span><span class="w"> </span><span class="k">LIKE</span><span class="w"> </span><span class="o">?</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="k">ORDER</span><span class="w"> </span><span class="k">BY</span><span class="w"> </span><span class="ss">"id"</span><span class="w"> </span><span class="k">DESC</span><span class="w"> </span><span class="k">LIMIT</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="k">OFFSET</span><span class="w"> </span><span class="o">?</span>
+</span></code></pre></div>
+<p>Identifiers, operators, ordering direction, grouping, and placeholder count
+never come from runtime values. Limit and offset are values and therefore use
+placeholders. Query execution passes the generated SQL and tuple to
+<code>DB::Connection#query</code> or <code>#exec</code>; <code>crystal-db</code> owns preparation and
+per-connection prepared-statement caching.</p>
+<p>Expression and ordering shapes expose class-level typed tuples of empty SQL
+token structs. <code>typeof</code> supplies the flattened token types to the static
+compiler; no expression instance or query value is passed to SQL generation.
+This avoids recursive runtime rendering while preserving explicit grouping and
+stable depth-first bind order. Dialect subclasses inherit the nearest static
+SQL policy and may override it with their own nested policy constant.</p>
+<p>A runtime branch may produce a union of query-shape types. Crystal compiles one
+SQL specialization for each union member. Code that builds an arbitrary number
+of predicates in a loop must opt into <code>EntityManager#dynamic_query(T)</code>.
+<code>DynamicQuery</code> uses the same typed field descriptors and bound values but
+renders SQL at runtime. It is never selected implicitly.</p>
+<p><code>DynamicQuery</code> is mutable so loop-based filters can append to one runtime
+shape. It boxes concrete typed expressions behind entity-specific predicate
+nodes; field identity and the closed operator set remain compile-time checked.
+<code>DynamicRenderer</code> reads generated table/column literals, delegates runtime
+quoting, placeholders, and offset-only syntax to the concrete dialect, and
+returns <code>RenderedQuery(String, Array(DB::Any))</code>. The array is passed through
+crystal-db's <code>args:</code> API without becoming a static bind representation.</p>
+<p>Fixed-arity <code>IN</code> accepts a Tuple and produces a static placeholder count. An
+Array has runtime arity and is accepted only by <code>DynamicQuery</code>. An empty static
+Tuple emits a false expression instead of invalid SQL. Negative limit or offset
+raises <code>LF::Data::InvalidQueryError</code>.</p>
+<p>User values never enter SQL text in either mode.</p>
+<p>Typed bulk writes use:</p>
+<div class="language-crystal highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="n">entity_manager</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">Todo</span><span class="p">)</span>
+</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="w">  </span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">Todo</span><span class="o">::</span><span class="n">Fields</span><span class="o">.</span><span class="n">completed</span><span class="p">,</span><span class="w"> </span><span class="kc">true</span><span class="p">)</span>
+</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="w">  </span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">Todo</span><span class="o">::</span><span class="n">Fields</span><span class="o">.</span><span class="n">id</span><span class="o">.</span><span class="n">eq</span><span class="p">(</span><span class="n">id</span><span class="p">))</span>
+</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="w">  </span><span class="o">.</span><span class="n">execute</span>
+</span><span id="__span-14-5"><a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>
+</span><span id="__span-14-6"><a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="n">entity_manager</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">Todo</span><span class="p">)</span>
+</span><span id="__span-14-7"><a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="w">  </span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">Todo</span><span class="o">::</span><span class="n">Fields</span><span class="o">.</span><span class="n">completed</span><span class="o">.</span><span class="n">eq</span><span class="p">(</span><span class="kc">true</span><span class="p">))</span>
+</span><span id="__span-14-8"><a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a><span class="w">  </span><span class="o">.</span><span class="n">execute</span>
+</span></code></pre></div>
+<p>Successful bulk UPDATE or DELETE marks all currently managed entities of that
+type detached because their in-memory state may be stale. Bulk operations do
+not flush queued entity operations first. Execution is rejected when that
+entity type has pending per-entity operations. UPDATE binds SET values before
+WHERE values; repeated SET for one field uses the last value while retaining
+the field's first SQL position. Whole-table UPDATE and DELETE are allowed only
+through an explicit bulk builder execution.</p>
+<p>The active <code>DB::Connection</code> remains available as an advanced raw SQL escape
+hatch through the read-only <code>EntityManager#connection</code> getter. It is the
+connection owned by the current datasource transaction and is unavailable after
+the manager closes or enters its failed state. Driver errors keep their original
+type. Raw writes bypass Unit of Work guarantees and do not invalidate the
+identity map automatically. <code>clear(T)</code> detaches every managed entity of one type
+when that type has no pending entity operations; otherwise it raises
+<code>EntityStateError</code>. Application code must call <code>clear(T)</code> for affected types or
+abandon the manager before further managed operations.</p>
+<h2 id="repository-convenience-api">Repository Convenience API<a class="headerlink" href="#repository-convenience-api" title="Permanent link">&para;</a></h2>
+<p><code>EntityManager#repository(Entity)</code> returns an optional manager-bound
+<code>Repository(Entity, ID)</code>. The entity macro supplies the exact application-side
+lookup ID type, including removal of <code>Nil</code> from generated <code>Int32?</code> and <code>Int64?</code>
+IDs. The repository provides <code>find</code>, <code>find_by</code>, <code>count</code>, <code>exists?</code>, and access
+to the existing static and dynamic query builders. Entity-typed <code>persist</code>,
+<code>remove</code>, and delete-by-ID delegate queued writes; <code>update</code> and <code>delete_all</code>
+expose the existing typed bulk builders. <code>flush</code> remains a manager operation
+because it coordinates the complete transaction-local Unit of Work. The
+facade generates no new SQL plans and introduces no registry or persistence
+methods on entities.</p>
+<p>A repository is constructed only from an active transaction-local manager. It
+does not accept or own a <code>DataSource</code>, open a transaction, flush before reads,
+or remain usable after its manager closes. This keeps transaction ownership in
+the application service while allowing custom stateless repositories to use a
+small typed facade internally.</p>
+<p>Pagination is one-based and requires a positive page number, positive page
+size, and explicit typed ordering. It may accept an unpaginated composed static
+query, preserving repeated predicates and multi-column ordering. It executes
+one existing count terminal and one ordered SELECT with limit and offset. An
+out-of-range page has no items but retains the matching total; an empty result
+has zero total pages. Page navigation predicates are computed from its metadata
+without SQL. A query created by another manager fails with
+<code>RepositoryQueryOwnershipError</code> before SQL execution. Transaction failures and
+driver failures propagate with their existing types.</p>
+<h2 id="dialect-architecture">Dialect Architecture<a class="headerlink" href="#dialect-architecture" title="Permanent link">&para;</a></h2>
+<p>A database driver and a SQL dialect are different dependencies:</p>
+<ul>
+<li>a <code>crystal-db</code> driver opens connections, binds values, executes statements,
+  reads result sets, and reports driver errors;</li>
+<li>an <code>LF::Data::Dialect</code> converts Opal's typed operation model into
+  database-specific SQL and describes how statement results are interpreted.</li>
+</ul>
+<p>Data core defines the abstract dialect contract, operation-plan value types,
+and the optional shared static plan compiler. It does not require a concrete
+dialect:</p>
+<div class="language-crystal highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="k">abstract</span><span class="w"> </span><span class="k">class</span><span class="w"> </span><span class="nn">LF::Data::</span><span class="nc">Dialect</span>
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="w">  </span><span class="k">abstract</span><span class="w"> </span><span class="k">def</span><span class="w"> </span><span class="nf">name</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">String</span>
+</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="w">  </span><span class="k">abstract</span><span class="w"> </span><span class="k">def</span><span class="w"> </span><span class="nf">quote_identifier</span><span class="p">(</span><span class="n">identifier</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">String</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">String</span>
+</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="w">  </span><span class="k">abstract</span><span class="w"> </span><span class="k">def</span><span class="w"> </span><span class="nf">placeholder</span><span class="p">(</span><span class="n">position</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Int32</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">String</span>
+</span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>
+</span><span id="__span-15-6"><a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="w">  </span><span class="k">abstract</span><span class="w"> </span><span class="k">def</span><span class="w"> </span><span class="nf">find_plan</span><span class="p">(</span><span class="n">entity</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">T</span><span class="o">.</span><span class="n">class</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">SQL</span><span class="o">::</span><span class="n">StatementPlan</span><span class="w"> </span><span class="kp">forall</span><span class="w"> </span><span class="n">T</span>
+</span><span id="__span-15-7"><a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a><span class="w">  </span><span class="k">abstract</span><span class="w"> </span><span class="k">def</span><span class="w"> </span><span class="nf">insert_plan</span><span class="p">(</span><span class="n">entity</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">T</span><span class="o">.</span><span class="n">class</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">SQL</span><span class="o">::</span><span class="n">InsertPlan</span><span class="w"> </span><span class="kp">forall</span><span class="w"> </span><span class="n">T</span>
+</span><span id="__span-15-8"><a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a><span class="w">  </span><span class="k">abstract</span><span class="w"> </span><span class="k">def</span><span class="w"> </span><span class="nf">update_plan</span><span class="p">(</span><span class="n">entity</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">T</span><span class="o">.</span><span class="n">class</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">SQL</span><span class="o">::</span><span class="n">StatementPlan</span><span class="w"> </span><span class="kp">forall</span><span class="w"> </span><span class="n">T</span>
+</span><span id="__span-15-9"><a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a><span class="w">  </span><span class="k">abstract</span><span class="w"> </span><span class="k">def</span><span class="w"> </span><span class="nf">delete_plan</span><span class="p">(</span><span class="n">entity</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">T</span><span class="o">.</span><span class="n">class</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">SQL</span><span class="o">::</span><span class="n">StatementPlan</span><span class="w"> </span><span class="kp">forall</span><span class="w"> </span><span class="n">T</span>
+</span><span id="__span-15-10"><a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a><span class="w">  </span><span class="k">abstract</span><span class="w"> </span><span class="k">def</span><span class="w"> </span><span class="nf">select_plan</span><span class="p">(</span>
+</span><span id="__span-15-11"><a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a><span class="w">    </span><span class="n">entity</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">T</span><span class="o">.</span><span class="n">class</span><span class="p">,</span>
+</span><span id="__span-15-12"><a id="__codelineno-15-12" name="__codelineno-15-12" href="#__codelineno-15-12"></a><span class="w">    </span><span class="n">shape</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">S</span><span class="o">.</span><span class="n">class</span>
+</span><span id="__span-15-13"><a id="__codelineno-15-13" name="__codelineno-15-13" href="#__codelineno-15-13"></a><span class="w">  </span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">SQL</span><span class="o">::</span><span class="n">StatementPlan</span><span class="w"> </span><span class="kp">forall</span><span class="w"> </span><span class="n">T</span><span class="p">,</span><span class="w"> </span><span class="n">S</span>
+</span><span id="__span-15-14"><a id="__codelineno-15-14" name="__codelineno-15-14" href="#__codelineno-15-14"></a><span class="w">  </span><span class="k">abstract</span><span class="w"> </span><span class="k">def</span><span class="w"> </span><span class="nf">update_query_plan</span><span class="p">(</span>
+</span><span id="__span-15-15"><a id="__codelineno-15-15" name="__codelineno-15-15" href="#__codelineno-15-15"></a><span class="w">    </span><span class="n">entity</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">T</span><span class="o">.</span><span class="n">class</span><span class="p">,</span>
+</span><span id="__span-15-16"><a id="__codelineno-15-16" name="__codelineno-15-16" href="#__codelineno-15-16"></a><span class="w">    </span><span class="n">shape</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">S</span><span class="o">.</span><span class="n">class</span>
+</span><span id="__span-15-17"><a id="__codelineno-15-17" name="__codelineno-15-17" href="#__codelineno-15-17"></a><span class="w">  </span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">SQL</span><span class="o">::</span><span class="n">StatementPlan</span><span class="w"> </span><span class="kp">forall</span><span class="w"> </span><span class="n">T</span><span class="p">,</span><span class="w"> </span><span class="n">S</span>
+</span><span id="__span-15-18"><a id="__codelineno-15-18" name="__codelineno-15-18" href="#__codelineno-15-18"></a><span class="w">  </span><span class="k">abstract</span><span class="w"> </span><span class="k">def</span><span class="w"> </span><span class="nf">delete_query_plan</span><span class="p">(</span>
+</span><span id="__span-15-19"><a id="__codelineno-15-19" name="__codelineno-15-19" href="#__codelineno-15-19"></a><span class="w">    </span><span class="n">entity</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">T</span><span class="o">.</span><span class="n">class</span><span class="p">,</span>
+</span><span id="__span-15-20"><a id="__codelineno-15-20" name="__codelineno-15-20" href="#__codelineno-15-20"></a><span class="w">    </span><span class="n">shape</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">S</span><span class="o">.</span><span class="n">class</span>
+</span><span id="__span-15-21"><a id="__codelineno-15-21" name="__codelineno-15-21" href="#__codelineno-15-21"></a><span class="w">  </span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">SQL</span><span class="o">::</span><span class="n">StatementPlan</span><span class="w"> </span><span class="kp">forall</span><span class="w"> </span><span class="n">T</span><span class="p">,</span><span class="w"> </span><span class="n">S</span>
+</span><span id="__span-15-22"><a id="__codelineno-15-22" name="__codelineno-15-22" href="#__codelineno-15-22"></a>
+</span><span id="__span-15-23"><a id="__codelineno-15-23" name="__codelineno-15-23" href="#__codelineno-15-23"></a><span class="w">  </span><span class="k">abstract</span><span class="w"> </span><span class="k">def</span><span class="w"> </span><span class="nf">supports?</span><span class="p">(</span><span class="n">capability</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">DialectCapability</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Bool</span>
+</span><span id="__span-15-24"><a id="__codelineno-15-24" name="__codelineno-15-24" href="#__codelineno-15-24"></a><span class="k">end</span>
+</span></code></pre></div>
+<p><code>StatementPlan</code> contains only final SQL. <code>InsertPlan</code> additionally contains the
+generated-key strategy and optional returned column. It does not contain bind
+values or a runtime bind-order array.</p>
+<p>Entity annotations and instance variables remain the single mapping source of
+truth. Data core provides <code>LF::Data::SQL::StaticPlanCompiler</code>, a compile-time
+mixin that installs generic CRUD plan methods into a concrete dialect through
+<code>macro included</code> and <code>verbatim</code>. Installing the methods into the concrete class
+is required because an external macro call cannot retain a generic method's
+specialized <code>T</code> reliably.</p>
+<p>The compiler inspects <code>T</code> and, for queries, <code>S</code>. It owns common SQL structure:
+mapping declarations, deterministic column order, standard SELECT/INSERT/
+UPDATE/DELETE clauses, and placeholder order. It does not create a runtime
+entity descriptor, metadata registry, query-plan cache, or second mapping
+source.</p>
+<p>Each concrete dialect supplies a small compile-time policy describing only SQL
+variation:</p>
+<ul>
+<li>identifier delimiters and escaping;</li>
+<li>positional placeholder form;</li>
+<li>empty-INSERT syntax;</li>
+<li>generated-key result strategy and optional returned-column clause;</li>
+<li>later pagination syntax required by static query shapes.</li>
+</ul>
+<p>Runtime <code>quote_identifier</code> and <code>placeholder</code> behavior must derive from the same
+policy or be covered by parity specs so static and dynamic SQL cannot drift. A
+dialect may override an installed generic plan method when its SQL cannot be
+represented by the common policy.</p>
+<p>Each used <code>Entity + ConcreteDialect + QueryShape</code> combination therefore
+produces final dialect-specific SQL during compilation. <code>DialectPolicy</code> is not
+a runtime object or an additional generic parameter; it is compile-time input
+owned by the concrete dialect. Entity- and query-generated methods produce
+direct bind tuples; runtime does not scan metadata, dispatch through <code>BindSlot</code>,
+or build static SQL with <code>String::Builder</code>.</p>
+<p>This compiler is not a <code>BaseDialect</code> subclass. <code>LF::Data::Dialect</code> remains the
+runtime polymorphic contract, while static SQL generation is a separate
+compile-time collaborator. This avoids pretending that Crystal macros use
+runtime virtual dispatch.</p>
+<p>The abstract dialect reference stored by <code>DataSource</code> remains sufficient:
+Crystal specializes and dispatches generic virtual methods to the concrete
+dialect. <code>DataSource</code> and <code>EntityManager</code> do not need a dialect type parameter.</p>
+<p><code>quote_identifier</code> and <code>placeholder</code> remain in the base contract for schema
+rendering and the explicit <code>DynamicQuery</code> path. Dynamic SQL is rendered per
+execution because its structure is not known to the compiler.</p>
+<p>An <code>InsertPlan</code> explicitly describes how a generated key is obtained:</p>
+<ul>
+<li>no generated key: execute and ignore generated-key data;</li>
+<li><code>LastInsertId</code>: execute and convert <code>DB::ExecResult#last_insert_id</code>;</li>
+<li><code>ReturningRow</code>: execute as a query and read the declared returned column.</li>
+</ul>
+<p>This prevents the base contract from assuming SQLite's last-insert-ID behavior
+and permits a future PostgreSQL dialect to use <code>RETURNING</code> without changing
+EntityManager's public API.</p>
+<p>The concrete implementations are:</p>
+<div class="language-crystal highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="n">LF</span><span class="o">::</span><span class="n">Data</span><span class="o">::</span><span class="n">Dialects</span><span class="o">::</span><span class="n">SQLite</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">LF</span><span class="o">::</span><span class="n">Data</span><span class="o">::</span><span class="n">Dialect</span>
+</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="n">LF</span><span class="o">::</span><span class="n">Data</span><span class="o">::</span><span class="n">Dialects</span><span class="o">::</span><span class="n">PostgreSQL</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">LF</span><span class="o">::</span><span class="n">Data</span><span class="o">::</span><span class="n">Dialect</span>
+</span></code></pre></div>
+<p>SQLite lives under the optional <code>opal/data/dialects/sqlite</code> entrypoint. It uses
+double-quoted identifiers, <code>?</code> placeholders, SQLite pagination,
+<code>LastInsertId</code>, and SQLite schema rendering. It does not require or register
+the <code>sqlite3</code> driver; the application must require that shard itself.</p>
+<p>PostgreSQL lives under the optional <code>opal/data/dialects/postgresql</code> entrypoint.
+It uses double-quoted identifiers, numbered <code>$1</code> placeholders, standard offset
+pagination, <code>ReturningRow</code>, and PostgreSQL schema rendering. It does not require
+or register the <code>pg</code> driver; the application must require that shard itself.</p>
+<p>Schema behavior is separated from DML rendering. The base package defines
+typed schema operations and an abstract <code>SchemaRenderer</code>. SQLite supplies
+<code>LF::Data::Dialects::SQLite::SchemaRenderer</code>. <code>MigrationRunner</code> asks its
+DataSource dialect for a schema renderer and raises
+<code>UnsupportedSchemaOperationError</code> when a capability is absent.</p>
+<p><code>DialectCapability</code> is a closed framework enum for behavior that changes
+execution: generated keys, transactional DDL, safe migration locking, schema
+inspection, add column, rename column, and foreign-key DDL. It is not a
+registry of arbitrary vendor features.</p>
+<p>The dialect contract does not normalize arbitrary SQL, isolation levels,
+vendor-only types, JSON operators, upsert syntax, row-locking clauses, or
+driver value conversion. MySQL and further dialects require separate execution
+plans and integration suites.</p>
+<h2 id="migrations">Migrations<a class="headerlink" href="#migrations" title="Permanent link">&para;</a></h2>
+<p>Migrations are explicit compiled Crystal classes:</p>
+<div class="language-crystal highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">CreateTodos</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">LF</span><span class="o">::</span><span class="n">Data</span><span class="o">::</span><span class="n">Migration</span>
+</span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="w">  </span><span class="k">def</span><span class="w"> </span><span class="nf">version</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Int64</span>
+</span><span id="__span-17-3"><a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a><span class="w">    </span><span class="mi">2026072801_i64</span>
+</span><span id="__span-17-4"><a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="w">  </span><span class="k">end</span>
+</span><span id="__span-17-5"><a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a>
+</span><span id="__span-17-6"><a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a><span class="w">  </span><span class="k">def</span><span class="w"> </span><span class="nf">name</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">String</span>
+</span><span id="__span-17-7"><a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a><span class="w">    </span><span class="s2">"create_todos"</span>
+</span><span id="__span-17-8"><a id="__codelineno-17-8" name="__codelineno-17-8" href="#__codelineno-17-8"></a><span class="w">  </span><span class="k">end</span>
+</span><span id="__span-17-9"><a id="__codelineno-17-9" name="__codelineno-17-9" href="#__codelineno-17-9"></a>
+</span><span id="__span-17-10"><a id="__codelineno-17-10" name="__codelineno-17-10" href="#__codelineno-17-10"></a><span class="w">  </span><span class="k">def</span><span class="w"> </span><span class="nf">up</span><span class="p">(</span><span class="n">schema</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">LF</span><span class="o">::</span><span class="n">Data</span><span class="o">::</span><span class="n">SchemaEditor</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Nil</span>
+</span><span id="__span-17-11"><a id="__codelineno-17-11" name="__codelineno-17-11" href="#__codelineno-17-11"></a><span class="w">    </span><span class="n">schema</span><span class="o">.</span><span class="n">create_table</span><span class="p">(</span><span class="s2">"todo"</span><span class="p">)</span><span class="w"> </span><span class="k">do</span><span class="w"> </span><span class="o">|</span><span class="n">table</span><span class="o">|</span>
+</span><span id="__span-17-12"><a id="__codelineno-17-12" name="__codelineno-17-12" href="#__codelineno-17-12"></a><span class="w">      </span><span class="n">table</span><span class="o">.</span><span class="n">generated_id</span><span class="p">(</span><span class="s2">"id"</span><span class="p">)</span>
+</span><span id="__span-17-13"><a id="__codelineno-17-13" name="__codelineno-17-13" href="#__codelineno-17-13"></a><span class="w">      </span><span class="n">table</span><span class="o">.</span><span class="n">string</span><span class="p">(</span><span class="s2">"title"</span><span class="p">,</span><span class="w"> </span><span class="ss">null</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">)</span>
+</span><span id="__span-17-14"><a id="__codelineno-17-14" name="__codelineno-17-14" href="#__codelineno-17-14"></a><span class="w">      </span><span class="n">table</span><span class="o">.</span><span class="n">bool</span><span class="p">(</span><span class="s2">"completed"</span><span class="p">,</span><span class="w"> </span><span class="ss">null</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w"> </span><span class="ss">default</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">)</span>
+</span><span id="__span-17-15"><a id="__codelineno-17-15" name="__codelineno-17-15" href="#__codelineno-17-15"></a><span class="w">      </span><span class="n">table</span><span class="o">.</span><span class="n">int64</span><span class="p">(</span><span class="s2">"version"</span><span class="p">,</span><span class="w"> </span><span class="ss">null</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w"> </span><span class="ss">default</span><span class="p">:</span><span class="w"> </span><span class="err">0</span><span class="n">_i64</span><span class="p">)</span>
+</span><span id="__span-17-16"><a id="__codelineno-17-16" name="__codelineno-17-16" href="#__codelineno-17-16"></a><span class="w">    </span><span class="k">end</span>
+</span><span id="__span-17-17"><a id="__codelineno-17-17" name="__codelineno-17-17" href="#__codelineno-17-17"></a><span class="w">  </span><span class="k">end</span>
+</span><span id="__span-17-18"><a id="__codelineno-17-18" name="__codelineno-17-18" href="#__codelineno-17-18"></a><span class="k">end</span>
+</span></code></pre></div>
+<p>An application explicitly creates <code>MigrationSet.new(CreateTodos.new, ...)</code>.
+The runner validates unique, strictly ascending positive versions before
+executing SQL. It stores version, name, and application timestamp in
+<code>_lf_migrations</code>.</p>
+<p><code>MigrationSet</code> preserves declared instance order and exposes no mutable global
+registry. Validation runs again at the start of <code>MigrationRunner#run</code>, before
+the runner opens a datasource transaction. This protects the execution boundary
+even when a migration instance exposes mutable version or name state. Pending
+work is represented by immutable <code>PlannedMigration</code> descriptors containing the
+validated version and name; history records that snapshot rather than rereading
+the mutable migration object after <code>up</code>.</p>
+<p><code>SchemaEditor</code> produces typed schema-operation values and delegates them to the
+<code>SchemaRenderer</code> supplied by the active dialect. Data core contains no concrete
+dialect branches. <code>create_table(..., if_not_exists: true)</code> is available for
+infrastructure bootstrap; a concrete renderer must apply that mode to both the
+table and any indexes emitted by the same operation. The migration history uses
+this mode to create <code>_lf_migrations</code> idempotently.</p>
+<p>Each pending migration and its history insert run in one transaction when the
+dialect supports transactional DDL. Failed migrations are not recorded.
+Already applied versions are skipped. An applied version with a different name
+is an error. An applied version absent from the current migration set is also
+an error: the executable refuses to run against a schema newer than the set it
+knows how to describe. The history remains forward-only and no rollback is
+attempted.</p>
+<p>The runner pins one checked-out datasource connection for the migration session
+and obtains the dialect migration-lock strategy before planning. It opens one
+transaction to ensure and read history, then one independent transaction per
+pending migration on that same connection. The migration <code>up</code> method and its
+history insert share a transaction; a failure in either rolls back that
+migration and stops later versions, while previously committed versions remain
+applied. Driver and SQL exceptions keep their original types.</p>
+<p>Concurrent PostgreSQL runners use a session advisory lock acquired before
+history planning. Its two-key identifier hashes the current database and an
+application namespace, and acquisition has a bounded timeout. SQLite has no
+advisory lock: it explicitly retains transactional DDL plus the
+<code>_lf_migrations.version</code> primary-key reconciliation strategy. Two SQLite
+runners may observe a version as pending, but at most one can commit its effects
+and history row; the loser rereads exact version/name history. There is no
+process-global lock. Arbitrary external side effects remain outside the
+transaction guarantee. A dialect missing either <code>TransactionalDDL</code> or
+<code>MigrationLock</code> capability is rejected before history SQL. Lock release is
+idempotent, stays on the pinned connection, and cleanup failure is aggregated
+with any primary migration failure.</p>
+<p>The portable schema DSL covers create/drop/rename table, scalar columns,
+generated primary keys, foreign keys, unique constraints, indexes, add column,
+and rename column. Unsupported SQLite alterations raise
+<code>LF::Data::UnsupportedSchemaOperationError</code>. Raw SQL is an explicit method on
+the schema editor.</p>
+<p>SQLite and PostgreSQL provide dialect-owned schema introspection. An application
+may explicitly declare a <code>Schema::Model</code>, compare it with an inspected snapshot,
+review a deterministic typed diff, and generate a normal Crystal migration
+class. Inspection and generation never execute schema changes. Rename hints are
+explicit; destructive table/index operations require a generation opt-in;
+unresolved column or constraint changes refuse source generation. The migration
+history table is unmanaged by default, and application tables may be explicitly
+excluded before dialect metadata inspection.</p>
+<p>Migrations remain forward-only. <code>down</code>, automatic schema generation from entity
+metadata, startup schema synchronization, automatic destructive changes, and
+source checksums are excluded.</p>
+<p>Schema, history select, and history insert statements participate in the same
+datasource listener stream as entity operations. <code>StatementObserver</code> belongs to
+the Data listener contract; <code>EntityManager</code> exposes only an internal callback
+bridge and has no dependency on migration or schema types.</p>
+<h2 id="application-autoconfiguration">Application Autoconfiguration<a class="headerlink" href="#application-autoconfiguration" title="Permanent link">&para;</a></h2>
+<p>Application receives a generic conditional autoconfiguration mechanism rather
+than Data-specific code. An application extension descriptor declares:</p>
+<ul>
+<li>the marker annotation that enables it;</li>
+<li>an integer priority;</li>
+<li>a zero-argument extension type.</li>
+</ul>
+<p>Application bootstrap installs enabled extensions after application bean
+providers are registered and before the runtime is returned. Extension stop
+order remains the reverse of installation order. <code>LF::Application</code> does not
+reference <code>LF::Data</code>.</p>
+<p>Data opts in with:</p>
+<div class="language-crystal highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="k">require</span><span class="w"> </span><span class="s2">"opal/autoconfig/data"</span>
+</span><span id="__span-18-2"><a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="k">require</span><span class="w"> </span><span class="s2">"sqlite3"</span>
+</span><span id="__span-18-3"><a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>
+</span><span id="__span-18-4"><a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a><span class="o">@[</span><span class="nd">LF::Application</span><span class="o">]</span>
+</span><span id="__span-18-5"><a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a><span class="o">@[</span><span class="nd">LF::AutoConfig::Data</span><span class="o">]</span>
+</span><span id="__span-18-6"><a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a><span class="k">class</span><span class="w"> </span><span class="nc">TodoApplication</span>
+</span><span id="__span-18-7"><a id="__codelineno-18-7" name="__codelineno-18-7" href="#__codelineno-18-7"></a><span class="k">end</span>
+</span></code></pre></div>
+<p>The Data extension reads:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="nt">database</span><span class="p">:</span>
+</span><span id="__span-19-2"><a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="w">  </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sqlite3://./todo.db</span>
+</span><span id="__span-19-3"><a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a><span class="w">  </span><span class="nt">migrations</span><span class="p">:</span>
+</span><span id="__span-19-4"><a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a><span class="w">    </span><span class="nt">run_on_startup</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+</span></code></pre></div>
+<p>The URL is mandatory when the marker is present. The extension selects the
+SQLite dialect from the <code>sqlite3</code> URI scheme, opens the datasource, registers
+the same instance as a singleton bean, and owns its shutdown. Unsupported
+schemes and invalid configuration raise
+<code>LF::Data::AutoConfig::ConfigurationError</code>.</p>
+<p>If startup migrations are enabled, the extension resolves exactly one
+application-defined <code>MigrationSet</code> bean and runs it before bootstrap returns.
+No set is resolved when startup migration is disabled. Enabled migration with
+no set is a configuration error.</p>
+<p>Data autoconfiguration is installed before the current HTTP extension. Runtime
+shutdown therefore stops and drains HTTP first, closes Data second, and
+destroys remaining DI beans last.</p>
+<h2 id="observability">Observability<a class="headerlink" href="#observability" title="Permanent link">&para;</a></h2>
+<p><code>DataSource</code> accepts listener instances through its constructor. There is no
+global listener registry or built-in SQL logger.</p>
+<p>Listeners observe transaction begin/commit/rollback and statement completion
+with operation kind, entity type when available, SQL text, elapsed time, rows
+affected, and exception. Bind values are excluded from the default event to
+avoid accidental credential or personal-data logging.</p>
+<p>A listener exception must not replace a database or application exception.
+Listener failures are ignored by core v1; production listener implementations
+are expected to report internally.</p>
+<h2 id="error-contract">Error Contract<a class="headerlink" href="#error-contract" title="Permanent link">&para;</a></h2>
+<p>All framework-owned runtime errors inherit <code>LF::Data::Error</code>. Public subclasses
+include:</p>
+<ul>
+<li><code>ClosedDataSourceError</code>;</li>
+<li><code>ClosedEntityManagerError</code>;</li>
+<li><code>FailedEntityManagerError</code>;</li>
+<li><code>EntityStateError</code>;</li>
+<li><code>DetachedEntityError</code>;</li>
+<li><code>MappingError</code>;</li>
+<li><code>InvalidQueryError</code>;</li>
+<li><code>RepositoryQueryOwnershipError</code>;</li>
+<li><code>OptimisticLockError</code>;</li>
+<li><code>RelationshipError</code>;</li>
+<li><code>UnsavedRelationshipError</code>;</li>
+<li><code>UnmanagedRelationshipError</code>;</li>
+<li><code>RelationshipKeyMismatchError</code>;</li>
+<li><code>RelationshipCycleError</code>;</li>
+<li><code>MigrationError</code>;</li>
+<li><code>DuplicateMigrationVersionError</code>;</li>
+<li><code>MigrationHistoryMismatchError</code>;</li>
+<li><code>UnsupportedSchemaOperationError</code>.</li>
+</ul>
+<p>Driver, pool, connection, and SQL errors remain their original <code>DB::Error</code>
+subclasses. Autoconfiguration errors use
+<code>LF::Data::AutoConfig::ConfigurationError</code>.</p>
+<h2 id="performance-constraints">Performance Constraints<a class="headerlink" href="#performance-constraints" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Entity discovery and mapping metadata are compile-time only.</li>
+<li>Relationship descriptors and target validation are compile-time only; no
+  runtime relationship registry exists.</li>
+<li>Static CRUD/find SQL is specialized at compile time for each used
+  entity/concrete-dialect combination, using the dialect's static policy.</li>
+<li>Static query SQL is specialized at compile time for each used
+  entity/concrete-dialect/query-shape combination, using the dialect's static
+  policy.</li>
+<li>There is no per-operation metadata reflection or string-key field lookup.</li>
+<li>Opal has no SQL plan or prepared-statement cache; prepared-statement creation
+  and per-connection caching remain delegated to <code>crystal-db</code>.</li>
+<li>Static execution passes generated bind tuples directly; it performs no SQL
+  rendering, bind-slot traversal, or <code>Array(DB::Any)</code> construction.</li>
+<li>Runtime SQL rendering and dynamic bind arrays exist only behind the explicit
+  <code>DynamicQuery</code> API.</li>
+<li>Identity maps, operation queues, and query value objects are
+  transaction-local.</li>
+<li>No entity snapshots are allocated.</li>
+<li>Reading never triggers an implicit write.</li>
+<li>Listener cost is absent when no listeners are configured.</li>
+<li>No separate benchmark suite is required for v1; regression specs verify SQL
+  counts and absence of implicit queries.</li>
+</ul>
+<h2 id="consequences">Consequences<a class="headerlink" href="#consequences" title="Permanent link">&para;</a></h2>
+<p>Applications gain a consistent persistence context, typed mapping, generated
+CRUD, typed query composition, optimistic locking, and migrations without
+placing infrastructure methods on domain objects.</p>
+<p>The explicit model requires application services to pass an entity manager into
+repository methods when several repositories participate in one transaction.
+Updates require <code>persist</code>, and generated IDs needed mid-transaction require
+<code>flush</code>.</p>
+<p>The first release intentionally does not solve every ORM problem. Joins,
+projections, composite IDs, entity inheritance, savepoints, second-level cache,
+generated repositories, <code>attach</code>, <code>merge</code>, and dirty checking require separate
+ADRs. Lazy loading, proxy objects, and implicit relationship queries remain
+rejected rather than deferred.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../ADR-0004-http-application-autoconfiguration/" class="md-footer__link md-footer__link--prev" aria-label="Previous: HTTP autoconfiguration">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                HTTP autoconfiguration
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../ADR-0006-native-websocket-routes/" class="md-footer__link md-footer__link--next" aria-label="Next: WebSocket routes">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                WebSocket routes
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2026 Mike Oz
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["announce.dismiss", "content.action.edit", "content.code.annotate", "content.code.copy", "content.tabs.link", "navigation.footer", "navigation.indexes", "navigation.path", "navigation.sections", "navigation.tabs", "navigation.top", "search.highlight", "search.share", "search.suggest", "toc.follow"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

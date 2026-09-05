@@ -1,0 +1,2438 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A modular HTTP, data, LiveView, UI, and security toolkit for Crystal.">
+      
+      
+      
+        <link rel="canonical" href="https://mikeoz32.github.io/opal/plans/2026-07-12-application-bootstrap/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Compile-Time Application Layer Implementation Plan - Opal</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="opal" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#compile-time-application-layer-implementation-plan" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Opal" class="md-header__button md-logo" aria-label="Opal" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Opal
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Compile-Time Application Layer Implementation Plan
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="opal" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Use dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Use dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0-7 2.39 3.42C13.65 5.15 12.84 5 12 5s-1.65.15-2.39.42zM3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29zm.02 10 1.76-3.77a7.131 7.131 0 0 0 2.38 4.14zM20.65 7l-1.77 3.79a7.02 7.02 0 0 0-2.38-4.15zm-.01 10-4.14.36c.59-.51 1.12-1.14 1.54-1.86.42-.73.69-1.5.83-2.29zM12 22l-2.41-3.44c.74.27 1.55.44 2.41.44.82 0 1.63-.17 2.37-.44z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Use light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Use light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m17.75 4.09-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94L12.44 4l1.06-3 1.06 3zm3.5 6.91-1.64 1.25.59 1.98-1.7-1.17-1.7 1.17.59-1.98L15.75 11l2.06-.05L18.5 9l.69 1.95zm-2.28 4.95c.83-.08 1.72 1.1 1.19 1.85-.32.45-.66.87-1.08 1.27C15.17 23 8.84 23 4.94 19.07c-3.91-3.9-3.91-10.24 0-14.14.4-.4.82-.76 1.27-1.08.75-.53 1.93.36 1.85 1.19-.27 2.86.69 5.83 2.89 8.02a9.96 9.96 0 0 0 8.02 2.89m-1.64 2.02a12.08 12.08 0 0 1-7.8-3.47c-2.17-2.19-3.33-5-3.49-7.82-2.81 3.14-2.7 7.96.31 10.98 3.02 3.01 7.84 3.12 10.98.31"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/mikeoz32/opal" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    mikeoz32/opal
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Overview
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../getting-started/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Get started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../guides/application/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Guides
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../data/getting-started/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Data
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../reference/modules/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../adr/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../contributing/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Contributing
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Opal" class="md-nav__button md-logo" aria-label="Opal" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Opal
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/mikeoz32/opal" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    mikeoz32/opal
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../getting-started/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Get started
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Get started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Install Opal
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/first-api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Your first HTTP API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/todo-api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Your first database-backed API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/live-view-counter/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Your first LiveView page
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/application/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Application and configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/dependency-injection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependency injection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/http-controllers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    HTTP controllers and policies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/websockets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    WebSockets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../live-view/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    LiveView
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UI components
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Data
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../data/getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../data/entities/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Entities
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../data/queries/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Queries
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../data/transactions-and-repositories/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transactions and repositories
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../data/relationships/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Relationships and cascades
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../data/migrations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Migrations and locks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../data/schema-generation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Schema diff and generation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../data/dialects/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dialects
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../data/raw-sql-and-converters/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Raw SQL and converters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../data/autoconfiguration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Autoconfiguration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/modules/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Module selection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/runtime-contracts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runtime contracts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Crystal API reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../adr/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Architecture
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/ADR-0001-di-bean-lifecycle-callbacks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    DI lifecycle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/ADR-0002-application-bootstrap-layer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Application bootstrap
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/ADR-0003-application-context-extensions-and-config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Application context and extensions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/ADR-0004-http-application-autoconfiguration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    HTTP autoconfiguration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/ADR-0005-crystal-native-data-layer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data layer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/ADR-0006-native-websocket-routes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    WebSocket routes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/ADR-0007-opal-live-view/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    LiveView
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/ADR-0008-http-controller-execution-pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Controller pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/ADR-0009-phoenix-live-view-client/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Phoenix client
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/ADR-0010-optional-ui-primitives/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UI primitives
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#scope-guardrails" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scope Guardrails
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#baseline" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Baseline
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Baseline">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#task-1-establish-application-compile-fixture-coverage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Task 1: Establish application compile-fixture coverage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#task-2-add-application-configuration-metadata-without-changing-di-behavior" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Task 2: Add application configuration metadata without changing DI behavior
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#task-3-expose-the-minimal-typed-resolver-required-by-the-runtime-facade" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Task 3: Expose the minimal typed resolver required by the runtime facade
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#task-4-replace-the-old-application-class-with-marker-metadata-and-generated-entrypoints" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Task 4: Replace the old application class with marker metadata and generated entrypoints
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#task-5-implement-deterministic-configuration-discovery-and-application-metadata-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Task 5: Implement deterministic configuration discovery and application metadata validation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#task-6-add-runtime-state-bootstrap-cleanup-and-typed-application-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Task 6: Add runtime state, bootstrap cleanup, and typed application errors
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#task-7-implement-run-result-and-dual-failure-semantics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Task 7: Implement run result and dual-failure semantics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#task-8-add-and-verify-example-applications" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Task 8: Add and verify example applications
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#task-9-publish-the-api-contract-and-regression-evidence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Task 9: Publish the API contract and regression evidence
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#final-acceptance-checklist" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Final Acceptance Checklist
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/mikeoz32/opal/edit/main/docs/plans/2026-07-12-application-bootstrap.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="compile-time-application-layer-implementation-plan">Compile-Time Application Layer Implementation Plan<a class="headerlink" href="#compile-time-application-layer-implementation-plan" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p><strong>For Codex:</strong> REQUIRED SUB-SKILL: Use <code>executing-plans</code> to implement this plan task-by-task.</p>
+</blockquote>
+<p><strong>Goal:</strong> Replace the proposed subclass-based application bootstrap with the accepted compile-time <code>@[LF::Application]</code> model, backed by <code>LF::ApplicationRuntime</code>, while preserving standalone DI and current HTTP behavior.</p>
+<p><strong>Architecture:</strong> <code>LF::Application</code> becomes an annotation. Crystal macros identify one application class and all <code>@[LF::ApplicationConfiguration]</code> classes, validate application metadata, generate configuration adapters, and emit deterministic bootstrap registration code. <code>LF::ApplicationRuntime</code> owns a root <code>DefaultContainer</code>, presents a narrow typed-resolution facade, and coordinates application-level failure/closure semantics; <code>LF::DI</code> retains every bean, scope, lifecycle, and dependency-resolution responsibility.</p>
+<p><strong>Tech Stack:</strong> Crystal, Crystal annotations/macros, Crystal Spec, existing <code>LF::DI</code>, standard <code>Process.run</code> for compiler-fixture specs, existing SQLite example dependencies.</p>
+<hr />
+<h2 id="scope-guardrails">Scope Guardrails<a class="headerlink" href="#scope-guardrails" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Do not change router matching, <code>LF::HTTP::Controller</code>, HTTP server lifecycle, or
+  request-scope ownership.</li>
+<li>Do not add database abstractions, configuration binding, profiles, conditions,
+  eager/lazy bean policy, or DI lifecycle features.</li>
+<li>Do not expose <code>ApplicationRuntime#context</code>; only add the smallest typed public
+  DI resolver required by the runtime facade.</li>
+<li>Keep <code>LF::DI::DefaultContainer</code> usable directly and keep its
+  explicit <code>register</code> ordering untouched.</li>
+<li>Each task starts with a focused failing test, then the smallest production
+  change, then focused and full-suite verification. Commit only green steps.</li>
+</ul>
+<h2 id="baseline">Baseline<a class="headerlink" href="#baseline" title="Permanent link">&para;</a></h2>
+<p>Before Task 1, run:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>crystal<span class="w"> </span>spec
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>crystal<span class="w"> </span>run<span class="w"> </span>examples/todo_api_sqlite/src/todo_api_sqlite_example.cr
+</span></code></pre></div>
+<p>The second command is a manual smoke test; stop it after confirming the server
+starts. Do not include generated SQLite databases or compiled binaries in git.
+Record the actual spec count rather than retaining the stale count in the root
+README.</p>
+<h3 id="task-1-establish-application-compile-fixture-coverage">Task 1: Establish application compile-fixture coverage<a class="headerlink" href="#task-1-establish-application-compile-fixture-coverage" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong>
+- Create: <code>spec/application_compile_spec.cr</code>
+- Create: <code>spec/fixtures/application/standalone_di.cr</code></p>
+<p><strong>Step 1: Write failing compiler-fixture helpers.</strong></p>
+<p>Add a spec helper that invokes:</p>
+<div class="language-crystal highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">Process</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="s2">"crystal"</span><span class="p">,</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span><span class="o">[</span><span class="s2">"build"</span><span class="p">,</span><span class="w"> </span><span class="s2">"--no-codegen"</span><span class="p">,</span><span class="w"> </span><span class="n">fixture_path</span><span class="o">]</span><span class="p">,</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span><span class="ss">output</span><span class="p">:</span><span class="w"> </span><span class="n">output</span><span class="p">,</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">  </span><span class="ss">error</span><span class="p">:</span><span class="w"> </span><span class="n">error</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="p">)</span>
+</span></code></pre></div>
+<p>The helper must return exit status and captured stderr. Use <code>--no-codegen</code> so
+fixtures validate macro expansion without leaving binaries. Keep fixtures as
+separate executables because a compile-time error cannot be asserted inside the
+main spec compilation unit.</p>
+<p><strong>Step 2: Add the first green assertion.</strong></p>
+<p>Prove the harness can compile a standalone executable that creates an
+<code>LF::DI::DefaultContainer</code> and has no application marker. This
+baseline verifies the fixture mechanism without depending on the new API.</p>
+<p><strong>Step 3: Run the focused compiler spec.</strong></p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>crystal<span class="w"> </span>spec<span class="w"> </span>spec/application_compile_spec.cr
+</span></code></pre></div>
+<p>Expected: PASS. The task deliberately tests only existing standalone DI
+compatibility so the harness can be committed without carrying a red suite.</p>
+<p><strong>Step 4: Commit only the fixture harness if it is independently green.</strong></p>
+<p>Use: <code>test: add application compiler fixture harness</code>.</p>
+<h3 id="task-2-add-application-configuration-metadata-without-changing-di-behavior">Task 2: Add application configuration metadata without changing DI behavior<a class="headerlink" href="#task-2-add-application-configuration-metadata-without-changing-di-behavior" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong>
+- Modify: <code>src/opal/di.cr</code>
+- Modify: <code>spec/opal_spec.cr</code>
+- Modify: <code>spec/application_spec.cr</code>
+- Create: <code>spec/fixtures/application/invalid_configuration_constructor.cr</code></p>
+<p><strong>Step 1: Write failing DI-focused specs.</strong></p>
+<p>Define an <code>@[LF::ApplicationConfiguration]</code> class that has a
+<code>@[LF::DI::Bean]</code> factory but does <strong>not</strong> include
+<code>LF::DI::BeanConfiguration</code>. Prove that registration makes the factory
+available. Add a configuration whose zero-argument construction is impossible
+and a compiler fixture expecting a clear failure.</p>
+<p>Add a regression spec proving ordinary explicit
+<code>include LF::DI::BeanConfiguration</code> and <code>context.register(config)</code> still work
+in caller-defined order. This is the compatibility boundary.</p>
+<p><strong>Step 2: Implement the smallest compile-time configuration adapter.</strong></p>
+<p>Add <code>LF::ApplicationConfiguration</code> metadata that accepts an optional named <code>priority</code>
+value (default <code>0</code>), plus macro support
+that emits the same <code>configure(ctx)</code> factory registration generated today by
+<code>BeanConfiguration</code>. Do not duplicate or change factory resolution, duplicate
+bean detection, scope handling, or lifecycle code.</p>
+<p>The implementation must make the annotated path self-sufficient. Retain
+<code>BeanConfiguration</code> for standalone/manual registrations during the migration.
+If an annotated class supplies a compatible explicit <code>configure</code>, document and
+test whether it is rejected or treated as the advanced/manual path; choose one
+behavior and keep it deterministic rather than generating two methods.</p>
+<p><strong>Step 3: Verify focused DI and compiler tests.</strong></p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>crystal<span class="w"> </span>spec<span class="w"> </span>spec/opal_spec.cr
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>crystal<span class="w"> </span>spec<span class="w"> </span>spec/application_compile_spec.cr
+</span></code></pre></div>
+<p><strong>Step 4: Commit.</strong></p>
+<p>Use: <code>feat(di): add configuration annotation</code>.</p>
+<h3 id="task-3-expose-the-minimal-typed-resolver-required-by-the-runtime-facade">Task 3: Expose the minimal typed resolver required by the runtime facade<a class="headerlink" href="#task-3-expose-the-minimal-typed-resolver-required-by-the-runtime-facade" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong>
+- Modify: <code>src/opal/di.cr</code>
+- Modify: <code>spec/opal_spec.cr</code></p>
+<p><strong>Step 1: Write failing specs next to current DI resolution specs.</strong></p>
+<p>Add public API coverage for:</p>
+<div class="language-crystal highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">context</span><span class="o">.</span><span class="n">resolve</span><span class="p">(</span><span class="n">UniqueService</span><span class="p">)</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">context</span><span class="o">.</span><span class="n">resolve</span><span class="p">(</span><span class="s2">"unique_service"</span><span class="p">,</span><span class="w"> </span><span class="n">UniqueService</span><span class="p">)</span>
+</span></code></pre></div>
+<p>The type-only overload must preserve current behavior: unique type resolves,
+zero candidates raise <code>LF::DI::BeanNotFoundError</code>, and multiple candidates raise
+<code>LF::DI::AmbiguousBeanError</code>. The name-and-type overload must preserve existing
+<code>BeanTypeMismatchError</code> behavior. Do not test name-first dependency fallback
+here; it is already owned by <code>resolve_dependency</code> and must not change.</p>
+<p><strong>Step 2: Implement only public delegation.</strong></p>
+<p>Expose a public type-only resolver that calls the existing protected type
+lookup. Reuse existing <code>get_bean(name, Type)</code> or add a naming-compatible
+overload only if required for the planned facade. No new maps, normalization,
+or resolution path is allowed.</p>
+<p><strong>Step 3: Verify.</strong></p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>crystal<span class="w"> </span>spec<span class="w"> </span>spec/opal_spec.cr
+</span></code></pre></div>
+<p><strong>Step 4: Commit.</strong></p>
+<p>Use: <code>feat(di): expose typed bean resolver</code>.</p>
+<h3 id="task-4-replace-the-old-application-class-with-marker-metadata-and-generated-entrypoints">Task 4: Replace the old application class with marker metadata and generated entrypoints<a class="headerlink" href="#task-4-replace-the-old-application-class-with-marker-metadata-and-generated-entrypoints" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong>
+- Modify: <code>src/opal/application.cr</code>
+- Modify: <code>src/opal.cr</code> only if require ordering needs adjustment
+- Replace: <code>spec/application_spec.cr</code>
+- Modify: <code>spec/application_compile_spec.cr</code>
+- Create: <code>spec/fixtures/application/valid_single_app.cr</code>
+- Create: <code>spec/fixtures/application/no_app_marker.cr</code>
+- Create: <code>spec/fixtures/application/multiple_app_markers.cr</code>
+- Create: <code>spec/fixtures/application/app_with_context_argument.cr</code>
+- Create: <code>spec/fixtures/application/app_with_required_constructor.cr</code></p>
+<p><strong>Step 1: Write failing runtime API specs.</strong></p>
+<p>Use one fixture application:</p>
+<div class="language-crystal highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="o">@[</span><span class="nd">LF::Application</span><span class="o">]</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">ApplicationSpecApp</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span><span class="o">@[</span><span class="nd">LF::DI::Bean</span><span class="o">]</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">  </span><span class="k">def</span><span class="w"> </span><span class="nf">application_spec_value</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">ApplicationSpecValue</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">    </span><span class="n">ApplicationSpecValue</span><span class="o">.</span><span class="n">new</span><span class="p">(</span><span class="s2">"configured"</span><span class="p">)</span>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">  </span><span class="k">end</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="k">end</span>
+</span></code></pre></div>
+<p>Prove that <code>ApplicationSpecApp.bootstrap</code> returns
+<code>LF::ApplicationRuntime</code>, its typed <code>resolve</code> returns the bean declared on the
+application class, and the runtime has no public raw-context API. The latter is
+enforced by the negative compiler fixture rather than runtime reflection.</p>
+<p>Extend the compiler fixtures to prove that one annotated app compiles, no marker
+still compiles, two markers fail with a stable actionable message, passing a
+context to <code>App.bootstrap</code> fails, and an app class requiring constructor
+arguments fails because it also serves as a configuration provider.</p>
+<p><strong>Step 2: Implement the type split.</strong></p>
+<p>Replace the current <code>class LF::Application</code> with the annotation declaration
+and introduce <code>LF::ApplicationRuntime</code>. Generate class methods only on the
+single annotated application class. The generated <code>bootstrap</code> must allocate a
+fresh root <code>DefaultContainer</code>; do not accept an injected context in
+the public method.</p>
+<p>The application class must participate in the same generated DI configuration
+path as <code>@[LF::ApplicationConfiguration]</code> classes. Do not require <code>include
+BeanConfiguration</code> or a second configuration class for it.</p>
+<p><strong>Step 3: Verify.</strong></p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>crystal<span class="w"> </span>spec<span class="w"> </span>spec/application_spec.cr
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>crystal<span class="w"> </span>spec<span class="w"> </span>spec/application_compile_spec.cr
+</span></code></pre></div>
+<p><strong>Step 4: Commit.</strong></p>
+<p>Use: <code>feat(application): add generated bootstrap entrypoints</code>.</p>
+<h3 id="task-5-implement-deterministic-configuration-discovery-and-application-metadata-validation">Task 5: Implement deterministic configuration discovery and application metadata validation<a class="headerlink" href="#task-5-implement-deterministic-configuration-discovery-and-application-metadata-validation" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong>
+- Modify: <code>src/opal/application.cr</code>
+- Modify: <code>spec/application_spec.cr</code>
+- Modify: <code>spec/application_compile_spec.cr</code>
+- Create: <code>spec/fixtures/application/invalid_configuration_priority.cr</code></p>
+<p><strong>Step 1: Add RED discovery tests.</strong></p>
+<p>Create configurations with priorities <code>20</code>, <code>0</code>, <code>0</code>, and <code>-10</code>. Have their
+factory registration append to a test-only trace and assert automatic order:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>priority 20 -&gt; priority 0 / alphabetically first -&gt; priority 0 / alphabetically second -&gt; priority -10
+</span></code></pre></div>
+<p>Add a spec that proves:</p>
+<ul>
+<li>all annotated application configurations are included automatically;</li>
+<li>the application class configuration is included automatically and its
+  <code>@[LF::Application(priority: ...)]</code> value participates in the same order;</li>
+<li><code>LF::DI::ServiceConfiguration</code> is registered before application
+  configurations, so an <code>@[LF::DI::Service]</code> can consume an application bean;</li>
+<li>configuration provider instances are not resolvable as DI beans.</li>
+</ul>
+<p><strong>Step 2: Implement compile-time discovery.</strong></p>
+<p>Use Crystal macro expansion over known subclasses/types and annotations. Build
+the sorted registration sequence at compilation, then emit direct
+<code>context.register(Config.new)</code> calls. Do not build a runtime registry or inspect
+types while bootstrapping.</p>
+<p>Validate application markers as a set: zero markers are valid, one marker emits
+entrypoints, and more than one marker fails. Validate configuration priority
+shape and zero-argument provider construction at compile time with messages
+naming the offending class and required correction.</p>
+<p><strong>Step 3: Run verification.</strong></p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>crystal<span class="w"> </span>spec<span class="w"> </span>spec/application_spec.cr
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>crystal<span class="w"> </span>spec<span class="w"> </span>spec/application_compile_spec.cr
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>crystal<span class="w"> </span>spec
+</span></code></pre></div>
+<p><strong>Step 4: Commit.</strong></p>
+<p>Use: <code>feat(application): discover configurations at compile time</code>.</p>
+<h3 id="task-6-add-runtime-state-bootstrap-cleanup-and-typed-application-errors">Task 6: Add runtime state, bootstrap cleanup, and typed application errors<a class="headerlink" href="#task-6-add-runtime-state-bootstrap-cleanup-and-typed-application-errors" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong>
+- Modify: <code>src/opal/application.cr</code>
+- Modify: <code>spec/application_spec.cr</code></p>
+<p><strong>Step 1: Write RED lifecycle/error specs.</strong></p>
+<p>Cover each observable state transition:</p>
+<ul>
+<li><code>shutdown</code> closes a live runtime and destroys a resolved disposable singleton;</li>
+<li><code>resolve</code> after shutdown raises <code>ApplicationRuntime::ClosedError</code>;</li>
+<li>calling <code>shutdown</code> twice raises <code>ApplicationRuntime::AlreadyClosedError</code>;</li>
+<li>if root DI shutdown raises <code>LF::DI::BeanDestructionError</code>, the runtime is still
+  closed and later resolution raises <code>ClosedError</code>;</li>
+<li>a configuration-registration failure re-raises the original DI error and
+  never returns a runtime;</li>
+<li>a partial bootstrap test helper creates a disposable bean before a later
+  registration failure, proving bootstrap calls root shutdown during unwind.</li>
+</ul>
+<p>The partial-bootstrap helper may use the existing manual <code>BeanConfiguration</code>
+extension path only inside the spec. It must not become a second public
+application bootstrap API.</p>
+<p><strong>Step 2: Implement state and error types.</strong></p>
+<p>Define the application-owned hierarchy under <code>LF::ApplicationRuntime</code>, because
+Crystal annotations cannot contain nested types:</p>
+<div class="language-crystal highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="k">class</span><span class="w"> </span><span class="nn">LF::ApplicationRuntime::</span><span class="nc">Error</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">Exception</span><span class="p">;</span><span class="w"> </span><span class="k">end</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="k">class</span><span class="w"> </span><span class="nn">LF::ApplicationRuntime::</span><span class="nc">ClosedError</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">Error</span><span class="p">;</span><span class="w"> </span><span class="k">end</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="k">class</span><span class="w"> </span><span class="nn">LF::ApplicationRuntime::</span><span class="nc">AlreadyClosedError</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">Error</span><span class="p">;</span><span class="w"> </span><span class="k">end</span>
+</span></code></pre></div>
+<p>Guard facade methods with an open-state check. In <code>shutdown</code>, set the closed
+state in an <code>ensure</code> path so DI cleanup errors do not leave a usable-looking
+runtime. In bootstrap, clean up the root context on registration failure and
+re-raise the original exception. Preserve the original bootstrap error if its
+cleanup also fails; document that cleanup failure is not wrapped in this path.</p>
+<p><strong>Step 3: Verify.</strong></p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>crystal<span class="w"> </span>spec<span class="w"> </span>spec/application_spec.cr
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>crystal<span class="w"> </span>spec
+</span></code></pre></div>
+<p><strong>Step 4: Commit.</strong></p>
+<p>Use: <code>feat(application): enforce runtime lifecycle</code>.</p>
+<h3 id="task-7-implement-run-result-and-dual-failure-semantics">Task 7: Implement <code>run</code> result and dual-failure semantics<a class="headerlink" href="#task-7-implement-run-result-and-dual-failure-semantics" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong>
+- Modify: <code>src/opal/application.cr</code>
+- Modify: <code>spec/application_spec.cr</code></p>
+<p><strong>Step 1: Add RED run specs.</strong></p>
+<p>Add these cases:</p>
+<ul>
+<li>a successful block returns its exact value and the resolved disposable is
+  destroyed before <code>run</code> returns;</li>
+<li>a failing block with successful shutdown re-raises that exact block error;</li>
+<li>a successful block with failing shutdown re-raises the DI destruction error;</li>
+<li>a failing block and failing shutdown raise
+  <code>ApplicationRuntime::RunError</code> whose <code>block_error</code> and <code>shutdown_error</code>
+  expose the original exceptions;</li>
+<li>after any <code>run</code> outcome, no runtime remains usable through the yielded
+  reference.</li>
+</ul>
+<p>Use dedicated exception classes in the spec rather than asserting fragile
+string-only behavior.</p>
+<p><strong>Step 2: Implement the smallest control flow.</strong></p>
+<p>Keep <code>run</code> as a generic block method. Capture a block failure, always attempt
+shutdown, and construct <code>RunError</code> only when both phases fail. <code>RunError</code> must
+retain typed fields and a concise diagnostic message; it must not convert DI
+errors into strings.</p>
+<p><strong>Step 3: Verify.</strong></p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>crystal<span class="w"> </span>spec<span class="w"> </span>spec/application_spec.cr
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>crystal<span class="w"> </span>spec
+</span></code></pre></div>
+<p><strong>Step 4: Commit.</strong></p>
+<p>Use: <code>feat(application): add run lifecycle semantics</code>.</p>
+<h3 id="task-8-add-and-verify-example-applications">Task 8: Add and verify example applications<a class="headerlink" href="#task-8-add-and-verify-example-applications" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong>
+- Create: <code>examples/application_bootstrap_example.cr</code>
+- Modify: <code>README.md</code>
+- Modify: <code>examples/todo_api_sqlite/README.md</code>
+- Modify: <code>examples/todo_api_sqlite/src/todo_api_sqlite_example.cr</code> only for
+  documentation-aligned DI cleanup; do not migrate its HTTP bootstrap</p>
+<p><strong>Step 1: Add a minimal bootstrap example.</strong></p>
+<p>Create an executable example with one <code>@[LF::Application]</code> class, one bean
+factory declared on that class, one <code>@[LF::ApplicationConfiguration]</code> class, one
+<code>@[LF::DI::Service]</code>, and <code>App.run</code> resolving the service. It must demonstrate
+that no manual <code>add_bean</code>, manual configuration registration, or raw root
+context is required.</p>
+<p><strong>Step 2: Preserve the Todo API's explicit HTTP boundary.</strong></p>
+<p>The SQLite Todo API currently needs direct root-context access to create a
+request child scope and assign <code>HTTP::Server::Context#state</code>. Application
+runtime intentionally hides that context, and HTTP integration is a non-goal
+of this ADR. Therefore do not force this example through <code>ApplicationRuntime</code>
+or expose context solely for it.</p>
+<p>Review the example so that:</p>
+<ul>
+<li><code>TodoRepository</code> contains query logic only and never creates schema;</li>
+<li>database creation/schema setup remains in the database resource/configuration
+  path;</li>
+<li>services remain annotation-discovered and no manual <code>add_bean</code> is introduced;</li>
+<li>startup/shutdown behavior stays explicit and correct.</li>
+</ul>
+<p>Document that the example deliberately demonstrates standalone DI plus explicit
+HTTP request scopes, while the new minimal example demonstrates application
+bootstrap.</p>
+<p><strong>Step 3: Execute smoke checks.</strong></p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>crystal<span class="w"> </span>run<span class="w"> </span>examples/application_bootstrap_example.cr
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="nb">cd</span><span class="w"> </span>examples/todo_api_sqlite<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>shards<span class="w"> </span>install<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>crystal<span class="w"> </span>run<span class="w"> </span>src/todo_api_sqlite_example.cr
+</span></code></pre></div>
+<p>For Todo, issue <code>GET /todos</code> and <code>POST /todos</code> with <code>curl</code>, then stop the
+server. Verify <code>todo.db</code> remains ignored and no process is left running.</p>
+<p><strong>Step 4: Commit.</strong></p>
+<p>Use: <code>docs: add application bootstrap example</code>.</p>
+<h3 id="task-9-publish-the-api-contract-and-regression-evidence">Task 9: Publish the API contract and regression evidence<a class="headerlink" href="#task-9-publish-the-api-contract-and-regression-evidence" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong>
+- Modify: <code>README.md</code>
+- Modify: <code>docs/adr/README.md</code>
+- Modify: <code>docs/adr/ADR-0002-application-bootstrap-layer.md</code> only if code
+  reality requires a clarification
+- Modify: <code>docs/plans/2026-07-12-application-bootstrap.md</code> only to record any
+  intentional deviation</p>
+<p><strong>Step 1: Update public documentation.</strong></p>
+<p>Document two valid entry styles side by side:</p>
+<ol>
+<li>standalone DI with explicit root context and request scopes;</li>
+<li><code>@[LF::Application]</code> with generated <code>bootstrap</code>/<code>run</code> and typed resolution.</li>
+</ol>
+<p>List the exact ownership boundaries: DI owns beans/scopes/lifecycle; Application
+owns root-context creation and application closure; HTTP integration remains
+explicit. Include configuration priority rules, zero-argument provider rule,
+and the application error contract. Do not advertise database/configuration
+features that do not exist.</p>
+<p><strong>Step 2: Run complete verification.</strong></p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>crystal<span class="w"> </span>spec
+</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>crystal<span class="w"> </span>spec<span class="w"> </span>spec/application_compile_spec.cr
+</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>crystal<span class="w"> </span>run<span class="w"> </span>examples/application_bootstrap_example.cr
+</span></code></pre></div>
+<p>Run the Todo integration smoke test again, inspect <code>git status --short</code>, and
+remove only generated ignored artifacts if present. Confirm no source or
+documentation refers to the removed subclass-based <code>LF::Application</code> runtime.</p>
+<p><strong>Step 3: Commit.</strong></p>
+<p>Use: <code>docs: document application layer</code>.</p>
+<h2 id="final-acceptance-checklist">Final Acceptance Checklist<a class="headerlink" href="#final-acceptance-checklist" title="Permanent link">&para;</a></h2>
+<ul>
+<li>One annotated app generates only <code>App.bootstrap</code> and <code>App.run</code>; more than one
+  fails during compilation; no marker leaves a normal Crystal executable.</li>
+<li>Application configuration and DI configuration are discovered at compile time,
+  sorted deterministically, and carry no runtime scanning cost.</li>
+<li>Application class bean factories, annotated configuration bean factories, and
+  autowired services work together.</li>
+<li>The runtime cannot receive or expose a raw context through its public API.</li>
+<li>Resolution after close and repeated shutdown have typed application errors.</li>
+<li>Bootstrap cleanup, normal <code>run</code>, block failure, shutdown failure, and dual
+  failure behavior all have focused regression coverage.</li>
+<li>Existing standalone DI, router, <code>APIRoute</code>, request scope, and lifecycle specs
+  remain green.</li>
+<li>The new bootstrap example runs; the SQLite HTTP Todo example still serves its
+  endpoints using explicit HTTP/request-scope wiring.</li>
+<li>No generated databases, binaries, vendored dependencies, or server processes
+  remain after verification.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2026 Mike Oz
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["announce.dismiss", "content.action.edit", "content.code.annotate", "content.code.copy", "content.tabs.link", "navigation.footer", "navigation.indexes", "navigation.path", "navigation.sections", "navigation.tabs", "navigation.top", "search.highlight", "search.share", "search.suggest", "toc.follow"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

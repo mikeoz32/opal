@@ -1,0 +1,2421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="generator" content="Crystal Docs 1.20.3">
+<meta name="crystal_docs.project_version" content="">
+<meta name="crystal_docs.project_name" content="Opal">
+
+
+
+<link href="../../../css/style.css" rel="stylesheet" type="text/css" />
+<script type="text/javascript" src="../../../js/doc.js"></script>
+
+  <meta name="repository-name" content="Opal">
+  <title>LF::Data::Query::Rows(QueryShape) - Opal </title>
+  <script type="text/javascript">
+    CrystalDocs.base_path = "../../../";
+  </script>
+</head>
+<body>
+
+<svg class="hidden">
+  <symbol id="octicon-link" viewBox="0 0 16 16">
+    <path fill="currentColor" fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path>
+  </symbol>
+</svg>
+<input type="checkbox" id="sidebar-btn">
+<label for="sidebar-btn" id="sidebar-btn-label">
+  <svg class="open" xmlns="http://www.w3.org/2000/svg" height="2em" width="2em" viewBox="0 0 512 512"><title>Open Sidebar</title><path fill="currentColor" d="M80 96v64h352V96H80zm0 112v64h352v-64H80zm0 112v64h352v-64H80z"></path></svg>
+  <svg class="close" xmlns="http://www.w3.org/2000/svg" width="2em" height="2em" viewBox="0 0 512 512"><title>Close Sidebar</title><path fill="currentColor" d="m118.6 73.4-45.2 45.2L210.7 256 73.4 393.4l45.2 45.2L256 301.3l137.4 137.3 45.2-45.2L301.3 256l137.3-137.4-45.2-45.2L256 210.7Z"></path></svg>
+</label>
+<div class="sidebar">
+  <div class="sidebar-header">
+    <div class="search-box">
+      <input type="search" class="search-input" placeholder="Search..." spellcheck="false" aria-label="Search">
+    </div>
+
+    <div class="project-summary">
+      <h1 class="project-name">
+        <a href="../../../index.html">
+          Opal
+        </a>
+      </h1>
+
+      <span class="project-version">
+        
+      </span>
+    </div>
+  </div>
+
+  <div class="search-results hidden">
+    <ul class="search-list"></ul>
+  </div>
+
+  <div class="types-list">
+    <ul>
+  
+  <li class="parent open current" data-id="Opal/LF" data-name="lf">
+      <a href="../../../LF.html">LF</a>
+      
+        <ul>
+  
+  <li class=" " data-id="Opal/LF/Application" data-name="lf::application">
+      <a href="../../../LF/Application.html">Application</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/ApplicationAutoConfiguration" data-name="lf::applicationautoconfiguration">
+      <a href="../../../LF/ApplicationAutoConfiguration.html">ApplicationAutoConfiguration</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/ApplicationConfiguration" data-name="lf::applicationconfiguration">
+      <a href="../../../LF/ApplicationConfiguration.html">ApplicationConfiguration</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/ApplicationContext" data-name="lf::applicationcontext">
+      <a href="../../../LF/ApplicationContext.html">ApplicationContext</a>
+      
+    </li>
+  
+  <li class="parent " data-id="Opal/LF/ApplicationExtension" data-name="lf::applicationextension">
+      <a href="../../../LF/ApplicationExtension.html">ApplicationExtension</a>
+      
+        <ul>
+  
+  <li class=" " data-id="Opal/LF/ApplicationExtension/StopIncomplete" data-name="lf::applicationextension::stopincomplete">
+      <a href="../../../LF/ApplicationExtension/StopIncomplete.html">StopIncomplete</a>
+      
+    </li>
+  
+</ul>
+
+      
+    </li>
+  
+  <li class="parent " data-id="Opal/LF/ApplicationRuntime" data-name="lf::applicationruntime">
+      <a href="../../../LF/ApplicationRuntime.html">ApplicationRuntime</a>
+      
+        <ul>
+  
+  <li class=" " data-id="Opal/LF/ApplicationRuntime/AlreadyClosedError" data-name="lf::applicationruntime::alreadyclosederror">
+      <a href="../../../LF/ApplicationRuntime/AlreadyClosedError.html">AlreadyClosedError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/ApplicationRuntime/ClosedError" data-name="lf::applicationruntime::closederror">
+      <a href="../../../LF/ApplicationRuntime/ClosedError.html">ClosedError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/ApplicationRuntime/Error" data-name="lf::applicationruntime::error">
+      <a href="../../../LF/ApplicationRuntime/Error.html">Error</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/ApplicationRuntime/InstallError" data-name="lf::applicationruntime::installerror">
+      <a href="../../../LF/ApplicationRuntime/InstallError.html">InstallError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/ApplicationRuntime/RunError" data-name="lf::applicationruntime::runerror">
+      <a href="../../../LF/ApplicationRuntime/RunError.html">RunError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/ApplicationRuntime/ShutdownError" data-name="lf::applicationruntime::shutdownerror">
+      <a href="../../../LF/ApplicationRuntime/ShutdownError.html">ShutdownError</a>
+      
+    </li>
+  
+</ul>
+
+      
+    </li>
+  
+  <li class="parent " data-id="Opal/LF/AutoConfig" data-name="lf::autoconfig">
+      <a href="../../../LF/AutoConfig.html">AutoConfig</a>
+      
+        <ul>
+  
+  <li class=" " data-id="Opal/LF/AutoConfig/Data" data-name="lf::autoconfig::data">
+      <a href="../../../LF/AutoConfig/Data.html">Data</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/AutoConfig/HTTP" data-name="lf::autoconfig::http">
+      <a href="../../../LF/AutoConfig/HTTP.html">HTTP</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/AutoConfig/Security" data-name="lf::autoconfig::security">
+      <a href="../../../LF/AutoConfig/Security.html">Security</a>
+      
+    </li>
+  
+</ul>
+
+      
+    </li>
+  
+  <li class="parent " data-id="Opal/LF/ConfigService" data-name="lf::configservice">
+      <a href="../../../LF/ConfigService.html">ConfigService</a>
+      
+        <ul>
+  
+  <li class=" " data-id="Opal/LF/ConfigService/Error" data-name="lf::configservice::error">
+      <a href="../../../LF/ConfigService/Error.html">Error</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/ConfigService/LoadError" data-name="lf::configservice::loaderror">
+      <a href="../../../LF/ConfigService/LoadError.html">LoadError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/ConfigService/MissingKeyError" data-name="lf::configservice::missingkeyerror">
+      <a href="../../../LF/ConfigService/MissingKeyError.html">MissingKeyError</a>
+      
+    </li>
+  
+</ul>
+
+      
+    </li>
+  
+  <li class="parent open current" data-id="Opal/LF/Data" data-name="lf::data">
+      <a href="../../../LF/Data.html">Data</a>
+      
+        <ul>
+  
+  <li class="parent " data-id="Opal/LF/Data/AutoConfig" data-name="lf::data::autoconfig">
+      <a href="../../../LF/Data/AutoConfig.html">AutoConfig</a>
+      
+        <ul>
+  
+  <li class=" " data-id="Opal/LF/Data/AutoConfig/Configuration" data-name="lf::data::autoconfig::configuration">
+      <a href="../../../LF/Data/AutoConfig/Configuration.html">Configuration</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/AutoConfig/ConfigurationError" data-name="lf::data::autoconfig::configurationerror">
+      <a href="../../../LF/Data/AutoConfig/ConfigurationError.html">ConfigurationError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/AutoConfig/Error" data-name="lf::data::autoconfig::error">
+      <a href="../../../LF/Data/AutoConfig/Error.html">Error</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/AutoConfig/Extension" data-name="lf::data::autoconfig::extension">
+      <a href="../../../LF/Data/AutoConfig/Extension.html">Extension</a>
+      
+    </li>
+  
+</ul>
+
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/BelongsTo" data-name="lf::data::belongsto">
+      <a href="../../../LF/Data/BelongsTo.html">BelongsTo</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/ClosedDataSourceError" data-name="lf::data::closeddatasourceerror">
+      <a href="../../../LF/Data/ClosedDataSourceError.html">ClosedDataSourceError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/ClosedEntityManagerError" data-name="lf::data::closedentitymanagererror">
+      <a href="../../../LF/Data/ClosedEntityManagerError.html">ClosedEntityManagerError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Column" data-name="lf::data::column">
+      <a href="../../../LF/Data/Column.html">Column</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Converter" data-name="lf::data::converter">
+      <a href="../../../LF/Data/Converter.html">Converter</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/DataSource" data-name="lf::data::datasource">
+      <a href="../../../LF/Data/DataSource.html">DataSource</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/DetachedEntityError" data-name="lf::data::detachedentityerror">
+      <a href="../../../LF/Data/DetachedEntityError.html">DetachedEntityError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Dialect" data-name="lf::data::dialect">
+      <a href="../../../LF/Data/Dialect.html">Dialect</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/DialectCapability" data-name="lf::data::dialectcapability">
+      <a href="../../../LF/Data/DialectCapability.html">DialectCapability</a>
+      
+    </li>
+  
+  <li class="parent " data-id="Opal/LF/Data/Dialects" data-name="lf::data::dialects">
+      <a href="../../../LF/Data/Dialects.html">Dialects</a>
+      
+        <ul>
+  
+  <li class="parent " data-id="Opal/LF/Data/Dialects/PostgreSQL" data-name="lf::data::dialects::postgresql">
+      <a href="../../../LF/Data/Dialects/PostgreSQL.html">PostgreSQL</a>
+      
+        <ul>
+  
+  <li class=" " data-id="Opal/LF/Data/Dialects/PostgreSQL/AdvisoryMigrationLock" data-name="lf::data::dialects::postgresql::advisorymigrationlock">
+      <a href="../../../LF/Data/Dialects/PostgreSQL/AdvisoryMigrationLock.html">AdvisoryMigrationLock</a>
+      
+    </li>
+  
+  <li class="parent " data-id="Opal/LF/Data/Dialects/PostgreSQL/SchemaCompiler" data-name="lf::data::dialects::postgresql::schemacompiler">
+      <a href="../../../LF/Data/Dialects/PostgreSQL/SchemaCompiler.html">SchemaCompiler</a>
+      
+        <ul>
+  
+  <li class=" " data-id="Opal/LF/Data/Dialects/PostgreSQL/SchemaCompiler/Statement" data-name="lf::data::dialects::postgresql::schemacompiler::statement">
+      <a href="../../../LF/Data/Dialects/PostgreSQL/SchemaCompiler/Statement.html">Statement</a>
+      
+    </li>
+  
+</ul>
+
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Dialects/PostgreSQL/SchemaIntrospector" data-name="lf::data::dialects::postgresql::schemaintrospector">
+      <a href="../../../LF/Data/Dialects/PostgreSQL/SchemaIntrospector.html">SchemaIntrospector</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Dialects/PostgreSQL/SchemaRenderer" data-name="lf::data::dialects::postgresql::schemarenderer">
+      <a href="../../../LF/Data/Dialects/PostgreSQL/SchemaRenderer.html">SchemaRenderer</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Dialects/PostgreSQL/StaticSQLPolicy" data-name="lf::data::dialects::postgresql::staticsqlpolicy">
+      <a href="../../../LF/Data/Dialects/PostgreSQL/StaticSQLPolicy.html">StaticSQLPolicy</a>
+      
+    </li>
+  
+</ul>
+
+      
+    </li>
+  
+  <li class="parent " data-id="Opal/LF/Data/Dialects/SQLite" data-name="lf::data::dialects::sqlite">
+      <a href="../../../LF/Data/Dialects/SQLite.html">SQLite</a>
+      
+        <ul>
+  
+  <li class=" " data-id="Opal/LF/Data/Dialects/SQLite/SchemaIntrospector" data-name="lf::data::dialects::sqlite::schemaintrospector">
+      <a href="../../../LF/Data/Dialects/SQLite/SchemaIntrospector.html">SchemaIntrospector</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Dialects/SQLite/SchemaRenderer" data-name="lf::data::dialects::sqlite::schemarenderer">
+      <a href="../../../LF/Data/Dialects/SQLite/SchemaRenderer.html">SchemaRenderer</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Dialects/SQLite/StaticSQLPolicy" data-name="lf::data::dialects::sqlite::staticsqlpolicy">
+      <a href="../../../LF/Data/Dialects/SQLite/StaticSQLPolicy.html">StaticSQLPolicy</a>
+      
+    </li>
+  
+</ul>
+
+      
+    </li>
+  
+</ul>
+
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/DuplicateMigrationVersionError" data-name="lf::data::duplicatemigrationversionerror">
+      <a href="../../../LF/Data/DuplicateMigrationVersionError.html">DuplicateMigrationVersionError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/EmptySchemaDiffError" data-name="lf::data::emptyschemadifferror">
+      <a href="../../../LF/Data/EmptySchemaDiffError.html">EmptySchemaDiffError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Entity" data-name="lf::data::entity">
+      <a href="../../../LF/Data/Entity.html">Entity</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/EntityManager" data-name="lf::data::entitymanager">
+      <a href="../../../LF/Data/EntityManager.html">EntityManager</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/EntityState" data-name="lf::data::entitystate">
+      <a href="../../../LF/Data/EntityState.html">EntityState</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/EntityStateError" data-name="lf::data::entitystateerror">
+      <a href="../../../LF/Data/EntityStateError.html">EntityStateError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Error" data-name="lf::data::error">
+      <a href="../../../LF/Data/Error.html">Error</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/FailedEntityManagerError" data-name="lf::data::failedentitymanagererror">
+      <a href="../../../LF/Data/FailedEntityManagerError.html">FailedEntityManagerError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/ForeignKeySetupError" data-name="lf::data::foreignkeysetuperror">
+      <a href="../../../LF/Data/ForeignKeySetupError.html">ForeignKeySetupError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/HasMany" data-name="lf::data::hasmany">
+      <a href="../../../LF/Data/HasMany.html">HasMany</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/HasOne" data-name="lf::data::hasone">
+      <a href="../../../LF/Data/HasOne.html">HasOne</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Hydrator" data-name="lf::data::hydrator">
+      <a href="../../../LF/Data/Hydrator.html">Hydrator</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Id" data-name="lf::data::id">
+      <a href="../../../LF/Data/Id.html">Id</a>
+      
+    </li>
+  
+  <li class="parent " data-id="Opal/LF/Data/Internal" data-name="lf::data::internal">
+      <a href="../../../LF/Data/Internal.html">Internal</a>
+      
+        <ul>
+  
+  <li class=" " data-id="Opal/LF/Data/Internal/EntityKey" data-name="lf::data::internal::entitykey">
+      <a href="../../../LF/Data/Internal/EntityKey.html">EntityKey</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Internal/EntityOperation" data-name="lf::data::internal::entityoperation">
+      <a href="../../../LF/Data/Internal/EntityOperation.html">EntityOperation</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Internal/ListenerDispatcher" data-name="lf::data::internal::listenerdispatcher">
+      <a href="../../../LF/Data/Internal/ListenerDispatcher.html">ListenerDispatcher</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Internal/OperationQueue" data-name="lf::data::internal::operationqueue">
+      <a href="../../../LF/Data/Internal/OperationQueue.html">OperationQueue</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Internal/RelationshipTarget" data-name="lf::data::internal::relationshiptarget">
+      <a href="../../../LF/Data/Internal/RelationshipTarget.html">RelationshipTarget</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Internal/TrackedEntity" data-name="lf::data::internal::trackedentity">
+      <a href="../../../LF/Data/Internal/TrackedEntity.html">TrackedEntity</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Internal/TypedRelationshipTarget" data-name="lf::data::internal::typedrelationshiptarget(t)">
+      <a href="../../../LF/Data/Internal/TypedRelationshipTarget.html">TypedRelationshipTarget</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Internal/TypedTrackedEntity" data-name="lf::data::internal::typedtrackedentity(t)">
+      <a href="../../../LF/Data/Internal/TypedTrackedEntity.html">TypedTrackedEntity</a>
+      
+    </li>
+  
+</ul>
+
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/InvalidPredicateError" data-name="lf::data::invalidpredicateerror">
+      <a href="../../../LF/Data/InvalidPredicateError.html">InvalidPredicateError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/InvalidQueryError" data-name="lf::data::invalidqueryerror">
+      <a href="../../../LF/Data/InvalidQueryError.html">InvalidQueryError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Listener" data-name="lf::data::listener">
+      <a href="../../../LF/Data/Listener.html">Listener</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/MappingError" data-name="lf::data::mappingerror">
+      <a href="../../../LF/Data/MappingError.html">MappingError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Migration" data-name="lf::data::migration">
+      <a href="../../../LF/Data/Migration.html">Migration</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/MigrationError" data-name="lf::data::migrationerror">
+      <a href="../../../LF/Data/MigrationError.html">MigrationError</a>
+      
+    </li>
+  
+  <li class="parent " data-id="Opal/LF/Data/MigrationHistory" data-name="lf::data::migrationhistory">
+      <a href="../../../LF/Data/MigrationHistory.html">MigrationHistory</a>
+      
+        <ul>
+  
+  <li class=" " data-id="Opal/LF/Data/MigrationHistory/Entry" data-name="lf::data::migrationhistory::entry">
+      <a href="../../../LF/Data/MigrationHistory/Entry.html">Entry</a>
+      
+    </li>
+  
+</ul>
+
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/MigrationHistoryMismatchError" data-name="lf::data::migrationhistorymismatcherror">
+      <a href="../../../LF/Data/MigrationHistoryMismatchError.html">MigrationHistoryMismatchError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/MigrationLock" data-name="lf::data::migrationlock">
+      <a href="../../../LF/Data/MigrationLock.html">MigrationLock</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/MigrationLockCleanupError" data-name="lf::data::migrationlockcleanuperror">
+      <a href="../../../LF/Data/MigrationLockCleanupError.html">MigrationLockCleanupError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/MigrationLockConfigurationError" data-name="lf::data::migrationlockconfigurationerror">
+      <a href="../../../LF/Data/MigrationLockConfigurationError.html">MigrationLockConfigurationError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/MigrationLockReleaseError" data-name="lf::data::migrationlockreleaseerror">
+      <a href="../../../LF/Data/MigrationLockReleaseError.html">MigrationLockReleaseError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/MigrationLockTimeoutError" data-name="lf::data::migrationlocktimeouterror">
+      <a href="../../../LF/Data/MigrationLockTimeoutError.html">MigrationLockTimeoutError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/MigrationOrderError" data-name="lf::data::migrationordererror">
+      <a href="../../../LF/Data/MigrationOrderError.html">MigrationOrderError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/MigrationRunner" data-name="lf::data::migrationrunner">
+      <a href="../../../LF/Data/MigrationRunner.html">MigrationRunner</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/MigrationSet" data-name="lf::data::migrationset">
+      <a href="../../../LF/Data/MigrationSet.html">MigrationSet</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/MigrationSourceGenerationError" data-name="lf::data::migrationsourcegenerationerror">
+      <a href="../../../LF/Data/MigrationSourceGenerationError.html">MigrationSourceGenerationError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/NonUniqueResultError" data-name="lf::data::nonuniqueresulterror">
+      <a href="../../../LF/Data/NonUniqueResultError.html">NonUniqueResultError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/OptimisticLockError" data-name="lf::data::optimisticlockerror">
+      <a href="../../../LF/Data/OptimisticLockError.html">OptimisticLockError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Page" data-name="lf::data::page(entitytype)">
+      <a href="../../../LF/Data/Page.html">Page</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/PlannedMigration" data-name="lf::data::plannedmigration">
+      <a href="../../../LF/Data/PlannedMigration.html">PlannedMigration</a>
+      
+    </li>
+  
+  <li class="parent open current" data-id="Opal/LF/Data/Query" data-name="lf::data::query">
+      <a href="../../../LF/Data/Query.html">Query</a>
+      
+        <ul>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/And" data-name="lf::data::query::and(left, right)">
+      <a href="../../../LF/Data/Query/And.html">And</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/Asc" data-name="lf::data::query::asc">
+      <a href="../../../LF/Data/Query/Asc.html">Asc</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/BulkDelete" data-name="lf::data::query::bulkdelete">
+      <a href="../../../LF/Data/Query/BulkDelete.html">BulkDelete</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/BulkUpdate" data-name="lf::data::query::bulkupdate">
+      <a href="../../../LF/Data/Query/BulkUpdate.html">BulkUpdate</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/Count" data-name="lf::data::query::count(queryshape)">
+      <a href="../../../LF/Data/Query/Count.html">Count</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/DeleteQuery" data-name="lf::data::query::deletequery(entitytype, predicate)">
+      <a href="../../../LF/Data/Query/DeleteQuery.html">DeleteQuery</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/Desc" data-name="lf::data::query::desc">
+      <a href="../../../LF/Data/Query/Desc.html">Desc</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/DynamicIn" data-name="lf::data::query::dynamicin(fieldtype)">
+      <a href="../../../LF/Data/Query/DynamicIn.html">DynamicIn</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/DynamicOrderNode" data-name="lf::data::query::dynamicordernode(entitytype)">
+      <a href="../../../LF/Data/Query/DynamicOrderNode.html">DynamicOrderNode</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/DynamicPredicateNode" data-name="lf::data::query::dynamicpredicatenode(entitytype)">
+      <a href="../../../LF/Data/Query/DynamicPredicateNode.html">DynamicPredicateNode</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/DynamicQuery" data-name="lf::data::query::dynamicquery(entitytype)">
+      <a href="../../../LF/Data/Query/DynamicQuery.html">DynamicQuery</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/DynamicRenderer" data-name="lf::data::query::dynamicrenderer(entitytype)">
+      <a href="../../../LF/Data/Query/DynamicRenderer.html">DynamicRenderer</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/DynamicTerminal" data-name="lf::data::query::dynamicterminal">
+      <a href="../../../LF/Data/Query/DynamicTerminal.html">DynamicTerminal</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/Eq" data-name="lf::data::query::eq(fieldtype, storedtype)">
+      <a href="../../../LF/Data/Query/Eq.html">Eq</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/Exists" data-name="lf::data::query::exists(queryshape)">
+      <a href="../../../LF/Data/Query/Exists.html">Exists</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/Expression" data-name="lf::data::query::expression">
+      <a href="../../../LF/Data/Query/Expression.html">Expression</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/Field" data-name="lf::data::query::field(entitytype, propertytype, index)">
+      <a href="../../../LF/Data/Query/Field.html">Field</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/FieldKey" data-name="lf::data::query::fieldkey(key, checksum)">
+      <a href="../../../LF/Data/Query/FieldKey.html">FieldKey</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/FieldSet" data-name="lf::data::query::fieldset(entitytype)">
+      <a href="../../../LF/Data/Query/FieldSet.html">FieldSet</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/First" data-name="lf::data::query::first(queryshape)">
+      <a href="../../../LF/Data/Query/First.html">First</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/Gt" data-name="lf::data::query::gt(fieldtype, storedtype)">
+      <a href="../../../LF/Data/Query/Gt.html">Gt</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/Gte" data-name="lf::data::query::gte(fieldtype, storedtype)">
+      <a href="../../../LF/Data/Query/Gte.html">Gte</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/In" data-name="lf::data::query::in(fieldtype, storedvalues)">
+      <a href="../../../LF/Data/Query/In.html">In</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/IsNil" data-name="lf::data::query::isnil(fieldtype)">
+      <a href="../../../LF/Data/Query/IsNil.html">IsNil</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/IsNotNil" data-name="lf::data::query::isnotnil(fieldtype)">
+      <a href="../../../LF/Data/Query/IsNotNil.html">IsNotNil</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/Like" data-name="lf::data::query::like(fieldtype, storedtype)">
+      <a href="../../../LF/Data/Query/Like.html">Like</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/Lt" data-name="lf::data::query::lt(fieldtype, storedtype)">
+      <a href="../../../LF/Data/Query/Lt.html">Lt</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/Lte" data-name="lf::data::query::lte(fieldtype, storedtype)">
+      <a href="../../../LF/Data/Query/Lte.html">Lte</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/Ne" data-name="lf::data::query::ne(fieldtype, storedtype)">
+      <a href="../../../LF/Data/Query/Ne.html">Ne</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/NoLimit" data-name="lf::data::query::nolimit">
+      <a href="../../../LF/Data/Query/NoLimit.html">NoLimit</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/NoOffset" data-name="lf::data::query::nooffset">
+      <a href="../../../LF/Data/Query/NoOffset.html">NoOffset</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/NoOrdering" data-name="lf::data::query::noordering">
+      <a href="../../../LF/Data/Query/NoOrdering.html">NoOrdering</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/NoPredicate" data-name="lf::data::query::nopredicate">
+      <a href="../../../LF/Data/Query/NoPredicate.html">NoPredicate</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/Not" data-name="lf::data::query::not(child)">
+      <a href="../../../LF/Data/Query/Not.html">Not</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/Or" data-name="lf::data::query::or(left, right)">
+      <a href="../../../LF/Data/Query/Or.html">Or</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/Ordering" data-name="lf::data::query::ordering(fieldtype, direction)">
+      <a href="../../../LF/Data/Query/Ordering.html">Ordering</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/OrderList" data-name="lf::data::query::orderlist(previous, current)">
+      <a href="../../../LF/Data/Query/OrderList.html">OrderList</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/RenderedQuery" data-name="lf::data::query::renderedquery">
+      <a href="../../../LF/Data/Query/RenderedQuery.html">RenderedQuery</a>
+      
+    </li>
+  
+  <li class=" current" data-id="Opal/LF/Data/Query/Rows" data-name="lf::data::query::rows(queryshape)">
+      <a href="../../../LF/Data/Query/Rows.html">Rows</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/SelectQuery" data-name="lf::data::query::selectquery(entitytype, predicate, orders, limitstate, offsetstate)">
+      <a href="../../../LF/Data/Query/SelectQuery.html">SelectQuery</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/TypedDynamicOrderNode" data-name="lf::data::query::typeddynamicordernode(entitytype, orderingtype)">
+      <a href="../../../LF/Data/Query/TypedDynamicOrderNode.html">TypedDynamicOrderNode</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/TypedDynamicPredicateNode" data-name="lf::data::query::typeddynamicpredicatenode(entitytype, expressiontype)">
+      <a href="../../../LF/Data/Query/TypedDynamicPredicateNode.html">TypedDynamicPredicateNode</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/UpdateQuery" data-name="lf::data::query::updatequery(entitytype, assignmentfields, assignmentvalues, predicate)">
+      <a href="../../../LF/Data/Query/UpdateQuery.html">UpdateQuery</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/WithLimit" data-name="lf::data::query::withlimit">
+      <a href="../../../LF/Data/Query/WithLimit.html">WithLimit</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Query/WithOffset" data-name="lf::data::query::withoffset">
+      <a href="../../../LF/Data/Query/WithOffset.html">WithOffset</a>
+      
+    </li>
+  
+</ul>
+
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Relationship" data-name="lf::data::relationship(entitytype, index)">
+      <a href="../../../LF/Data/Relationship.html">Relationship</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/RelationshipCycleError" data-name="lf::data::relationshipcycleerror">
+      <a href="../../../LF/Data/RelationshipCycleError.html">RelationshipCycleError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/RelationshipError" data-name="lf::data::relationshiperror">
+      <a href="../../../LF/Data/RelationshipError.html">RelationshipError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/RelationshipKey" data-name="lf::data::relationshipkey(key, checksum)">
+      <a href="../../../LF/Data/RelationshipKey.html">RelationshipKey</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/RelationshipKeyMismatchError" data-name="lf::data::relationshipkeymismatcherror">
+      <a href="../../../LF/Data/RelationshipKeyMismatchError.html">RelationshipKeyMismatchError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/RelationshipKind" data-name="lf::data::relationshipkind">
+      <a href="../../../LF/Data/RelationshipKind.html">RelationshipKind</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/RelationshipSet" data-name="lf::data::relationshipset(entitytype)">
+      <a href="../../../LF/Data/RelationshipSet.html">RelationshipSet</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Repository" data-name="lf::data::repository(entitytype, idtype)">
+      <a href="../../../LF/Data/Repository.html">Repository</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/RepositoryQueryOwnershipError" data-name="lf::data::repositoryqueryownershiperror">
+      <a href="../../../LF/Data/RepositoryQueryOwnershipError.html">RepositoryQueryOwnershipError</a>
+      
+    </li>
+  
+  <li class="parent " data-id="Opal/LF/Data/Schema" data-name="lf::data::schema">
+      <a href="../../../LF/Data/Schema.html">Schema</a>
+      
+        <ul>
+  
+  <li class=" " data-id="Opal/LF/Data/Schema/AddColumn" data-name="lf::data::schema::addcolumn">
+      <a href="../../../LF/Data/Schema/AddColumn.html">AddColumn</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Schema/ColumnDefinition" data-name="lf::data::schema::columndefinition">
+      <a href="../../../LF/Data/Schema/ColumnDefinition.html">ColumnDefinition</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Schema/ColumnSnapshot" data-name="lf::data::schema::columnsnapshot">
+      <a href="../../../LF/Data/Schema/ColumnSnapshot.html">ColumnSnapshot</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Schema/ColumnType" data-name="lf::data::schema::columntype">
+      <a href="../../../LF/Data/Schema/ColumnType.html">ColumnType</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Schema/CreateIndex" data-name="lf::data::schema::createindex">
+      <a href="../../../LF/Data/Schema/CreateIndex.html">CreateIndex</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Schema/CreateTable" data-name="lf::data::schema::createtable">
+      <a href="../../../LF/Data/Schema/CreateTable.html">CreateTable</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Schema/DefaultValue" data-name="lf::data::schema::defaultvalue">
+      <a href="../../../LF/Data/Schema/DefaultValue.html">DefaultValue</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Schema/DiffDiagnostic" data-name="lf::data::schema::diffdiagnostic">
+      <a href="../../../LF/Data/Schema/DiffDiagnostic.html">DiffDiagnostic</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Schema/Differ" data-name="lf::data::schema::differ">
+      <a href="../../../LF/Data/Schema/Differ.html">Differ</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Schema/DiffOptions" data-name="lf::data::schema::diffoptions">
+      <a href="../../../LF/Data/Schema/DiffOptions.html">DiffOptions</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Schema/DiffPlan" data-name="lf::data::schema::diffplan">
+      <a href="../../../LF/Data/Schema/DiffPlan.html">DiffPlan</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Schema/DiffSafety" data-name="lf::data::schema::diffsafety">
+      <a href="../../../LF/Data/Schema/DiffSafety.html">DiffSafety</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Schema/DiffStep" data-name="lf::data::schema::diffstep">
+      <a href="../../../LF/Data/Schema/DiffStep.html">DiffStep</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Schema/DropIndex" data-name="lf::data::schema::dropindex">
+      <a href="../../../LF/Data/Schema/DropIndex.html">DropIndex</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Schema/DropTable" data-name="lf::data::schema::droptable">
+      <a href="../../../LF/Data/Schema/DropTable.html">DropTable</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Schema/ForeignKeyDefinition" data-name="lf::data::schema::foreignkeydefinition">
+      <a href="../../../LF/Data/Schema/ForeignKeyDefinition.html">ForeignKeyDefinition</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Schema/IndexDefinition" data-name="lf::data::schema::indexdefinition">
+      <a href="../../../LF/Data/Schema/IndexDefinition.html">IndexDefinition</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Schema/Introspector" data-name="lf::data::schema::introspector">
+      <a href="../../../LF/Data/Schema/Introspector.html">Introspector</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Schema/Literal" data-name="lf::data::schema::literal">
+      <a href="../../../LF/Data/Schema/Literal.html">Literal</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Schema/MigrationGenerator" data-name="lf::data::schema::migrationgenerator">
+      <a href="../../../LF/Data/Schema/MigrationGenerator.html">MigrationGenerator</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Schema/MigrationSourceGenerator" data-name="lf::data::schema::migrationsourcegenerator">
+      <a href="../../../LF/Data/Schema/MigrationSourceGenerator.html">MigrationSourceGenerator</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Schema/Model" data-name="lf::data::schema::model">
+      <a href="../../../LF/Data/Schema/Model.html">Model</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Schema/ModelBuilder" data-name="lf::data::schema::modelbuilder">
+      <a href="../../../LF/Data/Schema/ModelBuilder.html">ModelBuilder</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Schema/Operation" data-name="lf::data::schema::operation">
+      <a href="../../../LF/Data/Schema/Operation.html">Operation</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Schema/PrimaryKeyDefinition" data-name="lf::data::schema::primarykeydefinition">
+      <a href="../../../LF/Data/Schema/PrimaryKeyDefinition.html">PrimaryKeyDefinition</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Schema/RawSQL" data-name="lf::data::schema::rawsql">
+      <a href="../../../LF/Data/Schema/RawSQL.html">RawSQL</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Schema/RenameColumn" data-name="lf::data::schema::renamecolumn">
+      <a href="../../../LF/Data/Schema/RenameColumn.html">RenameColumn</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Schema/RenameTable" data-name="lf::data::schema::renametable">
+      <a href="../../../LF/Data/Schema/RenameTable.html">RenameTable</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Schema/Snapshot" data-name="lf::data::schema::snapshot">
+      <a href="../../../LF/Data/Schema/Snapshot.html">Snapshot</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Schema/TableBuilder" data-name="lf::data::schema::tablebuilder">
+      <a href="../../../LF/Data/Schema/TableBuilder.html">TableBuilder</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Schema/TableDefinition" data-name="lf::data::schema::tabledefinition">
+      <a href="../../../LF/Data/Schema/TableDefinition.html">TableDefinition</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Schema/TableSnapshot" data-name="lf::data::schema::tablesnapshot">
+      <a href="../../../LF/Data/Schema/TableSnapshot.html">TableSnapshot</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Schema/UniqueDefinition" data-name="lf::data::schema::uniquedefinition">
+      <a href="../../../LF/Data/Schema/UniqueDefinition.html">UniqueDefinition</a>
+      
+    </li>
+  
+</ul>
+
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/SchemaEditor" data-name="lf::data::schemaeditor">
+      <a href="../../../LF/Data/SchemaEditor.html">SchemaEditor</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/SchemaInspectionError" data-name="lf::data::schemainspectionerror">
+      <a href="../../../LF/Data/SchemaInspectionError.html">SchemaInspectionError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/SchemaRenderer" data-name="lf::data::schemarenderer">
+      <a href="../../../LF/Data/SchemaRenderer.html">SchemaRenderer</a>
+      
+    </li>
+  
+  <li class="parent " data-id="Opal/LF/Data/SQL" data-name="lf::data::sql">
+      <a href="../../../LF/Data/SQL.html">SQL</a>
+      
+        <ul>
+  
+  <li class=" " data-id="Opal/LF/Data/SQL/GeneratedKeySource" data-name="lf::data::sql::generatedkeysource">
+      <a href="../../../LF/Data/SQL/GeneratedKeySource.html">GeneratedKeySource</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/SQL/InsertPlan" data-name="lf::data::sql::insertplan">
+      <a href="../../../LF/Data/SQL/InsertPlan.html">InsertPlan</a>
+      
+    </li>
+  
+  <li class="parent " data-id="Opal/LF/Data/SQL/QueryToken" data-name="lf::data::sql::querytoken">
+      <a href="../../../LF/Data/SQL/QueryToken.html">QueryToken</a>
+      
+        <ul>
+  
+  <li class=" " data-id="Opal/LF/Data/SQL/QueryToken/And" data-name="lf::data::sql::querytoken::and">
+      <a href="../../../LF/Data/SQL/QueryToken/And.html">And</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/SQL/QueryToken/CloseParen" data-name="lf::data::sql::querytoken::closeparen">
+      <a href="../../../LF/Data/SQL/QueryToken/CloseParen.html">CloseParen</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/SQL/QueryToken/Leaf" data-name="lf::data::sql::querytoken::leaf(expressiontype)">
+      <a href="../../../LF/Data/SQL/QueryToken/Leaf.html">Leaf</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/SQL/QueryToken/Not" data-name="lf::data::sql::querytoken::not">
+      <a href="../../../LF/Data/SQL/QueryToken/Not.html">Not</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/SQL/QueryToken/OpenParen" data-name="lf::data::sql::querytoken::openparen">
+      <a href="../../../LF/Data/SQL/QueryToken/OpenParen.html">OpenParen</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/SQL/QueryToken/Or" data-name="lf::data::sql::querytoken::or">
+      <a href="../../../LF/Data/SQL/QueryToken/Or.html">Or</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/SQL/QueryToken/OrderLeaf" data-name="lf::data::sql::querytoken::orderleaf(orderingtype)">
+      <a href="../../../LF/Data/SQL/QueryToken/OrderLeaf.html">OrderLeaf</a>
+      
+    </li>
+  
+</ul>
+
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/SQL/StatementPlan" data-name="lf::data::sql::statementplan">
+      <a href="../../../LF/Data/SQL/StatementPlan.html">StatementPlan</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/SQL/StaticPlanCompiler" data-name="lf::data::sql::staticplancompiler">
+      <a href="../../../LF/Data/SQL/StaticPlanCompiler.html">StaticPlanCompiler</a>
+      
+    </li>
+  
+</ul>
+
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/StatementCompletionEvent" data-name="lf::data::statementcompletionevent">
+      <a href="../../../LF/Data/StatementCompletionEvent.html">StatementCompletionEvent</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/StatementObserver" data-name="lf::data::statementobserver">
+      <a href="../../../LF/Data/StatementObserver.html">StatementObserver</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/StatementOperation" data-name="lf::data::statementoperation">
+      <a href="../../../LF/Data/StatementOperation.html">StatementOperation</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Table" data-name="lf::data::table">
+      <a href="../../../LF/Data/Table.html">Table</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/TransactionalHistoryMigrationLock" data-name="lf::data::transactionalhistorymigrationlock">
+      <a href="../../../LF/Data/TransactionalHistoryMigrationLock.html">TransactionalHistoryMigrationLock</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/TransactionBeginEvent" data-name="lf::data::transactionbeginevent">
+      <a href="../../../LF/Data/TransactionBeginEvent.html">TransactionBeginEvent</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/TransactionCompletionEvent" data-name="lf::data::transactioncompletionevent">
+      <a href="../../../LF/Data/TransactionCompletionEvent.html">TransactionCompletionEvent</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/TransactionFinalization" data-name="lf::data::transactionfinalization">
+      <a href="../../../LF/Data/TransactionFinalization.html">TransactionFinalization</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/TransactionOutcome" data-name="lf::data::transactionoutcome">
+      <a href="../../../LF/Data/TransactionOutcome.html">TransactionOutcome</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/UnknownAppliedMigrationError" data-name="lf::data::unknownappliedmigrationerror">
+      <a href="../../../LF/Data/UnknownAppliedMigrationError.html">UnknownAppliedMigrationError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/UnmanagedRelationshipError" data-name="lf::data::unmanagedrelationshiperror">
+      <a href="../../../LF/Data/UnmanagedRelationshipError.html">UnmanagedRelationshipError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/UnresolvedSchemaDiffError" data-name="lf::data::unresolvedschemadifferror">
+      <a href="../../../LF/Data/UnresolvedSchemaDiffError.html">UnresolvedSchemaDiffError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/UnsafeSchemaChangeError" data-name="lf::data::unsafeschemachangeerror">
+      <a href="../../../LF/Data/UnsafeSchemaChangeError.html">UnsafeSchemaChangeError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/UnsavedRelationshipError" data-name="lf::data::unsavedrelationshiperror">
+      <a href="../../../LF/Data/UnsavedRelationshipError.html">UnsavedRelationshipError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/UnsupportedMigrationCapabilityError" data-name="lf::data::unsupportedmigrationcapabilityerror">
+      <a href="../../../LF/Data/UnsupportedMigrationCapabilityError.html">UnsupportedMigrationCapabilityError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/UnsupportedSchemaInspectionError" data-name="lf::data::unsupportedschemainspectionerror">
+      <a href="../../../LF/Data/UnsupportedSchemaInspectionError.html">UnsupportedSchemaInspectionError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/UnsupportedSchemaOperationError" data-name="lf::data::unsupportedschemaoperationerror">
+      <a href="../../../LF/Data/UnsupportedSchemaOperationError.html">UnsupportedSchemaOperationError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Data/Version" data-name="lf::data::version">
+      <a href="../../../LF/Data/Version.html">Version</a>
+      
+    </li>
+  
+</ul>
+
+      
+    </li>
+  
+  <li class="parent " data-id="Opal/LF/DI" data-name="lf::di">
+      <a href="../../../LF/DI.html">DI</a>
+      
+        <ul>
+  
+  <li class=" " data-id="Opal/LF/DI/AmbiguousBeanError" data-name="lf::di::ambiguousbeanerror">
+      <a href="../../../LF/DI/AmbiguousBeanError.html">AmbiguousBeanError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/DI/Bean" data-name="lf::di::bean">
+      <a href="../../../LF/DI/Bean.html">Bean</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/DI/BeanConfiguration" data-name="lf::di::beanconfiguration">
+      <a href="../../../LF/DI/BeanConfiguration.html">BeanConfiguration</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/DI/BeanDestructionError" data-name="lf::di::beandestructionerror">
+      <a href="../../../LF/DI/BeanDestructionError.html">BeanDestructionError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/DI/BeanFactory" data-name="lf::di::beanfactory">
+      <a href="../../../LF/DI/BeanFactory.html">BeanFactory</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/DI/BeanFactoryImpl" data-name="lf::di::beanfactoryimpl(t)">
+      <a href="../../../LF/DI/BeanFactoryImpl.html">BeanFactoryImpl</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/DI/BeanInitializationError" data-name="lf::di::beaninitializationerror">
+      <a href="../../../LF/DI/BeanInitializationError.html">BeanInitializationError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/DI/BeanInstance" data-name="lf::di::beaninstance">
+      <a href="../../../LF/DI/BeanInstance.html">BeanInstance</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/DI/BeanInstanceImpl" data-name="lf::di::beaninstanceimpl(t)">
+      <a href="../../../LF/DI/BeanInstanceImpl.html">BeanInstanceImpl</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/DI/BeanNotFoundError" data-name="lf::di::beannotfounderror">
+      <a href="../../../LF/DI/BeanNotFoundError.html">BeanNotFoundError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/DI/BeanTypeMismatchError" data-name="lf::di::beantypemismatcherror">
+      <a href="../../../LF/DI/BeanTypeMismatchError.html">BeanTypeMismatchError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/DI/ChildContextMutationError" data-name="lf::di::childcontextmutationerror">
+      <a href="../../../LF/DI/ChildContextMutationError.html">ChildContextMutationError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/DI/Container" data-name="lf::di::container">
+      <a href="../../../LF/DI/Container.html">Container</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/DI/ContextClosedError" data-name="lf::di::contextclosederror">
+      <a href="../../../LF/DI/ContextClosedError.html">ContextClosedError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/DI/DefaultContainer" data-name="lf::di::defaultcontainer">
+      <a href="../../../LF/DI/DefaultContainer.html">DefaultContainer</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/DI/Disposable" data-name="lf::di::disposable">
+      <a href="../../../LF/DI/Disposable.html">Disposable</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/DI/DuplicateBeanError" data-name="lf::di::duplicatebeanerror">
+      <a href="../../../LF/DI/DuplicateBeanError.html">DuplicateBeanError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/DI/Error" data-name="lf::di::error">
+      <a href="../../../LF/DI/Error.html">Error</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/DI/Initializable" data-name="lf::di::initializable">
+      <a href="../../../LF/DI/Initializable.html">Initializable</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/DI/InvalidChildScopeError" data-name="lf::di::invalidchildscopeerror">
+      <a href="../../../LF/DI/InvalidChildScopeError.html">InvalidChildScopeError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/DI/ScopeMismatchError" data-name="lf::di::scopemismatcherror">
+      <a href="../../../LF/DI/ScopeMismatchError.html">ScopeMismatchError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/DI/ScopeProvider" data-name="lf::di::scopeprovider">
+      <a href="../../../LF/DI/ScopeProvider.html">ScopeProvider</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/DI/Service" data-name="lf::di::service">
+      <a href="../../../LF/DI/Service.html">Service</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/DI/ServiceConfiguration" data-name="lf::di::serviceconfiguration">
+      <a href="../../../LF/DI/ServiceConfiguration.html">ServiceConfiguration</a>
+      
+    </li>
+  
+</ul>
+
+      
+    </li>
+  
+  <li class="parent " data-id="Opal/LF/HTTP" data-name="lf::http">
+      <a href="../../../LF/HTTP.html">HTTP</a>
+      
+        <ul>
+  
+  <li class=" " data-id="Opal/LF/HTTP/App" data-name="lf::http::app">
+      <a href="../../../LF/HTTP/App.html">App</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/ArgumentMetadata" data-name="lf::http::argumentmetadata">
+      <a href="../../../LF/HTTP/ArgumentMetadata.html">ArgumentMetadata</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/ArgumentSource" data-name="lf::http::argumentsource">
+      <a href="../../../LF/HTTP/ArgumentSource.html">ArgumentSource</a>
+      
+    </li>
+  
+  <li class="parent " data-id="Opal/LF/HTTP/AutoConfig" data-name="lf::http::autoconfig">
+      <a href="../../../LF/HTTP/AutoConfig.html">AutoConfig</a>
+      
+        <ul>
+  
+  <li class=" " data-id="Opal/LF/HTTP/AutoConfig/ConfigurationError" data-name="lf::http::autoconfig::configurationerror">
+      <a href="../../../LF/HTTP/AutoConfig/ConfigurationError.html">ConfigurationError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/AutoConfig/DrainTimeoutError" data-name="lf::http::autoconfig::draintimeouterror">
+      <a href="../../../LF/HTTP/AutoConfig/DrainTimeoutError.html">DrainTimeoutError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/AutoConfig/Error" data-name="lf::http::autoconfig::error">
+      <a href="../../../LF/HTTP/AutoConfig/Error.html">Error</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/AutoConfig/Extension" data-name="lf::http::autoconfig::extension">
+      <a href="../../../LF/HTTP/AutoConfig/Extension.html">Extension</a>
+      
+    </li>
+  
+</ul>
+
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/AutoConfigMiddleware" data-name="lf::http::autoconfigmiddleware">
+      <a href="../../../LF/HTTP/AutoConfigMiddleware.html">AutoConfigMiddleware</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/BadRequest" data-name="lf::http::badrequest">
+      <a href="../../../LF/HTTP/BadRequest.html">BadRequest</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/CallHandler" data-name="lf::http::callhandler">
+      <a href="../../../LF/HTTP/CallHandler.html">CallHandler</a>
+      
+    </li>
+  
+  <li class="parent " data-id="Opal/LF/HTTP/Controller" data-name="lf::http::controller">
+      <a href="../../../LF/HTTP/Controller.html">Controller</a>
+      
+        <ul>
+  
+  <li class=" " data-id="Opal/LF/HTTP/Controller/Delete" data-name="lf::http::controller::delete">
+      <a href="../../../LF/HTTP/Controller/Delete.html">Delete</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/Controller/Get" data-name="lf::http::controller::get">
+      <a href="../../../LF/HTTP/Controller/Get.html">Get</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/Controller/Head" data-name="lf::http::controller::head">
+      <a href="../../../LF/HTTP/Controller/Head.html">Head</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/Controller/Options" data-name="lf::http::controller::options">
+      <a href="../../../LF/HTTP/Controller/Options.html">Options</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/Controller/Patch" data-name="lf::http::controller::patch">
+      <a href="../../../LF/HTTP/Controller/Patch.html">Patch</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/Controller/Post" data-name="lf::http::controller::post">
+      <a href="../../../LF/HTTP/Controller/Post.html">Post</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/Controller/Put" data-name="lf::http::controller::put">
+      <a href="../../../LF/HTTP/Controller/Put.html">Put</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/Controller/Route" data-name="lf::http::controller::route">
+      <a href="../../../LF/HTTP/Controller/Route.html">Route</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/Controller/WebSocket" data-name="lf::http::controller::websocket">
+      <a href="../../../LF/HTTP/Controller/WebSocket.html">WebSocket</a>
+      
+    </li>
+  
+</ul>
+
+      
+    </li>
+  
+  <li class="parent " data-id="Opal/LF/HTTP/DI" data-name="lf::http::di">
+      <a href="../../../LF/HTTP/DI.html">DI</a>
+      
+        <ul>
+  
+  <li class=" " data-id="Opal/LF/HTTP/DI/RequestScopeHandler" data-name="lf::http::di::requestscopehandler">
+      <a href="../../../LF/HTTP/DI/RequestScopeHandler.html">RequestScopeHandler</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/DI/WebSocketScopeHandler" data-name="lf::http::di::websocketscopehandler">
+      <a href="../../../LF/HTTP/DI/WebSocketScopeHandler.html">WebSocketScopeHandler</a>
+      
+    </li>
+  
+</ul>
+
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/Error" data-name="lf::http::error">
+      <a href="../../../LF/HTTP/Error.html">Error</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/ExceptionFilter" data-name="lf::http::exceptionfilter">
+      <a href="../../../LF/HTTP/ExceptionFilter.html">ExceptionFilter</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/ExecutionContext" data-name="lf::http::executioncontext">
+      <a href="../../../LF/HTTP/ExecutionContext.html">ExecutionContext</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/ExecutionPipeline" data-name="lf::http::executionpipeline">
+      <a href="../../../LF/HTTP/ExecutionPipeline.html">ExecutionPipeline</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/Filter" data-name="lf::http::filter">
+      <a href="../../../LF/HTTP/Filter.html">Filter</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/Forbidden" data-name="lf::http::forbidden">
+      <a href="../../../LF/HTTP/Forbidden.html">Forbidden</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/Guard" data-name="lf::http::guard">
+      <a href="../../../LF/HTTP/Guard.html">Guard</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/Interceptor" data-name="lf::http::interceptor">
+      <a href="../../../LF/HTTP/Interceptor.html">Interceptor</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/InternalServerError" data-name="lf::http::internalservererror">
+      <a href="../../../LF/HTTP/InternalServerError.html">InternalServerError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/JSONPipe" data-name="lf::http::jsonpipe">
+      <a href="../../../LF/HTTP/JSONPipe.html">JSONPipe</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/JSONResponse" data-name="lf::http::jsonresponse">
+      <a href="../../../LF/HTTP/JSONResponse.html">JSONResponse</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/NotFound" data-name="lf::http::notfound">
+      <a href="../../../LF/HTTP/NotFound.html">NotFound</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/ParameterDecoder" data-name="lf::http::parameterdecoder">
+      <a href="../../../LF/HTTP/ParameterDecoder.html">ParameterDecoder</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/Pipe" data-name="lf::http::pipe">
+      <a href="../../../LF/HTTP/Pipe.html">Pipe</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/PipeValue" data-name="lf::http::pipevalue">
+      <a href="../../../LF/HTTP/PipeValue.html">PipeValue</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/Response" data-name="lf::http::response">
+      <a href="../../../LF/HTTP/Response.html">Response</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/RouteConflictError" data-name="lf::http::routeconflicterror">
+      <a href="../../../LF/HTTP/RouteConflictError.html">RouteConflictError</a>
+      
+    </li>
+  
+  <li class="parent " data-id="Opal/LF/HTTP/Router" data-name="lf::http::router">
+      <a href="../../../LF/HTTP/Router.html">Router</a>
+      
+        <ul>
+  
+  <li class=" " data-id="Opal/LF/HTTP/Router/ErrorMapper" data-name="lf::http::router::errormapper">
+      <a href="../../../LF/HTTP/Router/ErrorMapper.html">ErrorMapper</a>
+      
+    </li>
+  
+</ul>
+
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/StringPipe" data-name="lf::http::stringpipe">
+      <a href="../../../LF/HTTP/StringPipe.html">StringPipe</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/TextResponse" data-name="lf::http::textresponse">
+      <a href="../../../LF/HTTP/TextResponse.html">TextResponse</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/Unauthorized" data-name="lf::http::unauthorized">
+      <a href="../../../LF/HTTP/Unauthorized.html">Unauthorized</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/UseFilters" data-name="lf::http::usefilters">
+      <a href="../../../LF/HTTP/UseFilters.html">UseFilters</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/UseGuards" data-name="lf::http::useguards">
+      <a href="../../../LF/HTTP/UseGuards.html">UseGuards</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/UseInterceptors" data-name="lf::http::useinterceptors">
+      <a href="../../../LF/HTTP/UseInterceptors.html">UseInterceptors</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/UsePipes" data-name="lf::http::usepipes">
+      <a href="../../../LF/HTTP/UsePipes.html">UsePipes</a>
+      
+    </li>
+  
+  <li class="parent " data-id="Opal/LF/HTTP/WebSocketConnectionRegistry" data-name="lf::http::websocketconnectionregistry">
+      <a href="../../../LF/HTTP/WebSocketConnectionRegistry.html">WebSocketConnectionRegistry</a>
+      
+        <ul>
+  
+  <li class=" " data-id="Opal/LF/HTTP/WebSocketConnectionRegistry/Connection" data-name="lf::http::websocketconnectionregistry::connection">
+      <a href="../../../LF/HTTP/WebSocketConnectionRegistry/Connection.html">Connection</a>
+      
+    </li>
+  
+</ul>
+
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/WebSocketRequest" data-name="lf::http::websocketrequest">
+      <a href="../../../LF/HTTP/WebSocketRequest.html">WebSocketRequest</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/HTTP/WebSocketUpgrade" data-name="lf::http::websocketupgrade">
+      <a href="../../../LF/HTTP/WebSocketUpgrade.html">WebSocketUpgrade</a>
+      
+    </li>
+  
+</ul>
+
+      
+    </li>
+  
+  <li class="parent " data-id="Opal/LF/LiveView" data-name="lf::liveview">
+      <a href="../../../LF/LiveView.html">LiveView</a>
+      
+        <ul>
+  
+  <li class=" " data-id="Opal/LF/LiveView/AutoConfig" data-name="lf::liveview::autoconfig">
+      <a href="../../../LF/LiveView/AutoConfig.html">AutoConfig</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/ChildMount" data-name="lf::liveview::childmount">
+      <a href="../../../LF/LiveView/ChildMount.html">ChildMount</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/ChildViewContent" data-name="lf::liveview::childviewcontent">
+      <a href="../../../LF/LiveView/ChildViewContent.html">ChildViewContent</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/ChildViewFactory" data-name="lf::liveview::childviewfactory">
+      <a href="../../../LF/LiveView/ChildViewFactory.html">ChildViewFactory</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/ChildViewNestingError" data-name="lf::liveview::childviewnestingerror">
+      <a href="../../../LF/LiveView/ChildViewNestingError.html">ChildViewNestingError</a>
+      
+    </li>
+  
+  <li class="parent " data-id="Opal/LF/LiveView/Component" data-name="lf::liveview::component">
+      <a href="../../../LF/LiveView/Component.html">Component</a>
+      
+        <ul>
+  
+  <li class=" " data-id="Opal/LF/LiveView/Component/ChildViewRenderer" data-name="lf::liveview::component::childviewrenderer">
+      <a href="../../../LF/LiveView/Component/ChildViewRenderer.html">ChildViewRenderer</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/Component/Factory" data-name="lf::liveview::component::factory">
+      <a href="../../../LF/LiveView/Component/Factory.html">Factory</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/Component/Renderer" data-name="lf::liveview::component::renderer">
+      <a href="../../../LF/LiveView/Component/Renderer.html">Renderer</a>
+      
+    </li>
+  
+</ul>
+
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/ComponentContent" data-name="lf::liveview::componentcontent">
+      <a href="../../../LF/LiveView/ComponentContent.html">ComponentContent</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/ComponentNestingError" data-name="lf::liveview::componentnestingerror">
+      <a href="../../../LF/LiveView/ComponentNestingError.html">ComponentNestingError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/ConfigurationError" data-name="lf::liveview::configurationerror">
+      <a href="../../../LF/LiveView/ConfigurationError.html">ConfigurationError</a>
+      
+    </li>
+  
+  <li class="parent " data-id="Opal/LF/LiveView/ConnectionRuntime" data-name="lf::liveview::connectionruntime">
+      <a href="../../../LF/LiveView/ConnectionRuntime.html">ConnectionRuntime</a>
+      
+        <ul>
+  
+  <li class=" " data-id="Opal/LF/LiveView/ConnectionRuntime/ChildViewRenderer" data-name="lf::liveview::connectionruntime::childviewrenderer">
+      <a href="../../../LF/LiveView/ConnectionRuntime/ChildViewRenderer.html">ChildViewRenderer</a>
+      
+    </li>
+  
+</ul>
+
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/DuplicateChildViewError" data-name="lf::liveview::duplicatechildviewerror">
+      <a href="../../../LF/LiveView/DuplicateChildViewError.html">DuplicateChildViewError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/DuplicateComponentError" data-name="lf::liveview::duplicatecomponenterror">
+      <a href="../../../LF/LiveView/DuplicateComponentError.html">DuplicateComponentError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/DuplicateNavigationError" data-name="lf::liveview::duplicatenavigationerror">
+      <a href="../../../LF/LiveView/DuplicateNavigationError.html">DuplicateNavigationError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/Endpoint" data-name="lf::liveview::endpoint">
+      <a href="../../../LF/LiveView/Endpoint.html">Endpoint</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/Error" data-name="lf::liveview::error">
+      <a href="../../../LF/LiveView/Error.html">Error</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/EventReply" data-name="lf::liveview::eventreply">
+      <a href="../../../LF/LiveView/EventReply.html">EventReply</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/EventReplyError" data-name="lf::liveview::eventreplyerror">
+      <a href="../../../LF/LiveView/EventReplyError.html">EventReplyError</a>
+      
+    </li>
+  
+  <li class="parent " data-id="Opal/LF/LiveView/HTML" data-name="lf::liveview::html">
+      <a href="../../../LF/LiveView/HTML.html">HTML</a>
+      
+        <ul>
+  
+  <li class=" " data-id="Opal/LF/LiveView/HTML/Safe" data-name="lf::liveview::html::safe">
+      <a href="../../../LF/LiveView/HTML/Safe.html">Safe</a>
+      
+    </li>
+  
+</ul>
+
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/Info" data-name="lf::liveview::info">
+      <a href="../../../LF/LiveView/Info.html">Info</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/InvalidMountTokenError" data-name="lf::liveview::invalidmounttokenerror">
+      <a href="../../../LF/LiveView/InvalidMountTokenError.html">InvalidMountTokenError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/InvalidNavigationError" data-name="lf::liveview::invalidnavigationerror">
+      <a href="../../../LF/LiveView/InvalidNavigationError.html">InvalidNavigationError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/KeyedContent" data-name="lf::liveview::keyedcontent">
+      <a href="../../../LF/LiveView/KeyedContent.html">KeyedContent</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/KeyedEntry" data-name="lf::liveview::keyedentry">
+      <a href="../../../LF/LiveView/KeyedEntry.html">KeyedEntry</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/MessageTooBigError" data-name="lf::liveview::messagetoobigerror">
+      <a href="../../../LF/LiveView/MessageTooBigError.html">MessageTooBigError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/Mount" data-name="lf::liveview::mount">
+      <a href="../../../LF/LiveView/Mount.html">Mount</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/MountContext" data-name="lf::liveview::mountcontext">
+      <a href="../../../LF/LiveView/MountContext.html">MountContext</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/MountToken" data-name="lf::liveview::mounttoken">
+      <a href="../../../LF/LiveView/MountToken.html">MountToken</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/Navigation" data-name="lf::liveview::navigation">
+      <a href="../../../LF/LiveView/Navigation.html">Navigation</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/Page" data-name="lf::liveview::page">
+      <a href="../../../LF/LiveView/Page.html">Page</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/ParamsContext" data-name="lf::liveview::paramscontext">
+      <a href="../../../LF/LiveView/ParamsContext.html">ParamsContext</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/ProtocolError" data-name="lf::liveview::protocolerror">
+      <a href="../../../LF/LiveView/ProtocolError.html">ProtocolError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/PushedEvent" data-name="lf::liveview::pushedevent">
+      <a href="../../../LF/LiveView/PushedEvent.html">PushedEvent</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/RecursiveComponentError" data-name="lf::liveview::recursivecomponenterror">
+      <a href="../../../LF/LiveView/RecursiveComponentError.html">RecursiveComponentError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/Rendered" data-name="lf::liveview::rendered">
+      <a href="../../../LF/LiveView/Rendered.html">Rendered</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/RenderedDynamic" data-name="lf::liveview::rendereddynamic">
+      <a href="../../../LF/LiveView/RenderedDynamic.html">RenderedDynamic</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/RenderResult" data-name="lf::liveview::renderresult">
+      <a href="../../../LF/LiveView/RenderResult.html">RenderResult</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/StreamContent" data-name="lf::liveview::streamcontent">
+      <a href="../../../LF/LiveView/StreamContent.html">StreamContent</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/StreamOperation" data-name="lf::liveview::streamoperation">
+      <a href="../../../LF/LiveView/StreamOperation.html">StreamOperation</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/UnknownComponentError" data-name="lf::liveview::unknowncomponenterror">
+      <a href="../../../LF/LiveView/UnknownComponentError.html">UnknownComponentError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/UnknownEventError" data-name="lf::liveview::unknowneventerror">
+      <a href="../../../LF/LiveView/UnknownEventError.html">UnknownEventError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/UnknownInfoError" data-name="lf::liveview::unknowninfoerror">
+      <a href="../../../LF/LiveView/UnknownInfoError.html">UnknownInfoError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/UnsupportedDataError" data-name="lf::liveview::unsupporteddataerror">
+      <a href="../../../LF/LiveView/UnsupportedDataError.html">UnsupportedDataError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/LiveView/View" data-name="lf::liveview::view">
+      <a href="../../../LF/LiveView/View.html">View</a>
+      
+    </li>
+  
+</ul>
+
+      
+    </li>
+  
+  <li class="parent " data-id="Opal/LF/Routing" data-name="lf::routing">
+      <a href="../../../LF/Routing.html">Routing</a>
+      
+        <ul>
+  
+  <li class="parent " data-id="Opal/LF/Routing/Trie" data-name="lf::routing::trie">
+      <a href="../../../LF/Routing/Trie.html">Trie</a>
+      
+        <ul>
+  
+  <li class=" " data-id="Opal/LF/Routing/Trie/Handler" data-name="lf::routing::trie::handler">
+      <a href="../../../LF/Routing/Trie/Handler.html">Handler</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Routing/Trie/MatchResult" data-name="lf::routing::trie::matchresult">
+      <a href="../../../LF/Routing/Trie/MatchResult.html">MatchResult</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Routing/Trie/Node" data-name="lf::routing::trie::node">
+      <a href="../../../LF/Routing/Trie/Node.html">Node</a>
+      
+    </li>
+  
+</ul>
+
+      
+    </li>
+  
+</ul>
+
+      
+    </li>
+  
+  <li class="parent " data-id="Opal/LF/Security" data-name="lf::security">
+      <a href="../../../LF/Security.html">Security</a>
+      
+        <ul>
+  
+  <li class=" " data-id="Opal/LF/Security/APIKeyAuthenticator" data-name="lf::security::apikeyauthenticator">
+      <a href="../../../LF/Security/APIKeyAuthenticator.html">APIKeyAuthenticator</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Security/AuthenticatedGuard" data-name="lf::security::authenticatedguard">
+      <a href="../../../LF/Security/AuthenticatedGuard.html">AuthenticatedGuard</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Security/Authentication" data-name="lf::security::authentication">
+      <a href="../../../LF/Security/Authentication.html">Authentication</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Security/AuthenticationHandler" data-name="lf::security::authenticationhandler">
+      <a href="../../../LF/Security/AuthenticationHandler.html">AuthenticationHandler</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Security/AuthenticationMethod" data-name="lf::security::authenticationmethod">
+      <a href="../../../LF/Security/AuthenticationMethod.html">AuthenticationMethod</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Security/Authenticator" data-name="lf::security::authenticator">
+      <a href="../../../LF/Security/Authenticator.html">Authenticator</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Security/AuthenticatorChain" data-name="lf::security::authenticatorchain">
+      <a href="../../../LF/Security/AuthenticatorChain.html">AuthenticatorChain</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Security/AuthorityGuard" data-name="lf::security::authorityguard">
+      <a href="../../../LF/Security/AuthorityGuard.html">AuthorityGuard</a>
+      
+    </li>
+  
+  <li class="parent " data-id="Opal/LF/Security/AutoConfig" data-name="lf::security::autoconfig">
+      <a href="../../../LF/Security/AutoConfig.html">AutoConfig</a>
+      
+        <ul>
+  
+  <li class=" " data-id="Opal/LF/Security/AutoConfig/Extension" data-name="lf::security::autoconfig::extension">
+      <a href="../../../LF/Security/AutoConfig/Extension.html">Extension</a>
+      
+    </li>
+  
+</ul>
+
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Security/ConfigurationError" data-name="lf::security::configurationerror">
+      <a href="../../../LF/Security/ConfigurationError.html">ConfigurationError</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Security/Context" data-name="lf::security::context">
+      <a href="../../../LF/Security/Context.html">Context</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Security/CSRFInterceptor" data-name="lf::security::csrfinterceptor">
+      <a href="../../../LF/Security/CSRFInterceptor.html">CSRFInterceptor</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Security/Error" data-name="lf::security::error">
+      <a href="../../../LF/Security/Error.html">Error</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Security/InvalidCredentials" data-name="lf::security::invalidcredentials">
+      <a href="../../../LF/Security/InvalidCredentials.html">InvalidCredentials</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Security/JWTAuthenticator" data-name="lf::security::jwtauthenticator">
+      <a href="../../../LF/Security/JWTAuthenticator.html">JWTAuthenticator</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Security/JWTSupport" data-name="lf::security::jwtsupport">
+      <a href="../../../LF/Security/JWTSupport.html">JWTSupport</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Security/OIDCAuthenticator" data-name="lf::security::oidcauthenticator">
+      <a href="../../../LF/Security/OIDCAuthenticator.html">OIDCAuthenticator</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/Security/Principal" data-name="lf::security::principal">
+      <a href="../../../LF/Security/Principal.html">Principal</a>
+      
+    </li>
+  
+  <li class="parent " data-id="Opal/LF/Security/SignedSession" data-name="lf::security::signedsession">
+      <a href="../../../LF/Security/SignedSession.html">SignedSession</a>
+      
+        <ul>
+  
+  <li class=" " data-id="Opal/LF/Security/SignedSession/Issued" data-name="lf::security::signedsession::issued">
+      <a href="../../../LF/Security/SignedSession/Issued.html">Issued</a>
+      
+    </li>
+  
+</ul>
+
+      
+    </li>
+  
+</ul>
+
+      
+    </li>
+  
+  <li class="parent " data-id="Opal/LF/UI" data-name="lf::ui">
+      <a href="../../../LF/UI.html">UI</a>
+      
+        <ul>
+  
+  <li class=" " data-id="Opal/LF/UI/ButtonVariant" data-name="lf::ui::buttonvariant">
+      <a href="../../../LF/UI/ButtonVariant.html">ButtonVariant</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/UI/DataTableColumn" data-name="lf::ui::datatablecolumn(rowtype)">
+      <a href="../../../LF/UI/DataTableColumn.html">DataTableColumn</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/UI/DataTableColumnAlignment" data-name="lf::ui::datatablecolumnalignment">
+      <a href="../../../LF/UI/DataTableColumnAlignment.html">DataTableColumnAlignment</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/UI/DataTablePageInfo" data-name="lf::ui::datatablepageinfo">
+      <a href="../../../LF/UI/DataTablePageInfo.html">DataTablePageInfo</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/UI/DataTableSortDirection" data-name="lf::ui::datatablesortdirection">
+      <a href="../../../LF/UI/DataTableSortDirection.html">DataTableSortDirection</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/UI/MenuAlign" data-name="lf::ui::menualign">
+      <a href="../../../LF/UI/MenuAlign.html">MenuAlign</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/UI/SelectOption" data-name="lf::ui::selectoption">
+      <a href="../../../LF/UI/SelectOption.html">SelectOption</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/UI/Size" data-name="lf::ui::size">
+      <a href="../../../LF/UI/Size.html">Size</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/UI/TabsOrientation" data-name="lf::ui::tabsorientation">
+      <a href="../../../LF/UI/TabsOrientation.html">TabsOrientation</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/UI/Tone" data-name="lf::ui::tone">
+      <a href="../../../LF/UI/Tone.html">Tone</a>
+      
+    </li>
+  
+  <li class=" " data-id="Opal/LF/UI/TooltipPosition" data-name="lf::ui::tooltipposition">
+      <a href="../../../LF/UI/TooltipPosition.html">TooltipPosition</a>
+      
+    </li>
+  
+</ul>
+
+      
+    </li>
+  
+</ul>
+
+      
+    </li>
+  
+</ul>
+
+  </div>
+</div>
+
+
+<div class="main-content">
+<h1 class="type-name">
+
+  <span class="kind">
+    struct
+  </span> LF::<wbr>Data::<wbr>Query::<wbr>Rows(QueryShape)
+
+</h1>
+
+
+  <ul class="superclass-hierarchy"><li class="superclass"><a href="../../../LF/Data/Query/Rows.html">LF::Data::Query::Rows(QueryShape)</a></li><li class="superclass">Struct</li><li class="superclass">Value</li><li class="superclass">Object</li></ul>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2>
+    <a id="defined-in" class="anchor" href="#defined-in">
+  <svg class="octicon-link" aria-hidden="true">
+    <use href="#octicon-link"/>
+  </svg>
+</a>
+    Defined in:
+  </h2>
+  
+    
+      <a href="https://github.com/mikeoz32/opal/blob/codex/documentation-platform/src/opal/data/query/shape.cr#L49" target="_blank">
+        opal/data/query/shape.cr
+      </a>
+    
+    <br/>
+  
+
+
+
+
+
+  
+  <h2>
+    <a id="constructors" class="anchor" href="#constructors">
+  <svg class="octicon-link" aria-hidden="true">
+    <use href="#octicon-link"/>
+  </svg>
+</a>
+    Constructors
+  </h2>
+  <ul class="list-summary">
+    
+      <li class="entry-summary">
+        <a href="#new-class-method" class="signature"><strong>.new</strong></a>
+        
+      </li>
+    
+  </ul>
+
+
+  
+  <h2>
+    <a id="class-method-summary" class="anchor" href="#class-method-summary">
+  <svg class="octicon-link" aria-hidden="true">
+    <use href="#octicon-link"/>
+  </svg>
+</a>
+    Class Method Summary
+  </h2>
+  <ul class="list-summary">
+    
+      <li class="entry-summary">
+        <a href="#__lf_order_tokens-class-method" class="signature"><strong>.__lf_order_tokens</strong></a>
+        
+      </li>
+    
+      <li class="entry-summary">
+        <a href="#__lf_predicate_tokens-class-method" class="signature"><strong>.__lf_predicate_tokens</strong></a>
+        
+      </li>
+    
+  </ul>
+
+
+  
+
+  
+  <h2>
+    <a id="instance-method-summary" class="anchor" href="#instance-method-summary">
+  <svg class="octicon-link" aria-hidden="true">
+    <use href="#octicon-link"/>
+  </svg>
+</a>
+    Instance Method Summary
+  </h2>
+  <ul class="list-summary">
+    
+      <li class="entry-summary">
+        <a href="#initialize-instance-method" class="signature"><strong>#initialize</strong></a>
+        
+      </li>
+    
+  </ul>
+
+
+
+  <div class="methods-inherited">
+    
+      
+
+
+      
+
+
+      
+
+
+      
+
+
+    
+      
+
+
+      
+
+
+      
+
+
+      
+
+
+    
+      
+
+
+      
+
+
+      
+
+
+      
+
+
+    
+  </div>
+
+  
+  <h2>
+    <a id="constructor-detail" class="anchor" href="#constructor-detail">
+  <svg class="octicon-link" aria-hidden="true">
+    <use href="#octicon-link"/>
+  </svg>
+</a>
+    Constructor Detail
+  </h2>
+  
+    <div class="entry-detail" id="new-class-method">
+      <div class="signature">
+        
+        def self.<strong>new</strong>
+
+        <a class="method-permalink" href="#new-class-method">#</a>
+      </div>
+      
+      <br/>
+      <div>
+        
+          [<a href="https://github.com/mikeoz32/opal/blob/codex/documentation-platform/src/opal/data/query/shape.cr#L49" target="_blank">View source</a>]
+        
+      </div>
+    </div>
+  
+
+
+  
+  <h2>
+    <a id="class-method-detail" class="anchor" href="#class-method-detail">
+  <svg class="octicon-link" aria-hidden="true">
+    <use href="#octicon-link"/>
+  </svg>
+</a>
+    Class Method Detail
+  </h2>
+  
+    <div class="entry-detail" id="__lf_order_tokens-class-method">
+      <div class="signature">
+        
+        def self.<strong>__lf_order_tokens</strong>
+
+        <a class="method-permalink" href="#__lf_order_tokens-class-method">#</a>
+      </div>
+      
+      <br/>
+      <div>
+        
+          [<a href="https://github.com/mikeoz32/opal/blob/codex/documentation-platform/src/opal/data/query/shape.cr#L54" target="_blank">View source</a>]
+        
+      </div>
+    </div>
+  
+    <div class="entry-detail" id="__lf_predicate_tokens-class-method">
+      <div class="signature">
+        
+        def self.<strong>__lf_predicate_tokens</strong>
+
+        <a class="method-permalink" href="#__lf_predicate_tokens-class-method">#</a>
+      </div>
+      
+      <br/>
+      <div>
+        
+          [<a href="https://github.com/mikeoz32/opal/blob/codex/documentation-platform/src/opal/data/query/shape.cr#L50" target="_blank">View source</a>]
+        
+      </div>
+    </div>
+  
+
+
+  
+
+  
+  <h2>
+    <a id="instance-method-detail" class="anchor" href="#instance-method-detail">
+  <svg class="octicon-link" aria-hidden="true">
+    <use href="#octicon-link"/>
+  </svg>
+</a>
+    Instance Method Detail
+  </h2>
+  
+    <div class="entry-detail" id="initialize-instance-method">
+      <div class="signature">
+        
+        def <strong>initialize</strong>
+
+        <a class="method-permalink" href="#initialize-instance-method">#</a>
+      </div>
+      
+      <br/>
+      <div>
+        
+          [<a href="https://github.com/mikeoz32/opal/blob/codex/documentation-platform/src/opal/data/query/shape.cr#L49" target="_blank">View source</a>]
+        
+      </div>
+    </div>
+  
+
+
+
+</div>
+
+</body>
+</html>
