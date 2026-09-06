@@ -11,7 +11,7 @@ DI, policies, scopes, deadlines, and lifecycle.
 
 ## Current status
 
-Completed through the typed-client P1 slice:
+Completed through the RabbitMQ adapter unit-tested P1 slice:
 
 - application-wide `LF::ShutdownContext` and retry-safe extension quiescence;
 - quiesce-before-stop ordering with root DI preservation on drain failure;
@@ -39,9 +39,16 @@ Completed through the typed-client P1 slice:
   replies, settlement classification, and quiesce-before-close integration.
 - bounded fiber-safe RPC orchestration and an explicit typed service-client DSL
   with strict response validation and distinct failure categories.
+- an opt-in CloudAMQP-backed RabbitMQ adapter with deterministic bounded
+  topology, confirms, mandatory routing, manual settlement, retry/dead-letter
+  queues, exclusive reply generations, and no implicit RPC replay;
+- an injected broker-session contract covering adapter behavior without a live
+  broker, including topology, retry limits, reply correlation, reconnect, and
+  publication failure categories.
 
-Next: evaluate the current CloudAMQP Crystal client against the transport
-contract before selecting the RabbitMQ adapter implementation.
+Next: run the RabbitMQ 4 integration/conformance matrix, including broker
+restart and inequivalent topology declarations, in a Docker-capable
+environment before treating the adapter as release-ready.
 
 ## P0: Framework foundations
 
@@ -108,11 +115,14 @@ contract before selecting the RabbitMQ adapter implementation.
 
 ### 7. RabbitMQ AMQP 0-9-1 adapter
 
-- Evaluate the current CloudAMQP Crystal client against the conformance suite.
-- Implement deterministic queue/exchange/binding declarations.
-- Use publisher confirms, mandatory routing, manual ACK/NACK, bounded prefetch,
+- [x] Evaluate CloudAMQP `amqp-client` 1.3.4 against the transport contract.
+- [x] Implement deterministic queue/exchange/binding declarations.
+- [x] Use publisher confirms, mandatory routing, manual ACK/reject, bounded prefetch,
   exclusive reply queues, retry queues, and dead-letter queues.
-- Test RabbitMQ 4 startup, topology conflicts, broker restart, deleted reply
+- [x] Unit-test adapter lifecycle, topology, settlement, bounded retries,
+  publication failures, reply correlation, disconnect, and no-replay reconnect
+  through an injected broker session.
+- [ ] Test RabbitMQ 4 startup, topology conflicts, broker restart, deleted reply
   routes, unroutable calls, shutdown drain, and redelivery.
 
 ## P1: Data reliability

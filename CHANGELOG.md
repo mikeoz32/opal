@@ -34,6 +34,12 @@ All notable changes to Opal are documented in this file.
 - typed server-driven DataTable composition with keyed rows, sortable headers,
   selection and bulk actions, repository-agnostic page metadata, and explicit
   loading, empty, and error states.
+- opt-in transport-neutral microservice identities, strict Tori-compatible wire
+  envelopes, message-scoped controllers and policies, deterministic in-memory
+  transport, and bounded typed RPC clients;
+- opt-in RabbitMQ AMQP 0-9-1 transport with publisher confirms, mandatory
+  routing, manual settlement, bounded queues, finite retries, dead lettering,
+  and non-replaying reply-route generations.
 
 ### Changed
 

@@ -10,7 +10,14 @@ Requiring `opal` alone does not load message contracts or a broker adapter.
 The current API covers protocol configuration, identities, strict envelopes,
 transport value contracts, message policies, compile-time handler plans,
 message-scoped execution, typed RPC clients, and a deterministic in-memory
-transport.
+transport. The RabbitMQ adapter has its own opt-in entrypoint:
+
+```crystal
+require "opal/microservices/rabbitmq"
+```
+
+Neither `require "opal"` nor `require "opal/microservices"` loads the AMQP
+client.
 The complete compiling example is
 [`examples/microservices_foundations.cr`](../../examples/microservices_foundations.cr).
 
@@ -279,3 +286,75 @@ new reply-route generations without automatic replay. It is deterministic test
 infrastructure and provides no process or broker durability. Every future
 adapter must pass the shared transport conformance harness before it is treated
 as compatible.
+
+## Use RabbitMQ
+
+Add the broker connection and bounded-delivery policy to `application.yml`.
+Keep production credentials in a secret-managed configuration file selected by
+`OPAL_CONFIG`, rather than committing them:
+
+```yaml
+microservices:
+  rabbitmq:
+    url: amqp://guest:guest@127.0.0.1:5672
+    prefetch: 32
+    work_pool: 4
+    max_attempts: 3
+    max_queue_length: 10000
+    retry_delay_ms: 1000
+```
+
+The topology and broker settings are independent. Construct both from the same
+application configuration and pass the same profile to servers and clients:
+
+```crystal
+require "opal/microservices/rabbitmq"
+
+config = LF::ConfigService.new
+topology = LF::Microservices::TopologyConfig.from_config(config)
+profile = LF::Microservices::ProtocolProfile.new(topology: topology)
+codec = LF::Microservices::JSONCodec.new(profile)
+settings = LF::Microservices::RabbitMQ::Settings.from_config(config)
+
+server = LF::Microservices::RabbitMQ::ServerTransport.new(
+  service,
+  settings,
+  profile,
+)
+application = LF::ApplicationRuntime.new(root)
+application.install(
+  LF::Microservices::ServerRuntime.new(service, server, codec) do |context|
+    LF::Microservices.compile_executable_handlers(
+      service,
+      context,
+      CatalogMessages,
+    )
+  end
+)
+
+client_transport = LF::Microservices::RabbitMQ::ClientTransport.new(
+  settings,
+  profile,
+)
+client_transport.start
+rpc = LF::Microservices::RPCClient.new(client_transport, codec)
+catalog = CatalogClient.new(rpc)
+```
+
+The adapter declares durable bounded RPC and reliable-event queues,
+source-specific topic exchanges, per-method retry queues, and dead-letter
+queues. Ephemeral broadcasts and client reply routes use exclusive auto-delete
+queues. Publications use confirms; RPC requests, replies, and events use
+mandatory routing; consumers use bounded prefetch and manual settlement.
+
+`Retry` republishes to a TTL retry queue with an incremented broker-only
+`opal-attempt` header. The original delivery is acknowledged only after that
+publication is confirmed and routed. Once `max_attempts` is reached, the
+delivery is rejected without requeue and reaches its dead-letter queue. An
+accepted RPC is never replayed automatically: reconnect creates a new reply
+route and reports the prior pending correlation IDs as outcome-unknown.
+
+Call `application.shutdown` before closing outbound RPC clients. Shutdown first
+cancels consumer intake, waits for deliveries already handed to application
+fibers, and then closes the broker connection. Messages still waiting in a
+durable broker queue remain available to another replica.

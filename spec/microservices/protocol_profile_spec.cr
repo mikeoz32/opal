@@ -68,6 +68,9 @@ describe MS::TopologyConfig do
     expect_raises(MS::TopologyError, "127-byte") do
       MS::TopologyConfig.new(rpc_exchange: "a" * 128)
     end
+    expect_raises(MS::TopologyError, "127-byte") do
+      MS::TopologyConfig.new(retry_exchange_prefix: "a" * 128)
+    end
     expect_raises(MS::TopologyError, "reply token") do
       MS::TopologyConfig.new.reply_route("not-a-token")
     end

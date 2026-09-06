@@ -175,6 +175,33 @@ request.
 Broker headers are transport metadata. Application headers remain inside the
 JSON envelope and must not be implicitly merged with broker headers.
 
+The RabbitMQ adapter reserves the `opal-attempt` broker header. It is a positive
+32-bit integer, starts at `1` when absent, and is incremented only when a retry
+is republished. The adapter removes it before exposing delivery headers to
+application code.
+
+### RabbitMQ queue topology
+
+With the default profile, a `shop.catalog.v1` service and its `find` method use:
+
+| Resource | Name or binding |
+| --- | --- |
+| RPC exchange | `tori_py.rpc` |
+| RPC queue | `tori_py.rpc.shop.catalog.v1` |
+| RPC binding | `shop.catalog.v1.*` |
+| Retry exchange | `tori_py.retry` |
+| Method retry queue/key | `tori_py.rpc.shop.catalog.v1.retry.find` |
+| Dead-letter exchange | `tori_py.dead-letter` |
+| RPC dead-letter queue | `tori_py.rpc.shop.catalog.v1.dead` |
+
+Primary and retry queues use `x-max-length` with `reject-publish`; retry queues
+also use `x-message-ttl` and dead-letter back to the original exchange and
+routing key. Primary queues dead-letter terminal rejections. Reliable event
+subscriptions use the same bounded retry/dead-letter pattern. Queue declaration
+arguments are part of the deployment contract: changing them for an existing
+queue requires an explicit RabbitMQ migration rather than silently accepting a
+precondition failure.
+
 ## Golden compatibility vectors
 
 The canonical fixtures live in `spec/fixtures/microservices/wire-v1/`. They were

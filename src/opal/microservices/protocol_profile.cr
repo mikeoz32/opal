@@ -29,7 +29,7 @@ module LF::Microservices
       validate_prefix(event_queue_prefix, "event queue prefix")
       validate_prefix(reply_queue_prefix, "reply queue prefix")
       validate_exchange(dead_letter_exchange, "dead-letter exchange")
-      validate_prefix(retry_exchange_prefix, "retry exchange prefix")
+      validate_exchange(retry_exchange_prefix, "retry exchange")
     end
 
     def self.from_config(config : LF::ConfigService, prefix : String = "microservices.topology") : self

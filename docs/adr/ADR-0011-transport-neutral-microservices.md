@@ -35,8 +35,9 @@ register message infrastructure automatically.
 - `opal` owns generic application lifecycle, DI, execution policies, and Data.
 - `opal/microservices` owns transport-neutral RPC and event semantics, handler
   compilation, codecs, clients, and an in-memory transport.
-- a RabbitMQ adapter is distributed separately so the base Opal shard does not
-  acquire an AMQP dependency.
+- `opal/microservices/rabbitmq` owns the RabbitMQ adapter behind an explicit
+  entrypoint; the AMQP client is a shard dependency but is not loaded into
+  executables that require only `opal` or `opal/microservices`.
 - a future RabbitMQ Streams adapter may use Crabbit for event streams, but it is
   not a substitute for the AMQP 0-9-1 queues and exchanges required by RPC.
 
