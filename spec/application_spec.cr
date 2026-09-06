@@ -72,6 +72,34 @@ class ApplicationSpecExtension
   end
 end
 
+class ApplicationSpecQuiescingExtension
+  include LF::ApplicationExtension
+
+  property can_quiesce = true
+  getter quiesce_calls = 0
+  getter stop_calls = 0
+  getter deadline : Time::Instant?
+
+  def initialize(@name : String, @trace : Array(String))
+  end
+
+  def configure(context : LF::ApplicationContext) : Nil
+    @trace << "configure:#{@name}"
+  end
+
+  def quiesce(context : LF::ShutdownContext) : Nil
+    @quiesce_calls += 1
+    @deadline = context.deadline
+    @trace << "quiesce:#{@name}"
+    raise "#{@name} intake is still active" unless @can_quiesce
+  end
+
+  def stop : Nil
+    @stop_calls += 1
+    @trace << "stop:#{@name}"
+  end
+end
+
 class ApplicationSpecLifecycleExtension
   include LF::ApplicationExtension
 
@@ -314,6 +342,59 @@ describe LF::ApplicationRuntime do
     ApplicationSpecShutdownProbe.destroy_calls.should eq(1)
   end
 
+  it "quiesces every extension before stopping any extension" do
+    trace = [] of String
+    application = ApplicationSpecApp.bootstrap
+    first = ApplicationSpecQuiescingExtension.new("first", trace)
+    second = ApplicationSpecQuiescingExtension.new("second", trace)
+    application.install(first)
+    application.install(second)
+
+    application.shutdown(1.second)
+
+    trace.should eq([
+      "configure:first",
+      "configure:second",
+      "quiesce:second",
+      "quiesce:first",
+      "stop:second",
+      "stop:first",
+    ])
+    first.deadline.should eq(second.deadline)
+    first.quiesce_calls.should eq(1)
+    second.quiesce_calls.should eq(1)
+  end
+
+  it "keeps extensions and root DI alive when quiescing fails" do
+    ApplicationSpecShutdownProbe.reset
+    trace = [] of String
+    application = ApplicationSpecApp.bootstrap
+    extension = ApplicationSpecQuiescingExtension.new("messages", trace)
+    extension.can_quiesce = false
+    application.install(extension)
+    application.resolve(ApplicationSpecShutdownProbe)
+
+    error = expect_raises(LF::ApplicationRuntime::ShutdownError) do
+      application.shutdown(1.second)
+    end
+
+    error.extension_errors.size.should eq(1)
+    error.extension_errors.first.message.should eq("messages intake is still active")
+    extension.quiesce_calls.should eq(1)
+    extension.stop_calls.should eq(0)
+    application.shutdown_pending?.should be_true
+    application.closed?.should be_false
+    ApplicationSpecShutdownProbe.destroy_calls.should eq(0)
+
+    extension.can_quiesce = true
+    application.shutdown(1.second)
+
+    extension.quiesce_calls.should eq(2)
+    extension.stop_calls.should eq(1)
+    application.closed?.should be_true
+    ApplicationSpecShutdownProbe.destroy_calls.should eq(1)
+  end
+
   it "continues extension and DI shutdown after an extension fails" do
     ApplicationSpecShutdownProbe.reset
     trace = [] of String
@@ -453,6 +534,18 @@ describe LF::ApplicationRuntime do
     expect_raises(LF::ApplicationRuntime::AlreadyClosedError) do
       application.shutdown
     end
+  end
+
+  it "rejects a non-positive shutdown timeout without starting shutdown" do
+    application = ApplicationSpecApp.bootstrap
+
+    expect_raises(ArgumentError, "shutdown timeout must be positive") do
+      application.shutdown(0.seconds)
+    end
+
+    application.shutdown_pending?.should be_false
+    application.closed?.should be_false
+    application.shutdown
   end
 
   it "returns the run block result and shuts down" do

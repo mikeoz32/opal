@@ -392,7 +392,7 @@ module LF::HTTP::AutoConfig
       @stop_lock.synchronize { @stop_started }
     end
 
-    def stop : Nil
+    def quiesce(context : LF::ShutdownContext) : Nil
       loop do
         owner = false
         wait : Channel(Nil)? = nil
@@ -432,12 +432,13 @@ module LF::HTTP::AutoConfig
         if owner
           attempt_error : Exception? = nil
           begin
-            deadline = Time.instant + @configured_drain_timeout
+            configured_deadline = Time.instant + @configured_drain_timeout
+            deadline = configured_deadline < context.deadline ? configured_deadline : context.deadline
             current_server = @server
             current_server.try(&.close) unless current_server.try(&.closed?)
             websocket_budget_ms = Math.min(
               @websocket_shutdown_timeout_ms.to_i64,
-              @configured_drain_timeout.total_milliseconds.to_i64
+              Math.max((deadline - Time.instant).total_milliseconds.to_i64, 0_i64)
             ).to_i
             @websocket_connections.shutdown(websocket_budget_ms)
             if requests = @requests
@@ -463,6 +464,12 @@ module LF::HTTP::AutoConfig
           return
         end
       end
+    end
+
+    # Preserve direct extension shutdown for standalone users. ApplicationRuntime
+    # calls `quiesce` first and this becomes an idempotent compatibility path.
+    def stop : Nil
+      quiesce(LF::ShutdownContext.new(Time.instant + @configured_drain_timeout))
     end
 
     private def server : ::HTTP::Server

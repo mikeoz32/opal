@@ -1,6 +1,7 @@
 require "./opal/di"
 require "./opal/config_service"
 require "./opal/application"
+require "./opal/execution"
 require "./opal/http/app"
 require "./opal/http/controller"
 require "./opal/http/websocket_request"
