@@ -22,6 +22,7 @@ module MicroservicesTransportConformance
           server.status.running?.should be_true
           client.status.running?.should be_true
           client.generation.should eq(1)
+          client.next_reply?.should be_nil
 
           server.stop_intake
           server.status.quiescing?.should be_true

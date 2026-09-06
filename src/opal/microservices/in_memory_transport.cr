@@ -465,11 +465,12 @@ module LF::Microservices
       end
     end
 
-    def next_reply : EncodedDelivery | ReplyProtocolFailure
+    def next_reply? : EncodedDelivery | ReplyProtocolFailure | Nil
       delivery = @lock.synchronize do
-        require_running("next_reply")
-        @replies.shift? || raise TransportUnavailableError.new("no reply is available")
+        require_running("next_reply?")
+        @replies.shift?
       end
+      return nil unless delivery
       correlation_id = delivery.correlation_id
       unless correlation_id
         raise TransportCorrelationError.new("reply delivery has no correlation_id")

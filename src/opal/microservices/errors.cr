@@ -83,4 +83,57 @@ module LF::Microservices
 
   class DuplicateSettlementError < TransportError
   end
+
+  abstract class RPCClientError < Error
+    getter target : RPCTarget
+    getter correlation_id : UUID
+
+    def initialize(
+      message : String,
+      @target : RPCTarget,
+      @correlation_id : UUID,
+      cause : Exception? = nil,
+    )
+      super(message, cause)
+    end
+  end
+
+  class RPCRejectedError < RPCClientError
+  end
+
+  class RPCTimeoutError < RPCClientError
+  end
+
+  class RPCTransportError < RPCClientError
+  end
+
+  class RPCOutcomeUnknownError < RPCClientError
+  end
+
+  class RPCProtocolError < RPCClientError
+  end
+
+  class RPCRemoteError < RPCClientError
+    getter remote_error : RemoteRPCErrorData
+
+    def initialize(
+      @remote_error : RemoteRPCErrorData,
+      target : RPCTarget,
+      correlation_id : UUID,
+    )
+      super(remote_error.message, target, correlation_id)
+    end
+
+    def code : String
+      remote_error.code
+    end
+
+    def retryable? : Bool
+      remote_error.retryable
+    end
+
+    def details : Hash(String, JSON::Any)
+      remote_error.details
+    end
+  end
 end

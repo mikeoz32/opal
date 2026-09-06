@@ -151,6 +151,17 @@ The client distinguishes:
 Opal does not automatically retry accepted or outcome-unknown RPC calls. A
 timeout or disconnected caller does not prove remote rollback.
 
+An adapter must raise `TransportIndeterminateError` when publication failed but
+it cannot prove that the broker did not accept the request. Other publication
+errors are treated as pre-acceptance transport failures or explicit broker
+rejections according to their concrete type.
+
+Application-owned typed clients declare a fixed service identity and RPC
+methods through `TypedServiceClient`. `RPCClient` builds and validates the wire
+envelopes, enforces both transport and framework pending bounds, and maps each
+failure category to a distinct exception carrying the target and correlation
+ID.
+
 ### RabbitMQ AMQP topology
 
 The initial RabbitMQ adapter targets AMQP 0-9-1 and uses publisher confirms,

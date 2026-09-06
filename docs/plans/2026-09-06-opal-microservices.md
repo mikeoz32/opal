@@ -11,7 +11,7 @@ DI, policies, scopes, deadlines, and lifecycle.
 
 ## Current status
 
-Completed in the initial P0 slice:
+Completed through the typed-client P1 slice:
 
 - application-wide `LF::ShutdownContext` and retry-safe extension quiescence;
 - quiesce-before-stop ordering with root DI preservation on drain failure;
@@ -37,9 +37,11 @@ Completed in the initial P0 slice:
   backpressure, settlement, retries, replies, events, drain, and reconnect;
 - an application `ServerRuntime` that owns handler dispatch, sanitized RPC
   replies, settlement classification, and quiesce-before-close integration.
+- bounded fiber-safe RPC orchestration and an explicit typed service-client DSL
+  with strict response validation and distinct failure categories.
 
-Next: add the typed RPC client contract on top of the verified transport and
-wire layers.
+Next: evaluate the current CloudAMQP Crystal client against the transport
+contract before selecting the RabbitMQ adapter implementation.
 
 ## P0: Framework foundations
 
@@ -97,12 +99,12 @@ wire layers.
 
 ### 6. Typed service clients
 
-- Generate typed clients from explicit Crystal contract declarations.
-- Enforce request/response types, finite deadlines, correlation IDs, and bounded
-  pending requests.
-- Distinguish rejection, timeout, remote public error, transport failure, and
-  outcome-unknown failure.
-- Never retry accepted requests automatically.
+- [x] Generate typed clients from explicit Crystal contract declarations.
+- [x] Enforce request/response types, finite deadlines, correlation IDs, and
+  bounded pending requests.
+- [x] Distinguish rejection, timeout, remote public error, transport failure,
+  and outcome-unknown failure.
+- [x] Never retry accepted requests automatically.
 
 ### 7. RabbitMQ AMQP 0-9-1 adapter
 

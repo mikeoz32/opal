@@ -226,7 +226,14 @@ module LF::Microservices
     abstract def start(receive_replies : Bool = true) : Nil
     abstract def publish_rpc(target : RPCTarget, publication : Publication) : PublicationReceipt
     abstract def publish_event(identity : EventIdentity, publication : Publication) : PublicationReceipt
-    abstract def next_reply : EncodedDelivery | ReplyProtocolFailure
+    # Returns one locally buffered reply without blocking, or nil when no reply
+    # is currently available. Broker disconnection is an error, not nil.
+    abstract def next_reply? : EncodedDelivery | ReplyProtocolFailure | Nil
+
+    def next_reply : EncodedDelivery | ReplyProtocolFailure
+      next_reply? || raise TransportUnavailableError.new("no reply is available")
+    end
+
     abstract def cancel_pending(correlation_id : UUID) : Nil
     # Replaces transport-owned ephemeral reply state and returns accepted RPC
     # correlations whose outcomes can no longer be observed. Implementations

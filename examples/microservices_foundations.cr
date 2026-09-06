@@ -58,6 +58,13 @@ class CatalogMessages
   end
 end
 
+class CatalogClient
+  include MS::TypedServiceClient
+
+  service "shop", "catalog", 1
+  rpc find, FindProduct, ProductAvailability, "find", 1
+end
+
 topology = MS::TopologyConfig.new(
   rpc_exchange: "company.rpc",
   rpc_queue_prefix: "company.rpc.queue",
@@ -84,43 +91,27 @@ runtime = application.install(
 )
 client = MS::InMemoryClientTransport.new(broker, topology)
 client.start
-
-created_at = MS.utc_now
-request = MS::RPCRequestEnvelope.new(
-  message_id: UUID.random,
-  service: service,
-  method: "find",
-  schema_version: 1,
-  created_at: created_at,
-  deadline_at: created_at + 5.seconds,
-  correlation_id: UUID.random,
-  reply_to: client.reply_to,
+rpc = MS::RPCClient.new(client, codec)
+catalog = CatalogClient.new(rpc)
+spawn do
+  loop do
+    if server.pending_count > 0
+      server.dispatch_one
+      break
+    end
+    Fiber.yield
+  end
+end
+result = catalog.find(
+  FindProduct.new("opal-1"),
+  timeout: 5.seconds,
   headers: {"tenant" => JSON::Any.new("acme")},
-  payload: JSON.parse(FindProduct.new("opal-1").to_json),
 )
-
-wire = codec.encode_request(request)
-decoded = codec.decode_request(wire)
-target = MS::RPCTarget.new(service, request.method, request.schema_version)
-publication = MS::Publication.new(
-  request.message_id,
-  target.routing_key,
-  wire,
-  mandatory: true,
-  correlation_id: request.correlation_id,
-  reply_to: request.reply_to,
-  expires_at: request.deadline_at,
-  content_type: codec.profile.rpc_content_type,
-)
-client.publish_rpc(target, publication)
-server.dispatch_one
-response = codec.decode_response(client.next_reply.as(MS::EncodedDelivery).body)
 
 puts "RPC exchange: #{topology.rpc_exchange}"
 puts "RPC queue: #{topology.rpc_queue(service)}"
 puts "Compiled RPC handlers: #{runtime.registry.rpc_handlers.size}"
-puts "Decoded payload: #{decoded.payload.to_json}"
-puts "Handler result: #{response.result.not_nil!.to_json}"
+puts "Typed handler result: #{result.to_json}"
 
-client.close
 application.shutdown
+rpc.close
