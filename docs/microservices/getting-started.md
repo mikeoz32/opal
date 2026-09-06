@@ -234,6 +234,91 @@ The client never republishes an accepted request automatically. `reconnect`
 creates a fresh reply generation and completes affected calls as
 `RPCOutcomeUnknownError`.
 
+## Autoconfigure a RabbitMQ application
+
+The recommended application path composes the service runtime and typed clients
+from one explicit annotation:
+
+```crystal
+require "opal/autoconfig/microservices/rabbitmq"
+
+@[LF::Application]
+@[LF::AutoConfig::Microservices(
+  namespace: "shop",
+  service: "catalog",
+  contract_version: 1,
+  controllers: [CatalogMessages],
+  clients: [CatalogClient],
+)]
+class CatalogApplication
+end
+
+CatalogApplication.run_microservice
+```
+
+`controllers` and `clients` are closed compile-time lists. The extension
+creates the service identity, protocol profile, codec, server/client transports,
+handler registry, and shared `RPCClient`; registers every typed client as a
+singleton DI bean; and participates in application quiesce and shutdown.
+
+The corresponding configuration is:
+
+```yaml
+microservices:
+  transport: rabbitmq
+  instance_id: catalog-a
+
+  rabbitmq:
+    url: amqp://opal:opal@127.0.0.1:5673/opal_test
+    prefetch: 32
+    work_pool: 4
+    max_attempts: 3
+    max_queue_length: 10000
+    retry_delay_ms: 1000
+
+  client:
+    max_pending: 1024
+    max_replies: 1024
+```
+
+Run the complete example with an explicit configuration file:
+
+```bash
+OPAL_CONFIG=examples/microservices_autoconfig.yml \
+  crystal run examples/microservices_autoconfig.cr
+```
+
+Omit `clients` when the service makes no outbound RPC calls. An outbound-only
+HTTP gateway does not need a fake local service identity:
+
+```crystal
+@[LF::Application]
+@[LF::AutoConfig::HTTP]
+@[LF::AutoConfig::Microservices(clients: [CatalogClient])]
+class GatewayApplication
+end
+
+GatewayApplication.run_http
+```
+
+The Microservices extension is installed during the normal application
+bootstrap, so HTTP, Data, and messaging share one DI container and one ordered
+shutdown. Use `bootstrap_microservice` when a custom process loop needs to
+resolve clients directly:
+
+```crystal
+runtime = GatewayApplication.bootstrap_microservice
+begin
+  catalog = runtime.resolve(CatalogClient)
+  # Run the custom process loop.
+ensure
+  runtime.shutdown unless runtime.closed?
+end
+```
+
+The manual transports below remain the escape hatch for custom connections,
+session factories, or lifecycle ownership.
+
 ## Use the in-memory transport
 
 `InMemoryBroker`, `InMemoryServerTransport`, and `InMemoryClientTransport`

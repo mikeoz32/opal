@@ -74,7 +74,9 @@ Opal exposes nine independent layers:
 9. `require "opal/microservices"` and `require "opal/microservices/rabbitmq"`
    Optional message controllers and policies, typed RPC clients,
    Tori-compatible contracts, deterministic in-memory testing, and a
-   RabbitMQ AMQP 0-9-1 adapter.
+   RabbitMQ AMQP 0-9-1 adapter. The
+   `opal/autoconfig/microservices/rabbitmq` entrypoint composes controllers and
+   injectable typed clients from an application annotation.
 
 ## Basic Router
 

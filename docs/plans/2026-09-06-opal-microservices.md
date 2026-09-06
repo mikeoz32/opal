@@ -45,6 +45,9 @@ Completed through the RabbitMQ adapter unit-tested P1 slice:
 - an injected broker-session contract covering adapter behavior without a live
   broker, including topology, retry limits, reply correlation, reconnect, and
   publication failure categories.
+- application autoconfiguration that derives the local runtime from explicit
+  controller/client lists, registers typed clients in DI, supports outbound-only
+  gateways, and owns signal-driven message-process shutdown.
 
 Next: run the RabbitMQ 4 integration/conformance matrix, including broker
 restart and inequivalent topology declarations, in a Docker-capable

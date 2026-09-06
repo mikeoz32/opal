@@ -1,0 +1,15 @@
+microservices:
+  transport: rabbitmq
+  instance_id: catalog-a
+
+  rabbitmq:
+    url: amqp://opal:opal@127.0.0.1:5673/opal_test
+    prefetch: 32
+    work_pool: 4
+    max_attempts: 3
+    max_queue_length: 10000
+    retry_delay_ms: 1000
+
+  client:
+    max_pending: 1024
+    max_replies: 1024

@@ -40,6 +40,9 @@ All notable changes to Opal are documented in this file.
 - opt-in RabbitMQ AMQP 0-9-1 transport with publisher confirms, mandatory
   routing, manual settlement, bounded queues, finite retries, dead lettering,
   and non-replaying reply-route generations.
+- RabbitMQ application autoconfiguration with explicit controller/client lists,
+  injectable typed RPC clients, outbound-only gateway support, and a
+  signal-aware message-process runner.
 
 ### Changed
 
