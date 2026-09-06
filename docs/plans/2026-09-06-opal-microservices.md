@@ -122,8 +122,11 @@ environment before treating the adapter as release-ready.
 - [x] Unit-test adapter lifecycle, topology, settlement, bounded retries,
   publication failures, reply correlation, disconnect, and no-replay reconnect
   through an injected broker session.
-- [ ] Test RabbitMQ 4 startup, topology conflicts, broker restart, deleted reply
-  routes, unroutable calls, shutdown drain, and redelivery.
+- [x] Add a pinned RabbitMQ 4 Compose environment and opt-in live specs for
+  startup, RPC round trips, retry, topology conflicts, deleted reply routes,
+  and unroutable calls.
+- [ ] Execute the live suite in a Docker-capable environment and add the
+  orchestrated broker-restart and shutdown-drain cases.
 
 ## P1: Data reliability
 

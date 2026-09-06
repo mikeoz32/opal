@@ -186,6 +186,9 @@ module LF::Microservices::RabbitMQ
       unless status.in?(TransportStatus::Running, TransportStatus::Quiescing)
         raise TransportStateError.new("publish_reply is invalid while transport is #{status}")
       end
+      unless publication.mandatory
+        raise TransportRejectedError.new("RabbitMQ replies require mandatory routing")
+      end
       publish_confirmed("", publication, persistent: false)
     end
 
@@ -555,6 +558,9 @@ module LF::Microservices::RabbitMQ
       correlation_id = publication.correlation_id || raise TransportRejectedError.new(
         "RPC publication requires correlation_id"
       )
+      unless publication.mandatory
+        raise TransportRejectedError.new("RPC publication requires mandatory routing")
+      end
       unless publication.reply_to == reply_to
         raise TransportRejectedError.new("RPC publication reply_to does not match client route")
       end
@@ -588,8 +594,14 @@ module LF::Microservices::RabbitMQ
       unless publication.routing_key == identity.routing_key
         raise TransportRejectedError.new("event publication routing key does not match identity")
       end
+      exchange = profile.topology.event_exchange(identity.source)
+      begin
+        current_session.declare_exchange(exchange, "topic", durable: true)
+      rescue error : Exception
+        raise TransportUnavailableError.new("RabbitMQ event exchange is unavailable", error)
+      end
       publish_confirmed(
-        profile.topology.event_exchange(identity.source),
+        exchange,
         publication,
         persistent: true,
       )
@@ -664,6 +676,7 @@ module LF::Microservices::RabbitMQ
         # Calls already accepted by this generation are resolved by explicit
         # reconnect as outcome-unknown; no implicit replay occurs here.
       end
+      created_session.declare_exchange(profile.topology.rpc_exchange, "topic", durable: true)
       consumer_tag = setup_reply_consumer(created_session) if @receive_replies
       @lock.synchronize do
         @session = created_session

@@ -429,6 +429,37 @@ describe RMQ::ServerTransport do
   ensure
     server.try(&.close)
   end
+
+  it "requires mandatory routing for transient replies" do
+    session = RabbitFakeSession.new
+    server = RMQ::ServerTransport.new(
+      rabbit_service,
+      rabbit_settings,
+      session_factory: rabbit_factory(session),
+    )
+    server.prepare([] of String, [] of MS::EventSubscription)
+    server.start(->(_delivery : MS::EncodedDelivery) { MS::SettlementRecommendation::Ack })
+    route = MS::ReplyRoute.generate
+
+    expect_raises(MS::TransportRejectedError, "mandatory routing") do
+      server.publish_reply(MS::Publication.new(UUID.random, route.value, Bytes[1]))
+    end
+
+    publication = MS::Publication.new(
+      UUID.random,
+      route.value,
+      Bytes[1],
+      mandatory: true,
+      correlation_id: UUID.random,
+    )
+    server.publish_reply(publication)
+    exchange, recorded, persistent = session.publications.last
+    exchange.should eq("")
+    recorded.message_id.should eq(publication.message_id)
+    persistent.should be_false
+  ensure
+    server.try(&.close)
+  end
 end
 
 describe RMQ::ClientTransport do
@@ -450,12 +481,38 @@ describe RMQ::ClientTransport do
     reply_options.exclusive.should be_true
     reply_options.auto_delete.should be_true
     reply_options.max_length.should eq(5)
+    session.exchanges.should contain({"tori_py.rpc", "topic", true})
     exchange, recorded, persistent = session.publications.first
     exchange.should eq("tori_py.rpc")
     recorded.message_id.should eq(publication.message_id)
     persistent.should be_true
     receipt.routed.should be_true
     client.pending_count.should eq(1)
+  ensure
+    client.try(&.close)
+  end
+
+  it "declares source event exchanges for outbound-only clients" do
+    session = RabbitFakeSession.new
+    client = RMQ::ClientTransport.new(
+      rabbit_settings,
+      session_factory: rabbit_factory(session),
+    )
+    client.start(receive_replies: false)
+    source = MS::ServiceIdentity.new("warehouse", "inventory", 1)
+    event = MS::EventIdentity.new(source, "stock-changed", 1)
+    publication = MS::Publication.new(
+      UUID.random,
+      event.routing_key,
+      Bytes[1],
+      mandatory: true,
+    )
+
+    client.publish_event(event, publication)
+
+    exchange = "tori_py.events.warehouse.inventory.v1"
+    session.exchanges.should contain({exchange, "topic", true})
+    session.publications.last[0].should eq(exchange)
   ensure
     client.try(&.close)
   end
@@ -477,6 +534,17 @@ describe RMQ::ClientTransport do
     )
     expect_raises(MS::TransportRejectedError, "routing key") do
       client.publish_rpc(rabbit_target, mismatched)
+    end
+
+    non_mandatory = MS::Publication.new(
+      UUID.random,
+      rabbit_target.routing_key,
+      Bytes[1],
+      correlation_id: UUID.random,
+      reply_to: client.reply_to,
+    )
+    expect_raises(MS::TransportRejectedError, "mandatory routing") do
+      client.publish_rpc(rabbit_target, non_mandatory)
     end
 
     session.enqueue_publish_result(false, true)

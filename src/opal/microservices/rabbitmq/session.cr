@@ -171,6 +171,7 @@ module LF::Microservices::RabbitMQ
     @topology : AMQP::Client::Channel
     @consumer : AMQP::Client::Channel
     @publisher : AMQP::Client::Channel
+    @topology_lock = Mutex.new
     @publish_lock = Mutex.new
     @returns_lock = Mutex.new
     @returned = Set(String).new
@@ -197,35 +198,41 @@ module LF::Microservices::RabbitMQ
     end
 
     def declare_exchange(name : String, type : String, durable : Bool = true) : Nil
-      @topology.exchange_declare(name, type, durable: durable)
+      @topology_lock.synchronize do
+        @topology.exchange_declare(name, type, durable: durable)
+      end
     end
 
     def declare_queue(name : String, options : QueueOptions) : String
-      arguments = {} of String => AMQ::Protocol::Field
-      if exchange = options.dead_letter_exchange
-        arguments["x-dead-letter-exchange"] = exchange
+      @topology_lock.synchronize do
+        arguments = {} of String => AMQ::Protocol::Field
+        if exchange = options.dead_letter_exchange
+          arguments["x-dead-letter-exchange"] = exchange
+        end
+        if routing_key = options.dead_letter_routing_key
+          arguments["x-dead-letter-routing-key"] = routing_key
+        end
+        if ttl = options.message_ttl
+          arguments["x-message-ttl"] = ttl.total_milliseconds.ceil.to_i64
+        end
+        if max_length = options.max_length
+          arguments["x-max-length"] = max_length
+          arguments["x-overflow"] = "reject-publish"
+        end
+        @topology.queue_declare(
+          name,
+          durable: options.durable,
+          exclusive: options.exclusive,
+          auto_delete: options.auto_delete,
+          args: AMQP::Client::Arguments.new(arguments),
+        )[:queue_name]
       end
-      if routing_key = options.dead_letter_routing_key
-        arguments["x-dead-letter-routing-key"] = routing_key
-      end
-      if ttl = options.message_ttl
-        arguments["x-message-ttl"] = ttl.total_milliseconds.ceil.to_i64
-      end
-      if max_length = options.max_length
-        arguments["x-max-length"] = max_length
-        arguments["x-overflow"] = "reject-publish"
-      end
-      @topology.queue_declare(
-        name,
-        durable: options.durable,
-        exclusive: options.exclusive,
-        auto_delete: options.auto_delete,
-        args: AMQP::Client::Arguments.new(arguments),
-      )[:queue_name]
     end
 
     def bind_queue(queue : String, exchange : String, routing_key : String) : Nil
-      @topology.queue_bind(queue, exchange, routing_key)
+      @topology_lock.synchronize do
+        @topology.queue_bind(queue, exchange, routing_key)
+      end
     end
 
     def consume(

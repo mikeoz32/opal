@@ -344,8 +344,9 @@ catalog = CatalogClient.new(rpc)
 The adapter declares durable bounded RPC and reliable-event queues,
 source-specific topic exchanges, per-method retry queues, and dead-letter
 queues. Ephemeral broadcasts and client reply routes use exclusive auto-delete
-queues. Publications use confirms; RPC requests, replies, and events use
-mandatory routing; consumers use bounded prefetch and manual settlement.
+queues. Publications use confirms; RPC requests and replies require mandatory
+routing; consumers use bounded prefetch and manual settlement. Event
+publications honor their explicit `mandatory` setting.
 
 `Retry` republishes to a TTL retry queue with an incremented broker-only
 `opal-attempt` header. The original delivery is acknowledged only after that
@@ -358,3 +359,6 @@ Call `application.shutdown` before closing outbound RPC clients. Shutdown first
 cancels consumer intake, waits for deliveries already handed to application
 fibers, and then closes the broker connection. Messages still waiting in a
 durable broker queue remain available to another replica.
+
+Real-broker verification uses the pinned RabbitMQ 4 Compose environment and
+commands in [`integration/rabbitmq/README.md`](../../integration/rabbitmq/README.md).
