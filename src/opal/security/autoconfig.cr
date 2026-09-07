@@ -4,6 +4,9 @@ require "./authentication"
 require "./http"
 
 module LF::AutoConfig
+  # Enables the authentication middleware extension on an `LF::Application`.
+  # Register `security_authenticator` to authenticate credentials; without it,
+  # requests remain anonymous until guards enforce authentication.
   annotation Security
   end
 end

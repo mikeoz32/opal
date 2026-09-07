@@ -2,12 +2,20 @@ require "./di"
 require "./config_service"
 
 module LF
+  # Marks the single application class in an executable. The optional integer
+  # `priority` controls where its bean-provider methods sit relative to
+  # `ApplicationConfiguration` providers.
   annotation Application
   end
 
+  # Marks an additional zero-argument bean provider for an application. Its
+  # optional integer `priority` orders provider registration from high to low.
   annotation ApplicationConfiguration
   end
 
+  # Declares a concrete `ApplicationExtension` as generated autoconfiguration.
+  # `enabled_by` is the marker annotation applications opt into; the optional
+  # integer `priority` orders extension installation from high to low.
   annotation ApplicationAutoConfiguration
   end
 

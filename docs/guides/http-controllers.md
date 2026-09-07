@@ -7,14 +7,7 @@ and serializes an action result.
 ## Route and input binding
 
 ```crystal
-class ProjectsApi
-  include LF::HTTP::Controller
-
-  @[LF::HTTP::Controller::Get("/projects/:id")]
-  def show(id : UUID, request : HTTP::Request)
-    {id: id, request_id: request.headers["X-Request-Id"]?}
-  end
-end
+--8<-- "examples/documentation/http_controllers_guide.cr:binding"
 ```
 
 Supported scalar path/query types and one `JSON::Serializable` body are bound
@@ -28,19 +21,12 @@ where they apply; a separate policy holder is not required for controller-level
 policy.
 
 ```crystal
-@[LF::HTTP::UseGuards(AuthenticatedGuard)]
-@[LF::HTTP::UseInterceptors(RequestTiming)]
-class ProjectsApi
-  include LF::HTTP::Controller
-
-  @[LF::HTTP::Controller::Post("/projects")]
-  @[LF::HTTP::UsePipes(TrimStrings)]
-  @[LF::HTTP::UseFilters(ApiErrorFilter)]
-  def create(payload : CreateProject)
-    # ...
-  end
-end
+--8<-- "examples/documentation/http_controllers_guide.cr:policies"
 ```
+
+This complete example registers every policy as a generated DI service. The
+`name` action argument comes from the query string, its parameter-level pipe
+trims it, and the returned `ProjectView` is serialized as JSON.
 
 The execution order is global → controller → action → parameter. Guards run
 before request binding. Interceptors wrap the action and unwind in reverse.

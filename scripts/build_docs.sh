@@ -5,11 +5,16 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 build_dir="${root}/build/docs"
 site_dir="${build_dir}/site"
 docs_ref="${OPAL_DOCS_REF:-$(git symbolic-ref --quiet --short HEAD 2>/dev/null || git rev-parse HEAD)}"
+docs_python="${OPAL_DOCS_PYTHON:-${root}/.venv-docs/bin/python}"
 
 cd "${root}"
 
-if ! python3 -c 'import mkdocs' >/dev/null 2>&1; then
-  echo "mkdocs is not installed. Create .venv-docs and install requirements-docs.txt first." >&2
+if [ ! -x "${docs_python}" ]; then
+  docs_python="python3"
+fi
+
+if ! "${docs_python}" -c 'import mkdocs' >/dev/null 2>&1; then
+  echo "mkdocs is not installed. Run scripts/setup_docs.sh first." >&2
   exit 1
 fi
 
@@ -20,7 +25,7 @@ fi
 rm -rf "${build_dir}"
 mkdir -p "${site_dir}"
 
-python3 -m mkdocs build --clean --config-file "${root}/mkdocs.yml"
+"${docs_python}" -m mkdocs build --clean --config-file "${root}/mkdocs.yml"
 crystal docs \
   --output "${site_dir}/api" \
   --project-name Opal \

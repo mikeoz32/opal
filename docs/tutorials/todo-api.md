@@ -10,10 +10,7 @@ The application owns its concrete driver. For SQLite, add `sqlite3` to the
 application shard and require it next to the selected Opal dialect:
 
 ```crystal
-require "opal"
-require "opal/data"
-require "opal/data/dialects/sqlite"
-require "sqlite3"
+--8<-- "examples/documentation/todo_data.cr:imports"
 ```
 
 For PostgreSQL, use `pg` and `opal/data/dialects/postgresql` instead. The Data
@@ -26,23 +23,7 @@ compile time and produce the model needed by queries, inserts, updates, and
 schema tools.
 
 ```crystal
-@[LF::Data::Table("todos")]
-class Todo
-  include LF::Data::Entity
-
-  @[LF::Data::Id]
-  @[LF::Data::GeneratedValue]
-  property id : Int64?
-
-  @[LF::Data::Column]
-  property title : String
-
-  @[LF::Data::Version]
-  property version : Int64?
-
-  def initialize(@title : String, @id : Int64? = nil, @version : Int64? = nil)
-  end
-end
+--8<-- "examples/documentation/todo_data.cr:entity"
 ```
 
 The entity does not lazy-load anything. Associations and queries are explicit
@@ -54,14 +35,12 @@ operations inside a transaction.
 uses a forward-only `MigrationSet` and records history in `_lf_migrations`.
 
 ```crystal
-source = LF::Data::DataSource.open(
-  "sqlite3://./todos.db",
-  dialect: LF::Data::Dialects::SQLite.new,
-)
-
-migrations = LF::Data::MigrationSet.new(CreateTodos.new)
-LF::Data::MigrationRunner.new(source).run(migrations)
+--8<-- "examples/documentation/todo_data.cr:migration"
 ```
+
+The manually opened source is closed in `ensure`. In a server application,
+Data autoconfiguration owns the source and closes it during application
+shutdown instead.
 
 Production PostgreSQL migrations acquire an advisory lock before planning or
 executing history. Read [Migrations and locks](../data/migrations.md) before
@@ -73,25 +52,13 @@ enabling startup migrations.
 argument or is created inside the block; it is never a singleton service.
 
 ```crystal
-def create(source : LF::Data::DataSource, title : String) : Todo
-  source.transaction do |manager|
-    todo = Todo.new(title)
-    manager.persist(todo)
-    manager.flush
-    todo
-  end
-end
+--8<-- "examples/documentation/todo_data.cr:create"
 ```
 
 Use a repository when an operation is a reusable domain query:
 
 ```crystal
-source.transaction do |manager|
-  todos = LF::Data::Repository(Todo).new(manager)
-  todos.query
-    .where(Todo::Fields.title.like("%release%"))
-    .to_a
-end
+--8<-- "examples/documentation/todo_data.cr:query"
 ```
 
 The [transactions and repositories guide](../data/transactions-and-repositories.md)
@@ -108,7 +75,7 @@ For a complete server, routes, DTOs, and tests, run the example:
 ```bash
 cd examples/todo_api_sqlite
 shards install
-crystal run src/todo_api_sqlite.cr
+crystal run src/todo_api_sqlite_example.cr
 ```
 
 Continue with the dedicated Data reference for [entities](../data/entities.md),

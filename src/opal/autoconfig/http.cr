@@ -4,6 +4,8 @@ require "sync/mutex"
 require "../live_view/autoconfig"
 
 module LF::AutoConfig
+  # Enables generated HTTP and LiveView assembly on an `LF::Application` class.
+  # The resulting application exposes `run_http` and owns server shutdown.
   annotation HTTP
   end
 end

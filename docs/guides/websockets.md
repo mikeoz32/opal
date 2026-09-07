@@ -7,25 +7,14 @@ unambiguous.
 ## Router style
 
 ```crystal
-router.ws("/echo") do |socket, params|
-  while message = socket.receive?
-    socket.send("#{params["room"]?}: #{message}")
-  end
-end
+--8<-- "examples/documentation/websockets_guide.cr:router"
 ```
 
 Use `Router#ws` for a small protocol. Use a controller action for DI and the
 same route-discovery model as the HTTP API:
 
 ```crystal
-class ChatSocket
-  include LF::HTTP::Controller
-
-  @[LF::HTTP::Controller::WebSocket("/chat")]
-  def chat(socket : HTTP::WebSocket) : Nil
-    socket.on_message { |message| socket.send("echo: #{message}") }
-  end
-end
+--8<-- "examples/documentation/websockets_guide.cr:controller"
 ```
 
 Do not combine `on_message` with a manual `receive?` loop unless processing the

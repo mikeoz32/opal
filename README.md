@@ -24,12 +24,13 @@ documentation. Start at [`docs/index.md`](docs/index.md), or build a local
 static preview with:
 
 ```bash
-python3 -m venv .venv-docs
-.venv-docs/bin/python -m pip install -r requirements-docs.txt
-PATH="$PWD/.venv-docs/bin:$PATH" scripts/serve_docs.sh
+scripts/setup_docs.sh
+scripts/serve_docs.sh
 ```
 
 The server prints a local URL (by default `http://127.0.0.1:8000`).
+Run `scripts/check_docs.sh` before publishing; it also compiles the tutorial
+sources and every runnable example linked from the documentation.
 
 ## Status
 

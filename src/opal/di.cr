@@ -75,15 +75,16 @@ module LF::DI
     abstract def enter_scope(scope : String) : Container
   end
 
+  # Registers an ordinary class with the generated `ServiceConfiguration`.
+  # Constructor arguments are resolved by name and type, then by type alone.
+  # The generated bean name is the class name converted to snake case.
   annotation Service
   end
 
-  annotation Bean # Marks class method as a bean factory method
-    # Parameters:
-    #   name: String - The name of the bean
-    #   scope: String - The scope of the bean (singleton, prototype, etc.)
-
-
+  # Marks an instance method in a `BeanConfiguration` as a bean factory.
+  # `name` defaults to the method name and `scope` defaults to `singleton`;
+  # method arguments are resolved as dependencies when the bean is created.
+  annotation Bean
   end
 
   module BeanFactory

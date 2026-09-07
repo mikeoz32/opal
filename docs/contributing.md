@@ -28,9 +28,8 @@ the inline Crystal docstring that feeds the API reference.
 ## Preview before review
 
 ```bash
-python3 -m venv .venv-docs
-.venv-docs/bin/python -m pip install -r requirements-docs.txt
-PATH="$PWD/.venv-docs/bin:$PATH" scripts/serve_docs.sh
+scripts/setup_docs.sh
+scripts/serve_docs.sh
 ```
 
 Open `http://127.0.0.1:8000`. The generated artifact is intentionally ignored;
@@ -40,10 +39,12 @@ committed.
 ## Verify a documentation change
 
 ```bash
-PATH="$PWD/.venv-docs/bin:$PATH" scripts/check_docs.sh
+scripts/check_docs.sh
 ```
 
-The check builds Material for MkDocs and `crystal docs`, then asserts that both
-the guide landing page and generated API index exist. The repository also has
-a manual GitHub Actions workflow for the same check while automatic CI remains
+The check builds Material for MkDocs and `crystal docs`, compiles the exact
+Crystal sources embedded in tutorials, compiles every linked runnable example,
+and asserts that both the guide landing page and generated API index exist. A
+missing snippet source is also a strict build error. The repository has a
+manual GitHub Actions workflow for the same check while automatic CI remains
 intentionally disabled.

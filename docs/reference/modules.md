@@ -58,6 +58,7 @@ require "opal/ui"
 ```
 
 LiveView uses the authenticated HTTP request and WebSocket handshake context.
-For a browser application, use an opaque signed session cookie today; the JWT
-and OIDC adapter is designed for bearer resource tokens, not a browser
-authorization-code callback.
+For a browser application, use a signed session cookie today. Its Base64 JSON
+payload is authenticated but not encrypted, so it must contain no sensitive
+claims. The JWT and OIDC adapter is designed for bearer resource tokens, not a
+browser authorization-code callback.

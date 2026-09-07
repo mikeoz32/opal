@@ -18,19 +18,19 @@ checked-out source tree.
 Create a dedicated documentation environment once:
 
 ```bash
-python3 -m venv .venv-docs
-.venv-docs/bin/python -m pip install -r requirements-docs.txt
+scripts/setup_docs.sh
 ```
 
 Then build the guides and the Crystal API together:
 
 ```bash
-PATH="$PWD/.venv-docs/bin:$PATH" scripts/build_docs.sh
+scripts/build_docs.sh
 ```
 
 The output is `build/docs/site/`; the generated API is under
-`build/docs/site/api/`. The source link ref defaults to `main`; use
-`OPAL_DOCS_REF=<branch-or-tag>` to override the checked-out Git ref.
+`build/docs/site/api/`. Source links use the currently checked-out branch, or
+the current commit when the checkout is detached. Set
+`OPAL_DOCS_REF=<branch-or-tag>` to override that ref explicitly.
 
 !!! note "Why two generators?"
 

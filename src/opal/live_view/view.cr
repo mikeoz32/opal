@@ -5,6 +5,8 @@ require "./connection_runtime"
 require "./html"
 
 module LF::LiveView
+  # Registers a concrete `View` at one HTTP route for LiveView
+  # autoconfiguration. The path may contain named segments such as `:id`.
   annotation Page
   end
 

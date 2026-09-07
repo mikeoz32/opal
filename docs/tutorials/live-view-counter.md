@@ -10,29 +10,11 @@ Load HTTP autoconfiguration and make a `View` subclass a route with
 `@[LF::LiveView::Page]`:
 
 ```crystal
-require "opal"
-require "opal/autoconfig/http"
+--8<-- "examples/documentation/live_view_counter.cr:imports"
 
-@[LF::LiveView::Page("/counter")]
-class CounterLive < LF::LiveView::View
-  @count = 0
-
-  def handle_event(event : String, value : JSON::Any) : Nil
-    case event
-    when "increment" then @count += 1
-    when "decrement" then @count -= 1
-    else super
-    end
-  end
-
-  def render : LF::LiveView::Rendered
-    LF::LiveView::HTML.rendered(<<-HTML)
-      <button phx-click="decrement">-</button>
-      <output id="counter-value">#{@count}</output>
-      <button phx-click="increment">+</button>
-    HTML
-  end
-end
+--8<-- "examples/documentation/live_view_counter.cr:view_start"
+--8<-- "examples/documentation/live_view_counter.cr:mount"
+--8<-- "examples/documentation/live_view_counter.cr:view_end"
 ```
 
 Use standard `phx-*` binding names. Opal bundles pinned upstream Phoenix and
@@ -43,15 +25,11 @@ browser contract.
 ## 2. Create the application
 
 ```crystal
-@[LF::Application]
-@[LF::AutoConfig::HTTP]
-class CounterApplication
-end
-
-CounterApplication.run_http
+--8<-- "examples/documentation/live_view_counter.cr:application"
 ```
 
-Configure HTTP and a secret of at least 32 bytes:
+Save the HTTP configuration and a secret of at least 32 bytes as
+`config/application.yml`:
 
 ```yaml
 http:
@@ -62,9 +40,11 @@ live_view:
   secret: replace-with-a-generated-production-secret
 ```
 
-Start the application, open `http://127.0.0.1:8080/counter`, and press a
-button. The initial response is HTML; the page then connects through an Opal
-WebSocket endpoint and receives server-rendered updates.
+Start the application with `crystal run src/app.cr`, open
+`http://127.0.0.1:8080/counter`, and press a button. To keep configuration in a
+different location, set `OPAL_CONFIG=/path/to/application.yml`. The initial
+response is HTML; the page then connects through an Opal WebSocket endpoint and
+receives server-rendered updates.
 
 ## 3. Know the lifecycle boundary
 
@@ -73,9 +53,7 @@ socket connects. Treat client event values as untrusted input and repeat
 authorization in connected `mount`.
 
 ```crystal
-def mount(context : LF::LiveView::MountContext) : Nil
-  @connected = context.connected?
-end
+--8<-- "examples/documentation/live_view_counter.cr:mount"
 ```
 
 For a complete lifecycle, live navigation, keyed rendering, components,

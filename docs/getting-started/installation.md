@@ -42,14 +42,7 @@ only when the application uses those layers:
 Create `src/app.cr`:
 
 ```crystal
-require "opal"
-
-router = LF::HTTP::Router.new
-router.get("/") { |context, _params| context.response.print "Opal is running" }
-
-server = HTTP::Server.new(router)
-server.bind_tcp(8080)
-server.listen
+--8<-- "examples/documentation/installation.cr"
 ```
 
 Then run it:

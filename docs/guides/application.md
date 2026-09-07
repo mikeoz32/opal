@@ -7,31 +7,24 @@ extensions. It remains opt-in; a small router can be assembled manually.
 ## Mark the application
 
 ```crystal
-require "opal"
-require "opal/autoconfig/http"
-
-@[LF::Application]
-@[LF::AutoConfig::HTTP]
-class MyApplication
-end
-
-MyApplication.run_http
+--8<-- "examples/documentation/application_guide.cr"
 ```
 
 At compile time, Opal discovers the selected configurations and generates the
 assembly needed by `MyApplication`. At runtime, `ApplicationRuntime` owns the
 root `DefaultContainer` and installed extensions.
 
-## Configure by file and environment
+## Configure from YAML
 
 `LF::ConfigService` loads the application configuration used by extensions.
 HTTP autoconfiguration reads `http.host`, `http.port`, and `live_view.secret`
 when LiveView is enabled. Data autoconfiguration accepts a selected datasource,
 dialect, migrations, and migration options.
 
-Keep secrets outside committed YAML. Pass them through the deployment
-environment or a secret provider and compose the final application
-configuration during deployment.
+By default Opal reads `config/application.yml`. `OPAL_CONFIG` selects a
+different YAML file; it does not overlay individual environment variables or
+contact a secret provider. Keep secrets outside version control and have the
+deployment system render or mount the final YAML before starting Opal.
 
 ## Lifecycle rules
 

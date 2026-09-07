@@ -28,18 +28,23 @@ module LF::HTTP::Controller
   annotation Post
   end
 
+  # Registers a `PUT` controller action.
   annotation Put
   end
 
+  # Registers a `DELETE` controller action.
   annotation Delete
   end
 
+  # Registers a `PATCH` controller action.
   annotation Patch
   end
 
+  # Registers a `HEAD` controller action.
   annotation Head
   end
 
+  # Registers an `OPTIONS` controller action.
   annotation Options
   end
 
