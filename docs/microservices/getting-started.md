@@ -261,12 +261,25 @@ creates the service identity, protocol profile, codec, server/client transports,
 handler registry, and shared `RPCClient`; registers every typed client as a
 singleton DI bean; and participates in application quiesce and shutdown.
 
-The corresponding configuration is:
+Only the broker URL is required. Protocol topology, flow-control, retry, and
+client-capacity settings have bounded defaults:
 
 ```yaml
 microservices:
-  transport: rabbitmq
+  rabbitmq:
+    url: amqp://opal:opal@127.0.0.1:5673/opal_test
+```
+
+Override deployment-specific values only when needed:
+
+```yaml
+microservices:
   instance_id: catalog-a
+
+  topology:
+    rpc_exchange: company.rpc
+    rpc_queue_prefix: company.rpc.queue
+    reply_queue_prefix: company.reply
 
   rabbitmq:
     url: amqp://opal:opal@127.0.0.1:5673/opal_test
@@ -280,6 +293,10 @@ microservices:
     max_pending: 1024
     max_replies: 1024
 ```
+
+`microservices.transport` defaults to `rabbitmq` for this entrypoint. The
+remaining physical topology names keep their Tori-compatible defaults unless
+explicitly overridden.
 
 Run the complete example with an explicit configuration file:
 

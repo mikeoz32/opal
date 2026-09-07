@@ -38,6 +38,10 @@ register message infrastructure automatically.
 - `opal/microservices/rabbitmq` owns the RabbitMQ adapter behind an explicit
   entrypoint; the AMQP client is a shard dependency but is not loaded into
   executables that require only `opal` or `opal/microservices`.
+- `opal/autoconfig/microservices/rabbitmq` is the recommended application
+  entrypoint. An explicit `@[LF::AutoConfig::Microservices]` annotation lists
+  message controllers and typed clients; the generated application extension
+  owns transport creation, DI registration, intake, quiescence, and shutdown.
 - a future RabbitMQ Streams adapter may use Crabbit for event streams, but it is
   not a substitute for the AMQP 0-9-1 queues and exchanges required by RPC.
 
@@ -53,6 +57,25 @@ An API gateway may configure only outbound clients and no local service root.
 Multiple replicas of the same service use the same logical identity and compete
 for deliveries. Running unrelated logical services inside one application is
 not supported initially.
+
+An application declares that identity once at its composition root:
+
+```crystal
+@[LF::Application]
+@[LF::AutoConfig::Microservices(
+  namespace: "shop",
+  service: "catalog",
+  contract_version: 1,
+  controllers: [CatalogMessages],
+  clients: [InventoryClient],
+)]
+class CatalogApplication
+end
+```
+
+The lists are deliberately explicit and compile-time closed. Broker sessions,
+transports, codecs, handler registries, and the shared RPC client are derived
+infrastructure rather than application configuration.
 
 ### Explicit contracts and discovery
 
