@@ -7,31 +7,49 @@ require "./parameter_decoder"
 require "./response"
 require "./router"
 
+# Compile-time controller routes, request binding, constructor DI, and policy
+# composition for an HTTP application.
+#
+# Include this module in a class and annotate public actions with `Get`,
+# `Post`, another HTTP verb, or `WebSocket`. `setup_routes` creates a
+# request-scoped controller and registers its route handlers with a router.
+# Action arguments are client input only; dependencies belong in the
+# constructor.
 module LF::HTTP::Controller
+  # Registers a route for an explicit set of HTTP methods.
   annotation Route
   end
 
+  # Registers a `GET` controller action.
   annotation Get
   end
 
+  # Registers a `POST` controller action.
   annotation Post
   end
 
+  # Registers a `PUT` controller action.
   annotation Put
   end
 
+  # Registers a `DELETE` controller action.
   annotation Delete
   end
 
+  # Registers a `PATCH` controller action.
   annotation Patch
   end
 
+  # Registers a `HEAD` controller action.
   annotation Head
   end
 
+  # Registers an `OPTIONS` controller action.
   annotation Options
   end
 
+  # Registers a native WebSocket controller action. Guards are evaluated before
+  # the HTTP upgrade; validate individual messages inside the action.
   annotation WebSocket
   end
 

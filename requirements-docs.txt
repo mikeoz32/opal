@@ -1,0 +1,3 @@
+# Pin the documentation generator used by local and Pages builds.
+# It includes MkDocs and the plugins configured in mkdocs.yml.
+mkdocs-material==9.7.7

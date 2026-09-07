@@ -18,6 +18,22 @@ It is built on top of Crystal's standard `HTTP::Handler` stack and focuses on:
 - opt-in typed RPC and event services with transport-neutral execution and
   RabbitMQ AMQP 0-9-1 support
 
+## Documentation
+
+The documentation site contains progressive tutorials, feature guides, Data
+and security references, architectural decisions, and generated Crystal API
+documentation. Start at [`docs/index.md`](docs/index.md), or build a local
+static preview with:
+
+```bash
+scripts/setup_docs.sh
+scripts/serve_docs.sh
+```
+
+The server prints a local URL (by default `http://127.0.0.1:8000`).
+Run `scripts/check_docs.sh` before publishing; it also compiles the tutorial
+sources and every runnable example linked from the documentation.
+
 ## Status
 
 The routing, native WebSocket, LiveView, HTTP binding, DI lifecycle,
@@ -42,7 +58,7 @@ shards install
 
 ## Core API
 
-Opal exposes nine independent layers:
+Opal exposes ten independent layers:
 
 1. `LF::HTTP::Router`
    Low-level router with explicit handlers.
@@ -71,7 +87,11 @@ Opal exposes nine independent layers:
    dialogs, disclosure/navigation primitives, and overlays with a precompiled
    Tailwind theme.
 
-9. `require "opal/microservices"` and `require "opal/microservices/rabbitmq"`
+9. `require "opal/security"`
+   Optional authentication context, API-key and signed-session authenticators,
+   authorization guards, and CSRF protection built on the HTTP policy pipeline.
+
+10. `require "opal/microservices"` and `require "opal/microservices/rabbitmq"`
    Optional message controllers and policies, typed RPC clients,
    Tori-compatible contracts, deterministic in-memory testing, and a
    RabbitMQ AMQP 0-9-1 adapter. The

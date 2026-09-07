@@ -19,7 +19,7 @@ require "opal/microservices/rabbitmq"
 Neither `require "opal"` nor `require "opal/microservices"` loads the AMQP
 client.
 The complete compiling example is
-[`examples/microservices_foundations.cr`](../../examples/microservices_foundations.cr).
+[`examples/microservices_foundations.cr`](https://github.com/mikeoz32/opal/blob/main/examples/microservices_foundations.cr).
 
 ## Configure the protocol
 
@@ -463,4 +463,4 @@ fibers, and then closes the broker connection. Messages still waiting in a
 durable broker queue remain available to another replica.
 
 Real-broker verification uses the pinned RabbitMQ 4 Compose environment and
-commands in [`integration/rabbitmq/README.md`](../../integration/rabbitmq/README.md).
+commands in [`integration/rabbitmq/README.md`](https://github.com/mikeoz32/opal/blob/main/integration/rabbitmq/README.md).

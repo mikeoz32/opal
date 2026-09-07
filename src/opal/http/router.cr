@@ -7,6 +7,21 @@ require "./errors"
 require "./websocket_request"
 
 module LF::HTTP
+  # A deterministic `HTTP::Handler` with path parameters, method-aware routing,
+  # and native WebSocket route registration.
+  #
+  # Register HTTP routes with `#get`, `#post`, and the other verb helpers, or
+  # use `#add` for a set of methods. `#ws` reserves a path for a WebSocket
+  # upgrade. An unmatched path receives `404`; a path with no handler for the
+  # requested method receives `405` and an `Allow` header.
+  #
+  # ```
+  # router = LF::HTTP::Router.new
+  # router.get("/users/:id") { |context, params| context.response.print(params["id"]) }
+  # ```
+  #
+  # For constructor DI, request binding, and policy annotations, prefer
+  # `LF::HTTP::Controller` over registering individual handlers.
   class Router
     include ::HTTP::Handler
 
@@ -18,6 +33,8 @@ module LF::HTTP
     @http_methods = {} of String => Set(String)
     @websocket_paths = Set(String).new
 
+    # Creates an empty router. An optional error mapper controls the body of
+    # generated `404`, `405`, and `426` responses.
     def initialize(error_mapper : ErrorMapper? = nil)
       @root = LF::Routing::Trie::Node.new
       @error_mapper = error_mapper || ->(context : ::HTTP::Server::Context, status : ::HTTP::Status, body : String) do
@@ -25,6 +42,8 @@ module LF::HTTP
       end
     end
 
+    # Registers one HTTP handler for every method in `methods`. Named path
+    # segments such as `:id` are available in the block's params hash.
     def add(path : String, methods : Set(String) = Set{"GET"}, &handler : ::HTTP::Server::Context, Hash(String, String) -> Nil)
       register_http_path(path, methods)
       @root.add_route(path, handler, methods)
@@ -40,6 +59,12 @@ module LF::HTTP
       @http_methods[normalize_route_path(path)]?.try(&.includes?(method.upcase)) || false
     end
 
+    # Registers a WebSocket endpoint. A normal HTTP request to this path is
+    # rejected with `426 Upgrade Required`; a duplicate HTTP/WebSocket path is
+    # rejected during registration.
+    #
+    # Do not combine a callback-based socket handler with a manual `receive?`
+    # loop unless double processing is intentional.
     def ws(path : String, protocols : Array(String)? = nil, &handler : ::HTTP::WebSocket, Hash(String, String) -> Nil) : Nil
       add_websocket_route(path, protocols) do |websocket, params, _context|
         handler.call(websocket, params)
@@ -94,10 +119,12 @@ module LF::HTTP
       })
     end
 
+    # Registers a `GET` route.
     def get(path : String, &handler : ::HTTP::Server::Context, Hash(String, String) -> Nil)
       add(path, Set{"GET"}, &handler)
     end
 
+    # Registers a `POST` route.
     def post(path : String, &handler : ::HTTP::Server::Context, Hash(String, String) -> Nil)
       add(path, Set{"POST"}, &handler)
     end

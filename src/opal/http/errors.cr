@@ -27,6 +27,12 @@ module LF::HTTP
     end
   end
 
+  class Unauthorized < Error
+    def initialize(message : String = "Unauthorized")
+      super(message, ::HTTP::Status::UNAUTHORIZED)
+    end
+  end
+
   class Forbidden < Error
     def initialize(message : String = "Forbidden")
       super(message, ::HTTP::Status::FORBIDDEN)

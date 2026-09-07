@@ -5,6 +5,8 @@ require "../data/dialects/sqlite"
 require "./data/configuration"
 
 module LF::AutoConfig
+  # Enables application-owned DataSource configuration on an `LF::Application`.
+  # The application must import its concrete database driver explicitly.
   annotation Data
   end
 end

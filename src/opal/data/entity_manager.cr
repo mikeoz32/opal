@@ -1,5 +1,11 @@
 module LF
   module Data
+    # Tracks entity operations and executes typed queries within one
+    # `DataSource#transaction`.
+    #
+    # The manager implements explicit persistence rather than transparent dirty
+    # checking or lazy loading. Call `#persist` or `#remove`, build a query, and
+    # let the owning transaction flush it. It must not escape that transaction.
     class EntityManager
       getter? closed = false
 
@@ -16,6 +22,8 @@ module LF
         @next_sequence = 0_i64
       end
 
+      # Schedules an entity for insert or update. Relationship cascade behavior
+      # is generated from the entity's explicit mapping annotations.
       def persist(entity : T) : Nil forall T
         ensure_available(:persist)
 
@@ -62,6 +70,8 @@ module LF
         entity.__lf_cascade_persist(self, visited)
       end
 
+      # Schedules a managed entity for deletion. Removing a newly persisted
+      # entity cancels its pending insert; removing a detached entity raises.
       def remove(entity : T) : Nil forall T
         ensure_available(:remove)
 
@@ -113,6 +123,8 @@ module LF
         entity.__lf_cascade_remove(self, visited)
       end
 
+      # Loads one entity by its typed primary key, returning `nil` when no row
+      # exists. Repeated lookups return the transaction's managed identity.
       def find(entity : T.class, id) : T? forall T
         ensure_available(:find)
 
@@ -162,6 +174,8 @@ module LF
         end
       end
 
+      # Starts a compile-time typed select query for an entity. Query execution
+      # remains explicit: call `#to_a`, `#first?`, or another terminal method.
       def query(entity : T.class) forall T
         ensure_available(:query)
 

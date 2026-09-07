@@ -45,6 +45,15 @@ require "./data/schema/migration_generator"
 require "./data/migration_runner"
 
 module LF
+  # Explicit, transaction-local persistence APIs.
+  #
+  # This module is opt-in through `require "opal/data"`. An application also
+  # chooses and imports a concrete driver and dialect, for example
+  # `opal/data/dialects/sqlite` plus `sqlite3` or
+  # `opal/data/dialects/postgresql` plus `pg`.
+  #
+  # Entity managers exist only inside `DataSource#transaction`; entities never
+  # perform lazy relationship queries. Migrations are ordered and forward-only.
   module Data
   end
 end

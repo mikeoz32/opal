@@ -21,12 +21,20 @@ module LF
     end
   end
 
+  # Marks the single application class in an executable. The optional integer
+  # `priority` controls where its bean-provider methods sit relative to
+  # `ApplicationConfiguration` providers.
   annotation Application
   end
 
+  # Marks an additional zero-argument bean provider for an application. Its
+  # optional integer `priority` orders provider registration from high to low.
   annotation ApplicationConfiguration
   end
 
+  # Declares a concrete `ApplicationExtension` as generated autoconfiguration.
+  # `enabled_by` is the marker annotation applications opt into; the optional
+  # integer `priority` orders extension installation from high to low.
   annotation ApplicationAutoConfiguration
   end
 
@@ -60,6 +68,13 @@ module LF
 
     def resolve(name : String, type : T.class) : T forall T
       @container.resolve(name, type)
+    end
+
+    # Returns whether an application extension or configuration registered a
+    # bean under this exact name. Extensions use explicit names for optional
+    # integration points so they do not need reflection or service discovery.
+    def registered?(name : String) : Bool
+      @container.has_key?(name)
     end
 
     def register_bean(*, name : String, scope : String = "singleton", type : T.class, &factory : DI::Container -> T) : Nil forall T
