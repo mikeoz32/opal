@@ -21,6 +21,8 @@ examples=(
   examples/di_lifecycle_example.cr
   examples/handler_stack_example.cr
   examples/http_execution_pipeline_example.cr
+  examples/microservices_autoconfig.cr
+  examples/microservices_foundations.cr
   examples/router_example.cr
   examples/data_layer_sqlite/src/data_layer_example_cli.cr
   examples/data_layer_sqlite/src/data_layer_example_http_cli.cr

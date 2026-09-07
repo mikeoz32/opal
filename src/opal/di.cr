@@ -155,7 +155,10 @@ module LF::DI
   macro finished
     class ServiceConfiguration
       include BeanConfiguration
-      {% for klass, idx in Object.all_subclasses %}
+      # A concrete type can appear more than once in `Object.all_subclasses`
+      # when its ancestry contains instantiated generic base classes. Generate
+      # each annotated service provider exactly once.
+      {% for klass, idx in Object.all_subclasses.uniq %}
         {% service_name = klass.name.stringify
              .gsub(/([A-Z]+)([A-Z][a-z])/, "\\1_\\2")
              .gsub(/([a-z0-9])([A-Z])/, "\\1_\\2")

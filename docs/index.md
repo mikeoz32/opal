@@ -8,7 +8,8 @@ search:
 Opal is a modular toolkit for building Crystal applications: explicit HTTP
 routing, compile-time controllers and policies, scoped dependency injection,
 transaction-local data access, native WebSockets, server-rendered LiveView,
-optional UI primitives, and opt-in security.
+optional UI primitives, opt-in security, and typed microservices over
+transport-neutral contracts.
 
 The project favours contracts that are visible in the program. A Data
 transaction is a block; a dependency scope has a deterministic owner; an
@@ -42,14 +43,22 @@ per request or WebSocket handshake.
 
     [Security guide](security.md)
 
+-   :material-message-processing-outline: **Connect services**
+
+    Declare typed RPC clients and message controllers, then let the application
+    own RabbitMQ topology and lifecycle.
+
+    [Microservices guide](microservices/getting-started.md)
+
 </div>
 
 ## Choose only the layers you use
 
 `require "opal"` loads routing, HTTP controllers, DI, application runtime and
-LiveView. Data, UI, autoconfiguration, and security are separate entry points.
-This keeps a small API-only service from inheriting a database driver, a UI
-theme, or an authentication strategy it does not need.
+LiveView. Data, UI, autoconfiguration, security, and microservices are separate
+entry points. This keeps a small API-only service from inheriting a database
+driver, a UI theme, an authentication strategy, or a broker client it does not
+need.
 
 ```crystal
 require "opal"                  # HTTP, DI, application runtime, LiveView
@@ -58,6 +67,8 @@ require "opal/autoconfig/data"  # Application-owned DataSource
 require "opal/ui"               # optional Tailwind UI primitives
 require "opal/security"         # authentication and authorization
 require "opal/security/jwt"     # JWT and OIDC resource-token adapters
+require "opal/microservices"    # transport-neutral RPC and event contracts
+require "opal/autoconfig/microservices/rabbitmq" # Application-owned RabbitMQ
 ```
 
 See the complete [module selection reference](reference/modules.md) before
@@ -75,6 +86,8 @@ choosing an entry point.
    for connected state, events, and `phx-*` bindings.
 5. Add policies from the [HTTP controller guide](guides/http-controllers.md)
    and identity from the [Security guide](security.md).
+6. Connect independently deployed services with the
+   [Microservices guide](microservices/getting-started.md).
 
 ## Principles and deliberate boundaries
 

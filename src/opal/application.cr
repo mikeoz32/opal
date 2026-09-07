@@ -2,6 +2,25 @@ require "./di"
 require "./config_service"
 
 module LF
+  # Carries one application-wide shutdown deadline through the quiesce phase.
+  # Extensions should stop accepting new work and drain already accepted work
+  # without exceeding `remaining`.
+  struct ShutdownContext
+    getter deadline : Time::Instant
+
+    def initialize(@deadline : Time::Instant)
+    end
+
+    def remaining : Time::Span
+      remaining = @deadline - Time.instant
+      remaining > 0.seconds ? remaining : 0.seconds
+    end
+
+    def expired? : Bool
+      Time.instant >= @deadline
+    end
+  end
+
   # Marks the single application class in an executable. The optional integer
   # `priority` controls where its bean-provider methods sit relative to
   # `ApplicationConfiguration` providers.
@@ -27,6 +46,13 @@ module LF
     end
 
     abstract def configure(context : ApplicationContext) : Nil
+
+    # Stops intake and drains work that still depends on application resources.
+    # The default keeps existing extensions backward compatible. Implementations
+    # that own concurrent work must make this callback safe to retry.
+    def quiesce(context : ShutdownContext) : Nil
+    end
+
     abstract def stop : Nil
   end
 
@@ -65,6 +91,8 @@ module LF
   end
 
   class ApplicationRuntime
+    DEFAULT_SHUTDOWN_TIMEOUT = 30.seconds
+
     class Error < Exception
     end
 
@@ -186,9 +214,27 @@ module LF
       extension
     end
 
-    def shutdown : Nil
+    def shutdown(timeout : Time::Span = DEFAULT_SHUTDOWN_TIMEOUT) : Nil
       raise AlreadyClosedError.new if @closed
+      raise ArgumentError.new("shutdown timeout must be positive") unless timeout > 0.seconds
       @shutdown_started = true
+
+      shutdown_context = ShutdownContext.new(Time.instant + timeout)
+      quiesce_errors = [] of Exception
+      @extensions.reverse_each do |extension|
+        begin
+          extension.quiesce(shutdown_context)
+        rescue error : Exception
+          quiesce_errors << error
+        end
+      end
+
+      # An extension that could not stop intake or drain accepted work may
+      # still be using its dependencies. Preserve every extension and root DI
+      # so the caller can correct the condition and retry shutdown safely.
+      unless quiesce_errors.empty?
+        raise ShutdownError.new(quiesce_errors, nil)
+      end
 
       extension_errors = [] of Exception
       extension_index = @extensions.size - 1

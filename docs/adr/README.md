@@ -14,3 +14,4 @@ This directory contains Architecture Decision Records (ADRs) for Opal.
 - [ADR-0008: HTTP Controller Execution Pipeline](ADR-0008-http-controller-execution-pipeline.md)
 - [ADR-0009: Phoenix LiveView Browser Runtime Compatibility](ADR-0009-phoenix-live-view-client.md)
 - [ADR-0010: Optional Stateless UI Primitives](ADR-0010-optional-ui-primitives.md)
+- [ADR-0011: Transport-Neutral Microservices](ADR-0011-transport-neutral-microservices.md)

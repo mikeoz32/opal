@@ -14,6 +14,9 @@ compile-time declaration of which surface an application is willing to use.
 | `opal/ui` | stateless components, precompiled Tailwind theme, optional UI hooks | LiveView client initialization |
 | `opal/security` | authentication context, API keys, signed sessions, guards, CSRF | JWT implementation |
 | `opal/security/jwt` | JWT and OIDC resource-token authenticators | browser login redirect/callback flow |
+| `opal/microservices` | typed RPC and event contracts, message execution, in-memory transport | a broker adapter |
+| `opal/microservices/rabbitmq` | RabbitMQ AMQP 0-9-1 server and client transports | application assembly |
+| `opal/autoconfig/microservices/rabbitmq` | application-owned controllers, typed clients, RabbitMQ topology and lifecycle | HTTP server assembly |
 
 ## Import combinations
 
@@ -62,3 +65,15 @@ For a browser application, use a signed session cookie today. Its Base64 JSON
 payload is authenticated but not encrypted, so it must contain no sensitive
 claims. The JWT and OIDC adapter is designed for bearer resource tokens, not a
 browser authorization-code callback.
+
+### RabbitMQ microservice
+
+```crystal
+require "opal/autoconfig/microservices/rabbitmq"
+```
+
+Declare one `@[LF::AutoConfig::Microservices]` annotation on the application.
+The extension derives the codec, handler registry, transports, shared RPC
+client, DI registrations, and ordered shutdown. Only
+`microservices.rabbitmq.url` is required in configuration; use the lower-level
+RabbitMQ entrypoint when the application must own those resources manually.

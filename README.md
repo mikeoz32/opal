@@ -15,6 +15,8 @@ It is built on top of Crystal's standard `HTTP::Handler` stack and focuses on:
 - transaction-local persistence with compile-time entity and query contracts
 - server-rendered interactive pages with an Opal-owned LiveView runtime
 - optional accessible UI primitives with a precompiled Tailwind theme
+- opt-in typed RPC and event services with transport-neutral execution and
+  RabbitMQ AMQP 0-9-1 support
 
 ## Documentation
 
@@ -56,7 +58,7 @@ shards install
 
 ## Core API
 
-Opal exposes nine independent layers:
+Opal exposes ten independent layers:
 
 1. `LF::HTTP::Router`
    Low-level router with explicit handlers.
@@ -88,6 +90,15 @@ Opal exposes nine independent layers:
 9. `require "opal/security"`
    Optional authentication context, API-key and signed-session authenticators,
    authorization guards, and CSRF protection built on the HTTP policy pipeline.
+
+10. `require "opal/microservices"` and `require "opal/microservices/rabbitmq"`
+   Optional message controllers and policies, typed RPC clients,
+   Tori-compatible contracts, deterministic in-memory testing, and a
+   RabbitMQ AMQP 0-9-1 adapter. The
+   `opal/autoconfig/microservices/rabbitmq` entrypoint composes controllers and
+   injectable typed clients from an application annotation. See the
+   [microservices guide](docs/microservices/getting-started.md) for the minimal
+   application and broker configuration.
 
 ## Basic Router
 

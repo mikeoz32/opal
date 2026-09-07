@@ -1,0 +1,1 @@
+{"message_id":"55555555-5555-4555-8555-555555555555","kind":"rpc_response","correlation_id":"22222222-2222-4222-8222-222222222222","completed_at":"2026-01-01T12:00:01Z","error":{"code":"not_found","message":"Product was not found.","retryable":false,"details":{"sku":"opal-1"}}}

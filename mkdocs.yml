@@ -105,6 +105,9 @@ nav:
       - Dialects: data/dialects.md
       - Raw SQL and converters: data/raw-sql-and-converters.md
       - Autoconfiguration: data/autoconfiguration.md
+  - Microservices:
+      - Getting started: microservices/getting-started.md
+      - Protocol v1: microservices/protocol-v1.md
   - Reference:
       - Module selection: reference/modules.md
       - Runtime contracts: reference/runtime-contracts.md
@@ -121,4 +124,5 @@ nav:
       - Controller pipeline: adr/ADR-0008-http-controller-execution-pipeline.md
       - Phoenix client: adr/ADR-0009-phoenix-live-view-client.md
       - UI primitives: adr/ADR-0010-optional-ui-primitives.md
+      - Transport-neutral microservices: adr/ADR-0011-transport-neutral-microservices.md
   - Contributing: contributing.md

@@ -1,6 +1,7 @@
 require "http/server"
 require "json"
 require "../di"
+require "../execution"
 require "./di_integration"
 require "./errors"
 require "./response"
@@ -64,18 +65,12 @@ module LF::HTTP
     end
   end
 
-  abstract class Guard
-    abstract def can_activate(context : ExecutionContext) : Bool
-  end
-
   alias PipeValue = String | JSON::Any
 
-  abstract class Pipe
-    abstract def transform(
-      value : PipeValue,
-      metadata : ArgumentMetadata,
-      context : ExecutionContext,
-    ) : PipeValue
+  abstract class Guard < LF::Execution::Guard(ExecutionContext)
+  end
+
+  abstract class Pipe < LF::Execution::Pipe(PipeValue, ArgumentMetadata, ExecutionContext)
   end
 
   # Convenience base for a pipe interested only in path/query string values.
@@ -118,12 +113,10 @@ module LF::HTTP
 
   alias CallHandler = Proc(Response)
 
-  abstract class Interceptor
-    abstract def intercept(context : ExecutionContext, call_next : CallHandler) : Response
+  abstract class Interceptor < LF::Execution::Interceptor(ExecutionContext, Response)
   end
 
-  abstract class Filter
-    abstract def catch(exception : Exception, context : ExecutionContext) : Response?
+  abstract class Filter < LF::Execution::Filter(ExecutionContext, Response)
   end
 
   # Base for a typed exception filter. `handles SomeError` generates the
@@ -144,9 +137,7 @@ module LF::HTTP
       context : ExecutionContext,
       pipes : Array(Pipe),
     ) : PipeValue
-      pipes.reduce(value) do |current, pipe|
-        pipe.transform(current, metadata, context)
-      end
+      LF::Execution::Pipeline.apply_pipes(value.as(PipeValue), metadata, context, pipes)
     end
 
     def self.intercept(
@@ -154,8 +145,7 @@ module LF::HTTP
       interceptors : Array(Interceptor),
       &action : -> Response
     ) : Response
-      return yield if interceptors.empty?
-      InterceptorChain.new(context, interceptors, action).call
+      LF::Execution::Pipeline.intercept(context, interceptors, &action)
     end
 
     def self.catch(
@@ -163,28 +153,7 @@ module LF::HTTP
       context : ExecutionContext,
       filters : Array(Filter),
     ) : Response?
-      filters.each do |filter|
-        if response = filter.catch(exception, context)
-          return response
-        end
-      end
-      nil
-    end
-
-    private class InterceptorChain
-      def initialize(
-        @context : ExecutionContext,
-        @interceptors : Array(Interceptor),
-        @action : CallHandler,
-      )
-      end
-
-      def call(index : Int32 = 0) : Response
-        return @action.call if index >= @interceptors.size
-
-        interceptor = @interceptors[index]
-        interceptor.intercept(@context, -> { call(index + 1) })
-      end
+      LF::Execution::Pipeline.catch(exception, context, filters)
     end
   end
 end
