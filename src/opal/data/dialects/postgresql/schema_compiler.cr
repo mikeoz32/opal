@@ -170,6 +170,10 @@ module LF
               "TIMESTAMPTZ"
             when .bytes?
               "BYTEA"
+            when .json?
+              "JSON"
+            when .jsonb?
+              "JSONB"
             else
               raise UnsupportedSchemaOperationError.new(
                 @dialect.name,

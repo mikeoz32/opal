@@ -26,6 +26,7 @@ private class SQLiteGeneratedCompatibilityMigration < LF::Data::Migration
       table.generated_id("id")
       table.string("name", null: false)
       table.bool("active", null: false, default: true)
+      table.jsonb("metadata")
       table.index("idx_projects_active", "active")
     end
   end
@@ -59,6 +60,8 @@ describe LF::Data::Dialects::SQLite::SchemaIntrospector do
             default: Time.utc(2026, 8, 30, 12, 30, 0)
           )
           table.bytes("payload", default: Bytes[0x0a, 0xff])
+          table.json("document")
+          table.jsonb("metadata", null: false)
           table.unique("code", name: "uq_projects_code")
           table.index("idx_projects_active", "active")
         end
@@ -95,6 +98,8 @@ describe LF::Data::Dialects::SQLite::SchemaIntrospector do
         "score",
         "created_at",
         "payload",
+        "document",
+        "metadata",
       ])
       projects.column("id").not_nil!.generated?.should be_true
       projects.column("id").not_nil!.nullable?.should be_false
@@ -106,6 +111,8 @@ describe LF::Data::Dialects::SQLite::SchemaIntrospector do
         .should eq("2026-08-30T12:30:00Z")
       projects.column("payload").not_nil!.default.not_nil!.value
         .should eq(Bytes[0x0a, 0xff])
+      projects.column("document").not_nil!.type.text?.should be_true
+      projects.column("metadata").not_nil!.type.text?.should be_true
       projects.primary_key.not_nil!.columns.should eq(["id"])
       projects.unique_constraints.map(&.columns).should eq([["code"]])
       projects.indexes.should eq([
@@ -140,6 +147,7 @@ describe LF::Data::Dialects::SQLite::SchemaIntrospector do
           table.generated_id("id")
           table.string("name", null: false)
           table.bool("active", null: false, default: true)
+          table.jsonb("metadata")
           table.index("idx_projects_active", "active")
         end
       end

@@ -5,15 +5,18 @@ module LF
     module Dialects
       class PostgreSQL < LF::Data::Dialect
         module StaticSQLPolicy
-          IDENTIFIER_OPEN            = %(")
-          IDENTIFIER_CLOSE           = %(")
-          IDENTIFIER_ESCAPE_FROM     = %(")
-          IDENTIFIER_ESCAPE_TO       = %("")
-          PLACEHOLDER_STYLE          = :numbered
-          PLACEHOLDER_PREFIX         = "$"
-          PLACEHOLDER_FIRST_POSITION = 1
-          EMPTY_INSERT_STYLE         = :default_values
-          GENERATED_KEY_SOURCE       = SQL::GeneratedKeySource::ReturningRow
+          IDENTIFIER_OPEN             = %(")
+          IDENTIFIER_CLOSE            = %(")
+          IDENTIFIER_ESCAPE_FROM      = %(")
+          IDENTIFIER_ESCAPE_TO        = %("")
+          PLACEHOLDER_STYLE           = :numbered
+          PLACEHOLDER_PREFIX          = "$"
+          PLACEHOLDER_FIRST_POSITION  = 1
+          EMPTY_INSERT_STYLE          = :default_values
+          GENERATED_KEY_SOURCE        = SQL::GeneratedKeySource::ReturningRow
+          JSONB_CONTAINS_OPERATOR     = "@>"
+          JSONB_CONTAINED_BY_OPERATOR = "<@"
+          JSONB_HAS_KEY_OPERATOR      = "?"
         end
 
         STATIC_SQL_POLICY = StaticSQLPolicy
@@ -45,6 +48,19 @@ module LF
         def placeholder(position : Int32) : String
           raise ArgumentError.new("Placeholder position must be positive") if position <= 0
           "$#{position}"
+        end
+
+        def jsonb_operator(operator : Symbol) : String
+          case operator
+          when :contains
+            StaticSQLPolicy::JSONB_CONTAINS_OPERATOR
+          when :contained_by
+            StaticSQLPolicy::JSONB_CONTAINED_BY_OPERATOR
+          when :has_key
+            StaticSQLPolicy::JSONB_HAS_KEY_OPERATOR
+          else
+            raise UnsupportedQueryOperatorError.new(name, operator)
+          end
         end
 
         def migration_lock(

@@ -16,6 +16,7 @@ class CreateTodos < LF::Data::Migration
     schema.create_table("todos") do |table|
       table.generated_id("id")
       table.string("title", null: false)
+      table.jsonb("metadata")
     end
   end
 end
@@ -47,3 +48,10 @@ migrations through Data autoconfiguration. Explicit, read-only schema diff and
 Crystal migration source generation are documented in the
 [schema generation guide](schema-generation.md). There is no `down`,
 entity-driven schema inference, destructive auto-sync, or source checksum.
+
+The schema DSL also provides `table.json` and `table.jsonb`. PostgreSQL renders
+and introspects them as distinct native `JSON` and `JSONB` types. SQLite stores
+both logical types using `TEXT` affinity so the same application schema can be
+used in local tests. JSON/JSONB defaults are intentionally explicit SQL or
+handwritten migration concerns; the portable helpers accept only `name` and
+`null:`.

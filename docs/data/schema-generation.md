@@ -13,6 +13,7 @@ schema_model = LF::Data::Schema::Model.build do |schema|
     table.generated_id("id")
     table.string("name", null: false)
     table.bool("active", null: false, default: true)
+    table.jsonb("metadata")
     table.index("idx_projects_active", "active")
   end
 end
@@ -88,6 +89,9 @@ plan = generator.plan(schema_model, options)
 ```
 
 SQLite normalizes its storage affinities when comparing portable logical types,
-while PostgreSQL retains distinct boolean, integer, timestamp, and byte types.
+while PostgreSQL retains distinct boolean, integer, timestamp, byte, JSON, and
+JSONB types. SQLite `TEXT` is considered compatible with the logical `Json`
+and `Jsonb` types declared by the desired model. This permits portable schema
+diffs without pretending that SQLite implements PostgreSQL JSONB operators.
 Non-portable database types, expression/partial indexes, and vendor-specific
 defaults fail inspection unless their whole table is explicitly unmanaged.

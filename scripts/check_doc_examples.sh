@@ -10,6 +10,7 @@ mkdir -p "${cache_dir}"
 examples=(
   examples/documentation/application_guide.cr
   examples/documentation/dependency_injection_guide.cr
+  examples/documentation/data_json_columns.cr
   examples/documentation/first_api.cr
   examples/documentation/http_controllers_guide.cr
   examples/documentation/installation.cr

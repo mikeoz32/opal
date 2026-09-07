@@ -66,6 +66,8 @@ describe LF::Data::Query::Field do
     {"query_cross_entity_predicate.cr", "belongs to"},
     {"query_cross_entity_order.cr", "belongs to"},
     {"dynamic_query_cross_entity.cr", "belongs to"},
+    {"query_jsonb_non_json.cr", "does not support PostgreSQL JSONB predicates"},
+    {"query_jsonb_sqlite_static.cr", "does not support JSONB containment"},
   }.each do |fixture_case|
     fixture_name, message = fixture_case
 

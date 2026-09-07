@@ -340,6 +340,10 @@ module LF
               LF::Data::Schema::ColumnType::Timestamp
             when "bytea"
               LF::Data::Schema::ColumnType::Bytes
+            when "json"
+              LF::Data::Schema::ColumnType::Json
+            when "jsonb"
+              LF::Data::Schema::ColumnType::Jsonb
             else
               raise SchemaInspectionError.new(
                 "postgresql",

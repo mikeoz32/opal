@@ -66,7 +66,14 @@ module LF
           {% begin %}
             {% ivar = EntityType.instance_vars[Index] %}
             {% column_annotation = ivar.annotation(LF::Data::Column) %}
-            {% if converter = column_annotation && column_annotation[:converter] %}
+            {% if json_type = column_annotation && column_annotation[:type] %}
+              {% codec = column_annotation[:codec] || LF::Data::DefaultJSONCodec %}
+              {% if PropertyType.resolve.nilable? %}
+                value.nil? ? nil : LF::Data::JSONColumn.dump(value.not_nil!, {{codec}})
+              {% else %}
+                LF::Data::JSONColumn.dump(value, {{codec}})
+              {% end %}
+            {% elsif converter = column_annotation && column_annotation[:converter] %}
               {% if PropertyType.resolve.nilable? %}
                 value.nil? ? nil : LF::Data::Converter.dump(value.not_nil!, {{converter}})
               {% else %}
@@ -218,6 +225,31 @@ module LF
           {% end %}
         end
 
+        # PostgreSQL JSONB containment. The fragment may be any Crystal value
+        # with a JSON writer, so callers can query with a partial object rather
+        # than constructing the property's complete domain type.
+        def jsonb_contains(value : T) forall T
+          ensure_jsonb(:jsonb_contains)
+          dumped = LF::Data::JSONColumn.dump_query(value)
+          JSONBContains(typeof(self), String).new(dumped)
+        end
+
+        # PostgreSQL JSONB contained-by predicate.
+        def jsonb_contained_by(value : T) forall T
+          ensure_jsonb(:jsonb_contained_by)
+          dumped = LF::Data::JSONColumn.dump_query(value)
+          JSONBContainedBy(typeof(self), String).new(dumped)
+        end
+
+        # PostgreSQL JSONB top-level key or array-element existence predicate.
+        def jsonb_has_key(key : String)
+          ensure_jsonb(:jsonb_has_key)
+          if key.includes?('\0')
+            raise InvalidPredicateError.new(:jsonb_has_key, column, "key must not contain NUL")
+          end
+          JSONBHasKey(typeof(self)).new(key)
+        end
+
         def asc
           Ordering(typeof(self), Asc).new
         end
@@ -232,6 +264,16 @@ module LF
             {% ordered = ["Int32", "Int64", "Float32", "Float64", "String", "Time"] %}
             {% unless non_nil_types.size == 1 && ordered.includes?(non_nil_types.first.stringify) %}
               {% raise "#{EntityType} field #{EntityType.instance_vars[Index].name} is not orderable" %}
+            {% end %}
+          {% end %}
+        end
+
+        private def ensure_jsonb(operation : Symbol) : Nil
+          {% begin %}
+            {% ivar = EntityType.instance_vars[Index] %}
+            {% column_annotation = ivar.annotation(LF::Data::Column) %}
+            {% unless column_annotation && column_annotation[:type] == :jsonb %}
+              {% raise "#{EntityType} field #{ivar.name} does not support PostgreSQL JSONB predicates" %}
             {% end %}
           {% end %}
         end

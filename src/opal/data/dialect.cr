@@ -17,6 +17,12 @@ module LF
         "OFFSET #{placeholder}"
       end
 
+      # Returns the native SQL spelling for a supported JSONB operator.
+      # Dialects without JSONB query support retain the typed default failure.
+      def jsonb_operator(operator : Symbol) : String
+        raise UnsupportedQueryOperatorError.new(name, operator)
+      end
+
       def setup_connection(connection : DB::Connection) : Nil
       end
 

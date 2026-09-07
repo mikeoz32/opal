@@ -134,6 +134,57 @@ module LF
         end
       end
 
+      struct JSONBContains(FieldType, StoredType)
+        include Expression
+
+        getter value : StoredType
+
+        def initialize(@value : StoredType)
+        end
+
+        def __lf_args
+          {@value}
+        end
+
+        def self.__lf_tokens
+          {LF::Data::SQL::QueryToken::Leaf(JSONBContains(FieldType, StoredType)).new}
+        end
+      end
+
+      struct JSONBContainedBy(FieldType, StoredType)
+        include Expression
+
+        getter value : StoredType
+
+        def initialize(@value : StoredType)
+        end
+
+        def __lf_args
+          {@value}
+        end
+
+        def self.__lf_tokens
+          {LF::Data::SQL::QueryToken::Leaf(JSONBContainedBy(FieldType, StoredType)).new}
+        end
+      end
+
+      struct JSONBHasKey(FieldType)
+        include Expression
+
+        getter key : String
+
+        def initialize(@key : String)
+        end
+
+        def __lf_args
+          {@key}
+        end
+
+        def self.__lf_tokens
+          {LF::Data::SQL::QueryToken::Leaf(JSONBHasKey(FieldType)).new}
+        end
+      end
+
       struct In(FieldType, StoredValues)
         include Expression
 

@@ -12,6 +12,8 @@ module LF
         Float64
         Timestamp
         Bytes
+        Json
+        Jsonb
       end
 
       record DefaultValue, value : Literal

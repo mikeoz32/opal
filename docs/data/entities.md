@@ -17,9 +17,104 @@ class Todo
 end
 ```
 
-`@[Column]` can rename a column, ignore an application-only property, or select
-a stateless converter. Mapping validates IDs, versions, duplicate columns,
-supported stored types, and converter calls at compile time.
+`@[Column]` can rename a column, ignore an application-only property, select a
+stateless converter, or declare typed JSON storage. Mapping validates IDs,
+versions, duplicate columns, supported stored types, and converter calls at
+compile time.
+
+## Typed JSON and JSONB
+
+Use `type: :json` or `type: :jsonb` to keep a concrete Crystal type at the
+entity boundary while storing its JSON representation:
+
+```crystal
+struct CreatedPayload
+  include JSON::Serializable
+
+  getter created_id : String
+
+  def initialize(@created_id : String)
+  end
+end
+
+struct ArchivedPayload
+  include JSON::Serializable
+
+  getter reason : String
+
+  def initialize(@reason : String)
+  end
+end
+
+alias EntityChangePayload = CreatedPayload | ArchivedPayload
+
+@[LF::Data::Table("entity_changes")]
+class EntityChange
+  include LF::Data::Entity
+
+  @[LF::Data::Id]
+  getter id : Int64
+
+  @[LF::Data::Column(type: :jsonb)]
+  property payload : EntityChangePayload
+
+  @[LF::Data::Column(type: :json)]
+  property labels : Array(String)
+
+  @[LF::Data::Column(type: :jsonb)]
+  property metadata : Hash(String, String)?
+
+  def initialize(@id, @payload, @labels, @metadata)
+  end
+end
+```
+
+The default codec uses Crystal's `JSON::Serializable` contract. It supports
+arrays, nested serializable types, and unions that Crystal can distinguish.
+The declared property type is restored during hydration; Opal does not expose
+`JSON::Any` or a driver-specific JSON wrapper to the entity.
+
+A nilable property maps Crystal `nil` to SQL `NULL`, and SQL `NULL` back to
+Crystal `nil`. This differs from a JSON literal `null`, which remains JSON data
+and requires a property type that can decode it.
+
+### Custom codecs
+
+Use `codec:` when the application type does not implement the default JSON
+contract or needs a versioned wire representation:
+
+```crystal
+module EntityChangePayloadCodec
+  def self.load(
+    parser : JSON::PullParser,
+    type : EntityChangePayload.class,
+  ) : EntityChangePayload
+    EntityChangePayload.new(parser)
+  end
+
+  def self.dump(
+    value : EntityChangePayload,
+    builder : JSON::Builder,
+  ) : Nil
+    value.to_json(builder)
+  end
+end
+
+@[LF::Data::Column(type: :jsonb, codec: EntityChangePayloadCodec)]
+property payload : EntityChangePayload
+```
+
+Codecs are stateless compile-time references. `load` receives a normalized
+`JSON::PullParser`; `dump` writes one JSON value to the provided
+`JSON::Builder`. They never depend on PostgreSQL, SQLite, or a database driver.
+`load` must consume the complete JSON value; trailing content is rejected.
+`codec:` requires `type: :json` or `type: :jsonb`, and cannot be combined with
+`converter:`.
+
+Encoding and decoding failures raise `JSONColumnEncodeError` or
+`JSONColumnDecodeError`. A driver value that cannot represent JSON raises
+`JSONColumnStorageError`. Hydration adds entity, property, and column context
+through `MappingError`; error messages do not include the JSON payload.
 
 The declared ID type is also the lookup contract. Assigned IDs use their exact
 property type. A generated `Int32?` or `Int64?` property remains nilable only

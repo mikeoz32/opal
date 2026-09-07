@@ -57,6 +57,8 @@ describe LF::Data::Dialects::SQLite::SchemaRenderer do
           table.float64("score", default: 1.5_f64)
           table.timestamp("created_at", default: timestamp)
           table.bytes("payload", default: Bytes[0x0a, 0xff])
+          table.json("document")
+          table.jsonb("metadata", null: false)
           table.unique("code", name: "uq_projects_code")
           table.index("idx_projects_active", "active")
         end
@@ -70,6 +72,7 @@ describe LF::Data::Dialects::SQLite::SchemaRenderer do
           "\"score\" REAL DEFAULT 1.5, ",
           "\"created_at\" TEXT DEFAULT '2026-07-28T12:30:00Z', ",
           "\"payload\" BLOB DEFAULT X'0aff', ",
+          "\"document\" TEXT, \"metadata\" TEXT NOT NULL, ",
           "CONSTRAINT \"uq_projects_code\" UNIQUE (\"code\"))",
         ].join
         events.map(&.sql).should eq([
@@ -86,7 +89,7 @@ describe LF::Data::Dialects::SQLite::SchemaRenderer do
         ).should eq(1_i64)
         connection.scalar(
           "SELECT count(*) FROM pragma_table_info('projects')"
-        ).should eq(9_i64)
+        ).should eq(11_i64)
         connection.scalar(
           "SELECT count(*) FROM sqlite_master WHERE type = 'index' AND name = ?",
           "idx_projects_active"

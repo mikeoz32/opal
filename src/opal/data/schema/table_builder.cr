@@ -102,6 +102,17 @@ module LF
           add_column(name, ColumnType::Bytes, null, default)
         end
 
+        # Adds a logical JSON column. PostgreSQL keeps native JSON storage;
+        # SQLite uses text affinity while retaining codec round trips.
+        def json(name : String, *, null : Bool = true) : Nil
+          add_column(name, ColumnType::Json, null, NoDefault.new)
+        end
+
+        # Adds a logical JSONB column with native PostgreSQL storage.
+        def jsonb(name : String, *, null : Bool = true) : Nil
+          add_column(name, ColumnType::Jsonb, null, NoDefault.new)
+        end
+
         def primary_key(*columns : String, name : String? = nil) : Nil
           raise ArgumentError.new("Table #{self.name} already has a primary key") if @primary_key
 

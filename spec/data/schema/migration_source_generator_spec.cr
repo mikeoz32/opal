@@ -14,6 +14,8 @@ describe LF::Data::Schema::MigrationSourceGenerator do
     )
     table.bytes("payload", default: Bytes[0x0a, 0xff])
     table.bytes("empty_payload", default: Bytes.new(0))
+    table.json("document")
+    table.jsonb("metadata", null: false)
     table.unique("name", name: "uq_projects_name")
     table.index("idx_projects_active", "active")
     steps = [
@@ -42,6 +44,8 @@ describe LF::Data::Schema::MigrationSourceGenerator do
     source.should contain("Time::Format::RFC_3339.parse")
     source.should contain("Bytes[0x0a, 0xff]")
     source.should contain("Bytes.new(0)")
+    source.should contain(%(table.json("document")))
+    source.should contain(%(table.jsonb("metadata", null: false)))
     source.should contain(%(schema.rename_column("projects", "name", "title")))
 
     path = "/tmp/opal-generated-migration-#{Process.pid}.cr"

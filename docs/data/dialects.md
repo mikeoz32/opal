@@ -27,7 +27,8 @@ require "pg"
 ```
 
 The PostgreSQL dialect uses numbered `$1` binds, `INSERT ... RETURNING` for
-generated IDs, native boolean/timestamp/byte types, transactional DDL, and a
+generated IDs, native boolean/timestamp/byte/JSON/JSONB types, typed JSONB
+containment and key predicates, transactional DDL, and a
 database/application-namespaced advisory migration lock. Requiring the dialect
 does not load or register `crystal-pg`; the application owns that choice.
 
@@ -35,6 +36,11 @@ SQLite and PostgreSQL both advertise `SchemaInspection`. Introspection
 normalizes only the portable schema types and artifacts that Opal can represent;
 vendor-only types and expression or partial indexes fail with
 `SchemaInspectionError` rather than being silently omitted.
+
+SQLite renders logical JSON and JSONB columns as `TEXT` and supports typed
+entity round trips through the same codecs. It does not emulate PostgreSQL
+JSONB query operators. Static use is rejected by the SQLite query policy and
+dynamic use raises `UnsupportedQueryOperatorError`.
 
 Unsupported operations fail before partial execution with typed Opal errors.
 Driver, pool, connection, and SQL failures retain their original `DB::Error`
