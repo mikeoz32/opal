@@ -670,6 +670,21 @@ module LF
                                         ">="
                                       elsif expression_name == "Like"
                                         "LIKE"
+                                      elsif expression_name == "JSONBContains"
+                                        unless policy.has_constant?("JSONB_CONTAINS_OPERATOR")
+                                          raise "#{@type} static SQL policy does not support JSONB containment"
+                                        end
+                                        policy.constant("JSONB_CONTAINS_OPERATOR")
+                                      elsif expression_name == "JSONBContainedBy"
+                                        unless policy.has_constant?("JSONB_CONTAINED_BY_OPERATOR")
+                                          raise "#{@type} static SQL policy does not support JSONB contained-by"
+                                        end
+                                        policy.constant("JSONB_CONTAINED_BY_OPERATOR")
+                                      elsif expression_name == "JSONBHasKey"
+                                        unless policy.has_constant?("JSONB_HAS_KEY_OPERATOR")
+                                          raise "#{@type} static SQL policy does not support JSONB key existence"
+                                        end
+                                        policy.constant("JSONB_HAS_KEY_OPERATOR")
                                       else
                                         raise "Unsupported static predicate #{expression}"
                                       end %}
@@ -909,6 +924,21 @@ module LF
                                         ">="
                                       elsif expression_name == "Like"
                                         "LIKE"
+                                      elsif expression_name == "JSONBContains"
+                                        unless policy.has_constant?("JSONB_CONTAINS_OPERATOR")
+                                          raise "#{@type} static SQL policy does not support JSONB containment"
+                                        end
+                                        policy.constant("JSONB_CONTAINS_OPERATOR")
+                                      elsif expression_name == "JSONBContainedBy"
+                                        unless policy.has_constant?("JSONB_CONTAINED_BY_OPERATOR")
+                                          raise "#{@type} static SQL policy does not support JSONB contained-by"
+                                        end
+                                        policy.constant("JSONB_CONTAINED_BY_OPERATOR")
+                                      elsif expression_name == "JSONBHasKey"
+                                        unless policy.has_constant?("JSONB_HAS_KEY_OPERATOR")
+                                          raise "#{@type} static SQL policy does not support JSONB key existence"
+                                        end
+                                        policy.constant("JSONB_HAS_KEY_OPERATOR")
                                       else
                                         raise "Unsupported static bulk predicate #{expression}"
                                       end %}

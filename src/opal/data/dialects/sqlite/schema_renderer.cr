@@ -172,6 +172,8 @@ module LF
               "TEXT"
             when .bytes?
               "BLOB"
+            when .json?, .jsonb?
+              "TEXT"
             else
               raise UnsupportedSchemaOperationError.new(
                 @dialect.name,

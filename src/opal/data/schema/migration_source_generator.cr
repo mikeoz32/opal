@@ -160,6 +160,8 @@ module LF
                    when .float64?   then "float64"
                    when .timestamp? then "timestamp"
                    when .bytes?     then "bytes"
+                   when .json?      then "json"
+                   when .jsonb?     then "jsonb"
                    else
                      raise MigrationSourceGenerationError.new(
                        "unsupported column type #{column.type}"

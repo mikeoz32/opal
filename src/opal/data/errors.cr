@@ -47,6 +47,63 @@ module LF
       end
     end
 
+    # Base error for typed JSON column serialization and storage failures.
+    # `target_type` is the application-facing Crystal type; payload values are
+    # deliberately excluded from error messages.
+    abstract class JSONColumnError < Error
+      getter target_type : String
+
+      def initialize(@target_type : String, message : String, cause : Exception? = nil)
+        super(message, cause)
+      end
+    end
+
+    # Raised when a default or application codec cannot encode a value.
+    class JSONColumnEncodeError < JSONColumnError
+      def initialize(target_type : String, cause : Exception)
+        super(
+          target_type,
+          "Cannot encode JSON column value as #{target_type}",
+          cause
+        )
+      end
+    end
+
+    # Raised when stored JSON is invalid for the declared Crystal type.
+    class JSONColumnDecodeError < JSONColumnError
+      def initialize(target_type : String, cause : Exception)
+        super(
+          target_type,
+          "Cannot decode JSON column value as #{target_type}",
+          cause
+        )
+      end
+    end
+
+    # Raised when a driver returns SQL NULL for a required JSON property or a
+    # value that cannot be normalized into a JSON parser.
+    class JSONColumnStorageError < JSONColumnError
+      getter stored_type : String
+
+      def initialize(target_type : String, @stored_type : String)
+        super(
+          target_type,
+          "Cannot decode JSON column for #{target_type} from stored type #{stored_type}"
+        )
+      end
+    end
+
+    # Raised by a dynamic query when its dialect cannot render an operator.
+    # Static queries reject the same mismatch during compilation.
+    class UnsupportedQueryOperatorError < Error
+      getter dialect : String
+      getter operator : Symbol
+
+      def initialize(@dialect : String, @operator : Symbol)
+        super("Query operator #{operator} is not supported by dialect #{dialect}")
+      end
+    end
+
     class EntityStateError < Error
       getter operation : Symbol
       getter entity_name : String

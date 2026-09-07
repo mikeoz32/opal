@@ -54,6 +54,7 @@ module LF
         ) : Bool
           return true if integer_storage_type?(desired) && integer_storage_type?(actual)
           return true if desired.timestamp? && actual.text?
+          return true if (desired.json? || desired.jsonb?) && actual.text?
 
           desired == actual
         end

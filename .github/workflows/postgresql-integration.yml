@@ -49,4 +49,5 @@ jobs:
           crystal spec
           integration/postgresql_spec.cr
           integration/postgresql_schema_generation_spec.cr
+          integration/postgresql_json_column_spec.cr
           --no-color

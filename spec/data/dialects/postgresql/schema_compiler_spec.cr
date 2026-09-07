@@ -17,6 +17,8 @@ describe LF::Data::Dialects::PostgreSQL::SchemaCompiler do
     table.float64("score", default: 1.5_f64)
     table.timestamp("created_at", default: timestamp)
     table.bytes("payload", default: Bytes[0x0a, 0xff])
+    table.json("document")
+    table.jsonb("metadata", null: false)
     table.unique("code", name: "uq_projects_code")
     table.index("idx_projects_active", "active")
 
@@ -32,6 +34,7 @@ describe LF::Data::Dialects::PostgreSQL::SchemaCompiler do
         "\"score\" DOUBLE PRECISION DEFAULT 1.5, ",
         "\"created_at\" TIMESTAMPTZ DEFAULT '2026-08-30T12:30:00Z', ",
         "\"payload\" BYTEA DEFAULT decode('0aff', 'hex'), ",
+        "\"document\" JSON, \"metadata\" JSONB NOT NULL, ",
         "CONSTRAINT \"uq_projects_code\" UNIQUE (\"code\"))",
       ].join,
       %(CREATE INDEX "idx_projects_active" ON "projects" ("active")),

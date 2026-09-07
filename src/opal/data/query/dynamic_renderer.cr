@@ -119,6 +119,18 @@ module LF
           "#{column(FieldType)} LIKE #{bind(expression.value)}"
         end
 
+        def render(expression : JSONBContains(FieldType, StoredType)) : String forall FieldType, StoredType
+          "#{column(FieldType)} #{@dialect.jsonb_operator(:contains)} #{bind(expression.value)}"
+        end
+
+        def render(expression : JSONBContainedBy(FieldType, StoredType)) : String forall FieldType, StoredType
+          "#{column(FieldType)} #{@dialect.jsonb_operator(:contained_by)} #{bind(expression.value)}"
+        end
+
+        def render(expression : JSONBHasKey(FieldType)) : String forall FieldType
+          "#{column(FieldType)} #{@dialect.jsonb_operator(:has_key)} #{bind(expression.key)}"
+        end
+
         def render(expression : In(FieldType, StoredValues)) : String forall FieldType, StoredValues
           return "0 = 1" if expression.values.empty?
 

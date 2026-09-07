@@ -24,6 +24,9 @@ All notable changes to Opal are documented in this file.
 - entity-declared lookup ID enforcement and typed delete-by-ID scheduling;
 - manager-bound typed repositories with read/write conveniences, bulk builders,
   and composed-query one-based pagination;
+- typed JSON and JSONB entity columns with default or application codecs,
+  nilable/array/nested/union round trips, typed mapping errors, portable schema
+  support, and native PostgreSQL JSONB containment and key predicates;
 - end-to-end SQLite Data and Todo examples with process-level verification;
 - bounded transport-aware HTTP drain with typed timeout reporting;
 - explicit controller `HEAD` and `OPTIONS` routes, deterministic HTTP 405

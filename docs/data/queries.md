@@ -35,6 +35,36 @@ Opal owns no prepared-statement cache. SQL executes through the checked-out
 `DB::Connection`, and `crystal-db` owns connection-local preparation and
 caching.
 
+## PostgreSQL JSONB predicates
+
+Fields mapped with `@[LF::Data::Column(type: :jsonb)]` expose typed helpers for
+the native PostgreSQL containment and key operators:
+
+```crystal
+fields = EntityChange::Fields
+
+matching = manager.query(EntityChange)
+  .where(fields.payload.jsonb_contains({created_id: "change-42"})) # @>
+  .where(fields.payload.jsonb_has_key("created_id"))                # ?
+  .to_a
+
+bounded = manager.query(EntityChange)
+  .where(fields.payload.jsonb_contained_by(allowed_payload))        # <@
+  .to_a
+```
+
+The right-hand value for containment can be any JSON-serializable Crystal
+value, including a named tuple used as a partial document. Opal serializes it
+as a bind argument; it does not interpolate JSON into SQL or cast the JSONB
+column to text.
+
+These helpers are available only on `type: :jsonb` fields. Static queries fail
+at compile time when their dialect policy does not support the operator;
+dynamic queries raise `UnsupportedQueryOperatorError`. Use explicit raw SQL
+for PostgreSQL operators not represented by the typed query DSL, path
+extraction, expression indexes, or JSONPath. Native `jsonb` storage is retained,
+so those PostgreSQL features remain available.
+
 Inside a transaction, `manager.repository(Entity)` provides typed `find`,
 `find_by`, `count`, `exists?`, entity writes, typed bulk builders, and
 deterministic one-based pagination over these same plans. Pagination accepts a

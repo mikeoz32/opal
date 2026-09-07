@@ -36,6 +36,37 @@ module LF
               {% raise "#{entity} table name must not be empty or contain NUL" %}
             {% end %}
 
+            {% for ivar in entity.instance_vars %}
+              {% if column_annotation = ivar.annotation(LF::Data::Column) %}
+                {% attributes = column_annotation.named_args.keys.map(&.stringify) %}
+                {% supported_attributes = ["name", "ignore", "converter", "type", "codec"] %}
+                {% unsupported_attributes = attributes.reject do |attribute|
+                     supported_attributes.includes?(attribute)
+                   end %}
+                {% unless unsupported_attributes.empty? %}
+                  {% raise "#{entity} field #{ivar.name} has unsupported LF::Data::Column attributes: #{unsupported_attributes.join(", ")}" %}
+                {% end %}
+                {% json_type = column_annotation[:type] %}
+                {% codec = column_annotation[:codec] %}
+                {% converter = column_annotation[:converter] %}
+                {% if json_type && json_type != :json && json_type != :jsonb %}
+                  {% raise "#{entity} field #{ivar.name} column type must be :json or :jsonb, not #{json_type}" %}
+                {% end %}
+                {% if codec && !json_type %}
+                  {% raise "#{entity} field #{ivar.name} JSON codec requires column type: :json or :jsonb" %}
+                {% end %}
+                {% if converter && (json_type || codec) %}
+                  {% raise "#{entity} field #{ivar.name} must not combine converter with JSON type or codec" %}
+                {% end %}
+                {% if column_annotation[:ignore] && (json_type || codec || converter) %}
+                  {% raise "#{entity} ignored field #{ivar.name} must not define converter, JSON type, or codec" %}
+                {% end %}
+                {% if json_type && (ivar.annotation(LF::Data::Id) || ivar.annotation(LF::Data::Version)) %}
+                  {% raise "#{entity} field #{ivar.name} JSON column cannot be an ID or version" %}
+                {% end %}
+              {% end %}
+            {% end %}
+
             {% persistent_ivars = entity.instance_vars.reject do |ivar|
                  column_ann = ivar.annotation(LF::Data::Column)
                  (column_ann && column_ann[:ignore]) ||
@@ -218,8 +249,8 @@ module LF
               {% if version_column && version_column[:ignore] %}
                 {% raise "#{entity} field #{version_ivar.name} version must not be ignored" %}
               {% end %}
-              {% if version_column && version_column[:converter] %}
-                {% raise "#{entity} field #{version_ivar.name} version must not define a converter" %}
+              {% if version_column && (version_column[:converter] || version_column[:type] || version_column[:codec]) %}
+                {% raise "#{entity} field #{version_ivar.name} version must not define a converter or JSON mapping" %}
               {% end %}
               {% if version_ivar.annotation(LF::Data::Id) %}
                 {% raise "#{entity} field #{version_ivar.name} version cannot also be the ID" %}
@@ -253,7 +284,8 @@ module LF
             {% for ivar in persistent_ivars %}
               {% column_annotation = ivar.annotation(LF::Data::Column) %}
               {% converter = column_annotation && column_annotation[:converter] %}
-              {% unless converter %}
+              {% json_type = column_annotation && column_annotation[:type] %}
+              {% unless converter || json_type %}
                 {% field_type = ivar.type.resolve %}
                 {% if field_type.nilable? %}
                   {% non_nil_types = field_type.union_types.reject { |type| type == Nil } %}
@@ -401,7 +433,24 @@ module LF
               {% else %}
                 {% column_name = (column_annotation && column_annotation[:name]) || ivar.name.stringify %}
                 begin
-                  {% if converter = column_annotation && column_annotation[:converter] %}
+                  {% if json_type = column_annotation && column_annotation[:type] %}
+                    {% codec = column_annotation[:codec] || LF::Data::DefaultJSONCodec %}
+                    {% field_type = ivar.type.resolve %}
+                    {% if field_type.nilable? %}
+                      {% non_nil_type = field_type.union_types.reject { |type| type == Nil }.first %}
+                      @{{ivar.name}} = LF::Data::JSONColumn.load_nilable(
+                        result,
+                        {{codec}},
+                        {{non_nil_type}}
+                      )
+                    {% else %}
+                      @{{ivar.name}} = LF::Data::JSONColumn.load(
+                        result,
+                        {{codec}},
+                        {{ivar.type}}
+                      )
+                    {% end %}
+                  {% elsif converter = column_annotation && column_annotation[:converter] %}
                     @{{ivar.name}} = LF::Data::Converter.load(
                       result,
                       {{converter}},
@@ -437,7 +486,14 @@ module LF
                 {% ignored = (column_annotation && column_annotation[:ignore]) || relationship %}
                 {% generated_id = id_annotation && id_annotation[:generated] %}
                 {% unless ignored || generated_id %}
-                  {% if converter = column_annotation && column_annotation[:converter] %}
+                  {% if json_type = column_annotation && column_annotation[:type] %}
+                    {% codec = column_annotation[:codec] || LF::Data::DefaultJSONCodec %}
+                    {% if ivar.type.resolve.nilable? %}
+                      @{{ivar.name}}.nil? ? nil : LF::Data::JSONColumn.dump(@{{ivar.name}}.not_nil!, {{codec}}),
+                    {% else %}
+                      LF::Data::JSONColumn.dump(@{{ivar.name}}, {{codec}}),
+                    {% end %}
+                  {% elsif converter = column_annotation && column_annotation[:converter] %}
                     {% if ivar.type.resolve.nilable? %}
                       @{{ivar.name}}.nil? ? nil : LF::Data::Converter.dump(@{{ivar.name}}.not_nil!, {{converter}}),
                     {% else %}
@@ -464,7 +520,14 @@ module LF
                                   ivar.annotation(LF::Data::HasMany) %}
                 {% ignored = (column_annotation && column_annotation[:ignore]) || relationship %}
                 {% unless ignored || ivar.annotation(LF::Data::Id) || ivar.annotation(LF::Data::Version) %}
-                  {% if converter = column_annotation && column_annotation[:converter] %}
+                  {% if json_type = column_annotation && column_annotation[:type] %}
+                    {% codec = column_annotation[:codec] || LF::Data::DefaultJSONCodec %}
+                    {% if ivar.type.resolve.nilable? %}
+                      @{{ivar.name}}.nil? ? nil : LF::Data::JSONColumn.dump(@{{ivar.name}}.not_nil!, {{codec}}),
+                    {% else %}
+                      LF::Data::JSONColumn.dump(@{{ivar.name}}, {{codec}}),
+                    {% end %}
+                  {% elsif converter = column_annotation && column_annotation[:converter] %}
                     {% if ivar.type.resolve.nilable? %}
                       @{{ivar.name}}.nil? ? nil : LF::Data::Converter.dump(@{{ivar.name}}.not_nil!, {{converter}}),
                     {% else %}

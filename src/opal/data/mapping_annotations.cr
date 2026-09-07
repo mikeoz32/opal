@@ -6,7 +6,8 @@ module LF
     end
 
     # Configures one persisted property. Supported named arguments are `name`,
-    # `ignore`, and a stateless `converter` type.
+    # `ignore`, a stateless `converter`, or JSON `type` (`:json` / `:jsonb`) and
+    # an optional driver-neutral `codec`.
     annotation Column
     end
 

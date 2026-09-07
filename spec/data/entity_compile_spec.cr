@@ -68,6 +68,10 @@ describe LF::Data::Entity do
     {"invalid_table_name.cr", "InvalidTableNameEntity", "table name"},
     {"invalid_column_name.cr", "InvalidColumnNameEntity", "column name for field payload"},
     {"invalid_ignored_field.cr", "InvalidIgnoredFieldEntity", "ignored field derived_label"},
+    {"invalid_json_type.cr", "InvalidJSONTypeEntity", "type must be :json or :jsonb"},
+    {"json_codec_without_type.cr", "JSONCodecWithoutTypeEntity", "JSON codec requires column type"},
+    {"json_converter_and_codec.cr", "JSONConverterAndCodecEntity", "must not combine converter"},
+    {"json_id.cr", "JSONIdEntity", "JSON column cannot be an ID"},
   }.each do |fixture_case|
     fixture_name, entity_name, message_fragment = fixture_case
 

@@ -15,6 +15,8 @@ describe LF::Data::Schema::TableBuilder do
     table.timestamp("created_at", default: timestamp)
     bytes = Bytes[1, 2, 3]
     table.bytes("payload", default: bytes)
+    table.json("document")
+    table.jsonb("metadata", null: false)
 
     definition = table.build
 
@@ -29,6 +31,8 @@ describe LF::Data::Schema::TableBuilder do
       LF::Data::Schema::ColumnType::Float64,
       LF::Data::Schema::ColumnType::Timestamp,
       LF::Data::Schema::ColumnType::Bytes,
+      LF::Data::Schema::ColumnType::Json,
+      LF::Data::Schema::ColumnType::Jsonb,
     ])
     definition.columns.first.generated?.should be_true
     definition.columns.first.nullable?.should be_false
@@ -37,6 +41,8 @@ describe LF::Data::Schema::TableBuilder do
     definition.columns[3].default.not_nil!.value.should be_false
     definition.columns[7].default.not_nil!.value.should eq(timestamp)
     definition.columns[8].default.not_nil!.value.should eq(bytes)
+    definition.columns[9].nullable?.should be_true
+    definition.columns[10].nullable?.should be_false
     definition.primary_key.not_nil!.columns.should eq(["id"])
   end
 
