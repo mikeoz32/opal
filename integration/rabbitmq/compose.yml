@@ -1,0 +1,16 @@
+services:
+  rabbitmq:
+    image: rabbitmq:4.3.5-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: opal
+      RABBITMQ_DEFAULT_PASS: opal
+      RABBITMQ_DEFAULT_VHOST: opal_test
+    ports:
+      - "5673:5672"
+      - "15673:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 10s

@@ -1,0 +1,3 @@
+microservices:
+  rabbitmq:
+    url: amqp://opal:opal@127.0.0.1:5673/opal_test

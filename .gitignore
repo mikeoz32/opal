@@ -8,6 +8,8 @@
 !/docs/plans/**
 !/docs/data/
 !/docs/data/**
+!/docs/microservices/
+!/docs/microservices/**
 !/docs/live-view.md
 !/docs/ui.md
 /.cache/
