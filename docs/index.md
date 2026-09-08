@@ -69,6 +69,7 @@ require "opal/security"         # authentication and authorization
 require "opal/security/jwt"     # JWT and OIDC resource-token adapters
 require "opal/microservices"    # transport-neutral RPC and event contracts
 require "opal/autoconfig/microservices/rabbitmq" # Application-owned RabbitMQ
+require "opal/autoconfig/microservices/crabbit_streams" # Replayable projections
 ```
 
 See the complete [module selection reference](reference/modules.md) before
@@ -88,6 +89,8 @@ choosing an entry point.
    and identity from the [Security guide](security.md).
 6. Connect independently deployed services with the
    [Microservices guide](microservices/getting-started.md).
+7. Build durable CQRS read models with the
+   [RabbitMQ Streams projections guide](microservices/rabbitmq-streams.md).
 
 ## Principles and deliberate boundaries
 

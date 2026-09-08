@@ -1,0 +1,10 @@
+microservices:
+  streams:
+    url: rabbitmq-stream://opal:opal@127.0.0.1:5553/opal_test
+    producer_name: orders-example
+    create_topology: true
+    initial_offset: first
+    retry:
+      max_attempts: 5
+      initial_delay_ms: 250
+      max_delay_ms: 10000

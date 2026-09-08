@@ -23,6 +23,30 @@ module LF::Microservices
     Metadata
   end
 
+  # Position and topology metadata for an event read from a replayable stream.
+  # Queue-backed message deliveries leave this value absent.
+  struct StreamDeliveryMetadata
+    getter topology : String
+    getter stream : String
+    getter subscription : String
+    getter offset : UInt64
+    getter timestamp : Time
+    getter super_stream : String?
+
+    def initialize(
+      @topology : String,
+      @stream : String,
+      @subscription : String,
+      @offset : UInt64,
+      @timestamp : Time,
+      @super_stream : String? = nil,
+    )
+      raise MessageConfigurationError.new("stream topology must not be empty") if topology.empty?
+      raise MessageConfigurationError.new("stream name must not be empty") if stream.empty?
+      raise MessageConfigurationError.new("stream subscription must not be empty") if subscription.empty?
+    end
+  end
+
   struct ArgumentMetadata
     getter name : String
     getter target_type : String
@@ -43,6 +67,7 @@ module LF::Microservices
     getter event_identity : EventIdentity?
     getter correlation_id : UUID?
     getter causation_id : UUID?
+    getter stream_metadata : StreamDeliveryMetadata?
     @headers : Hash(String, JSON::Any)
 
     def initialize(
@@ -55,6 +80,7 @@ module LF::Microservices
       headers : Hash(String, JSON::Any) = {} of String => JSON::Any,
       @correlation_id : UUID? = nil,
       @causation_id : UUID? = nil,
+      @stream_metadata : StreamDeliveryMetadata? = nil,
     )
       @headers = WireValue.deep_copy(headers)
       raise MessageConfigurationError.new("controller must not be empty") if controller.empty?
@@ -72,6 +98,10 @@ module LF::Microservices
 
     def event? : Bool
       !event_identity.nil?
+    end
+
+    def stream? : Bool
+      !stream_metadata.nil?
     end
 
     # Application-owned headers from the decoded JSON envelope. Broker headers

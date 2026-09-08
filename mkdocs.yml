@@ -107,6 +107,7 @@ nav:
       - Autoconfiguration: data/autoconfiguration.md
   - Microservices:
       - Getting started: microservices/getting-started.md
+      - RabbitMQ Streams projections: microservices/rabbitmq-streams.md
       - Protocol v1: microservices/protocol-v1.md
   - Reference:
       - Module selection: reference/modules.md

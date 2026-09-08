@@ -12,6 +12,10 @@ shards:
     git: https://github.com/spider-gazelle/bindata.git
     version: 3.2.1
 
+  crabbit:
+    git: https://github.com/mikeoz32/crabbit.git
+    version: 0.2.0
+
   db:
     git: https://github.com/crystal-lang/crystal-db.git
     version: 0.14.0
@@ -24,6 +28,10 @@ shards:
     git: https://github.com/crystal-community/jwt.git
     version: 1.7.2
 
+  lz4:
+    git: https://github.com/84codes/lz4.cr.git
+    version: 1.0.0+git.commit.0015e74e0ed0f6bb15de9c25c25034ad4bc7f636
+
   openssl_ext:
     git: https://github.com/spider-gazelle/openssl_ext.git
     version: 2.8.5
@@ -32,6 +40,15 @@ shards:
     git: https://github.com/will/crystal-pg.git
     version: 0.30.0
 
+  snappy:
+    git: https://github.com/naqvis/snappy.git
+    version: 0.1.7
+
   sqlite3:
     git: https://github.com/crystal-lang/crystal-sqlite3.git
     version: 0.23.0
+
+  zstd:
+    git: https://github.com/didactic-drunk/zstd.cr.git
+    version: 1.2.0+git.commit.6e63bfcc80fb7ee14019216c1bf5839f09c7120f
+

@@ -24,6 +24,7 @@ examples=(
   examples/http_execution_pipeline_example.cr
   examples/microservices_autoconfig.cr
   examples/microservices_foundations.cr
+  examples/crabbit_streams_projection.cr
   examples/router_example.cr
   examples/data_layer_sqlite/src/data_layer_example_cli.cr
   examples/data_layer_sqlite/src/data_layer_example_http_cli.cr

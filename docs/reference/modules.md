@@ -17,6 +17,8 @@ compile-time declaration of which surface an application is willing to use.
 | `opal/microservices` | typed RPC and event contracts, message execution, in-memory transport | a broker adapter |
 | `opal/microservices/rabbitmq` | RabbitMQ AMQP 0-9-1 server and client transports | application assembly |
 | `opal/autoconfig/microservices/rabbitmq` | application-owned controllers, typed clients, RabbitMQ topology and lifecycle | HTTP server assembly |
+| `opal/microservices/crabbit_streams` | typed RabbitMQ Streams publishers, projection handlers, and broker checkpoints | automatic application assembly |
+| `opal/autoconfig/microservices/crabbit_streams` | application-owned stream topology, handler intake, DI registration, and lifecycle | AMQP 0-9-1 RPC topology |
 
 ## Import combinations
 
@@ -77,3 +79,14 @@ The extension derives the codec, handler registry, transports, shared RPC
 client, DI registrations, and ordered shutdown. Only
 `microservices.rabbitmq.url` is required in configuration; use the lower-level
 RabbitMQ entrypoint when the application must own those resources manually.
+
+### RabbitMQ Streams projection worker
+
+```crystal
+require "opal/autoconfig/microservices/crabbit_streams"
+```
+
+Declare `@[LF::AutoConfig::CrabbitStreams]` with explicit topology and handler
+types. The extension owns the Crabbit environment, typed publisher, partition
+consumers, broker checkpoints, message DI scopes, and ordered shutdown. This
+entrypoint is independent of the AMQP 0-9-1 RPC adapter.

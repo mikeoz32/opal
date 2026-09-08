@@ -17,6 +17,7 @@ It is built on top of Crystal's standard `HTTP::Handler` stack and focuses on:
 - optional accessible UI primitives with a precompiled Tailwind theme
 - opt-in typed RPC and event services with transport-neutral execution and
   RabbitMQ AMQP 0-9-1 support
+- durable typed projection handlers over RabbitMQ Streams and Crabbit
 
 ## Documentation
 
@@ -58,7 +59,7 @@ shards install
 
 ## Core API
 
-Opal exposes ten independent layers:
+Opal exposes eleven independent layers:
 
 1. `LF::HTTP::Router`
    Low-level router with explicit handlers.
@@ -99,6 +100,11 @@ Opal exposes ten independent layers:
    injectable typed clients from an application annotation. See the
    [microservices guide](docs/microservices/getting-started.md) for the minimal
    application and broker configuration.
+
+11. `require "opal/autoconfig/microservices/crabbit_streams"`
+    Optional typed stream publishers and replayable projection handlers with
+    Crabbit broker checkpoints, ordinary streams, and super streams. See the
+    [RabbitMQ Streams guide](docs/microservices/rabbitmq-streams.md).
 
 ## Basic Router
 

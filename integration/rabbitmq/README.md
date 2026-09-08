@@ -13,6 +13,9 @@ Run the real-broker specs:
 ```bash
 OPAL_RABBITMQ_TEST_URL='amqp://opal:opal@127.0.0.1:5673/opal_test' \
   crystal spec integration/rabbitmq_spec.cr --no-color
+
+OPAL_RABBITMQ_STREAM_TEST_URL='rabbitmq-stream://opal:opal@127.0.0.1:5553/opal_test' \
+  crystal spec integration/crabbit_streams_spec.cr --no-color
 ```
 
 Then remove the broker and its durable test resources:
@@ -27,7 +30,8 @@ Docker.
 
 The automated live cases cover startup/declarations, end-to-end RPC replies,
 delayed retry, mandatory unroutable publication, inequivalent queue arguments,
-and deleted exclusive reply routes. Broker restart remains an orchestrated
+deleted exclusive reply routes, typed stream projections, broker checkpoints,
+resume, and super-stream routing. Broker restart remains an orchestrated
 test: stop the Compose service after a confirmed request, start it again, call
 `RPCClient#reconnect`, and verify that the accepted correlation becomes
 outcome-unknown and is never republished.

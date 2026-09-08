@@ -42,8 +42,10 @@ register message infrastructure automatically.
   entrypoint. An explicit `@[LF::AutoConfig::Microservices]` annotation lists
   message controllers and typed clients; the generated application extension
   owns transport creation, DI registration, intake, quiescence, and shutdown.
-- a future RabbitMQ Streams adapter may use Crabbit for event streams, but it is
-  not a substitute for the AMQP 0-9-1 queues and exchanges required by RPC.
+- `opal/microservices/crabbit_streams` and its autoconfiguration entrypoint use
+  Crabbit for durable, replayable typed event streams and projection handlers.
+  Broker offsets are the projection checkpoints. Streams complement, but do
+  not replace, the AMQP 0-9-1 queues and exchanges required by RPC.
 
 ### Application and service identity
 
@@ -217,8 +219,16 @@ Subscriptions explicitly select one mode:
   durable when a stable instance identity and retention bounds are provided.
 
 All durable event delivery is at least once. Retry counts and storage are
-bounded. Poison messages terminate in a dead-letter queue rather than an
-unbounded requeue loop.
+bounded. Poison messages on AMQP 0-9-1 subscriptions terminate in a dead-letter
+queue rather than an unbounded requeue loop.
+
+RabbitMQ Streams projections use a different poison policy because silently
+skipping an offset would create a hole in a replayable read model. A stream
+handler retries locally, then stops only the affected partition without
+advancing its broker checkpoint. The runtime becomes degraded until an operator
+fixes the handler/data and explicitly resumes that partition. Projection side
+effects remain application-owned and must be idempotent under at-least-once
+delivery.
 
 ### Persistence reliability
 
