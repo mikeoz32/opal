@@ -18,6 +18,11 @@ OPAL_RABBITMQ_STREAM_TEST_URL='rabbitmq-stream://opal:opal@127.0.0.1:5553/opal_t
   crystal spec integration/crabbit_streams_spec.cr --no-color
 ```
 
+For an application using this Docker port mapping, configure
+`microservices.streams.load_balancer: true` so Crabbit keeps data connections
+on the mapped entrypoint instead of resolving RabbitMQ's internal container
+hostname.
+
 Then remove the broker and its durable test resources:
 
 ```bash

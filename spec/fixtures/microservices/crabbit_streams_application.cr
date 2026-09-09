@@ -61,6 +61,23 @@ if ENV["OPAL_EXERCISE_CRABBIT_STREAMS"]?
     routing_key: "order-1",
   )
   receipt.await
+
+  identity = StreamOrderCreated.stream_event_identity
+  envelope = MS::EventEnvelope.new(
+    UUID.random,
+    identity.source,
+    identity.event,
+    identity.schema_version,
+    Time.utc,
+    payload: JSON.parse(StreamOrderCreated.new("order-2").to_json),
+  )
+  publisher
+    .publish_envelope(
+      OrdersEventStream.stream_definition,
+      envelope,
+      routing_key: "order-2",
+    )
+    .await
   publisher.close
   environment.close
 end

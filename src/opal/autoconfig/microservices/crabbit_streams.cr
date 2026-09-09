@@ -9,17 +9,19 @@ module LF::AutoConfig
 end
 
 module LF::Microservices::CrabbitStreamsAutoConfig
-  alias EnvironmentFactory = Proc(String, ::Crabbit::Environment)
+  alias EnvironmentFactory = Proc(String, Bool, ::Crabbit::Environment)
 
   private struct Configuration
     getter uri : String
     getter producer_name : String
+    getter? load_balancer : Bool
     getter profile : ProtocolProfile
     getter runtime : StreamRuntimeSettings
 
     def initialize(
       @uri : String,
       @producer_name : String,
+      @load_balancer : Bool,
       @profile : ProtocolProfile,
       @runtime : StreamRuntimeSettings,
     )
@@ -34,6 +36,7 @@ module LF::Microservices::CrabbitStreamsAutoConfig
           "rabbitmq-stream://guest:guest@localhost:5552/%2f",
         ),
         producer_name: config.get("microservices.streams.producer_name", "opal"),
+        load_balancer: config.get("microservices.streams.load_balancer", false),
         profile: ProtocolProfile.new(topology: TopologyConfig.from_config(config)),
         runtime: StreamRuntimeSettings.new(
           create_topology: config.get("microservices.streams.create_topology", false),
@@ -100,7 +103,9 @@ module LF::Microservices::CrabbitStreamsAutoConfig
     getter? stopped = false
 
     def initialize(
-      @environment_factory : EnvironmentFactory = ->(uri : String) { ::Crabbit::Environment.connect(uri) },
+      @environment_factory : EnvironmentFactory = ->(uri : String, load_balancer : Bool) {
+        ::Crabbit::Environment.connect(uri, load_balancer: load_balancer)
+      },
     )
     end
 
@@ -188,7 +193,7 @@ module LF::Microservices::CrabbitStreamsAutoConfig
       registry : StreamHandlerRegistry,
       topologies : Array(StreamTopologyDefinition),
     ) : Nil
-      environment = @environment_factory.call(configuration.uri)
+      environment = @environment_factory.call(configuration.uri, configuration.load_balancer?)
       @environment = environment
       publisher = StreamPublisher.new(
         environment,

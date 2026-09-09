@@ -4,6 +4,12 @@ module LF
   class ConfigService
     DEFAULT_PATH = "config/application.yml"
 
+    # The configuration file that supplied this service, or `nil` when the
+    # application booted with an empty configuration. Optional integrations
+    # can reuse the exact same source without reparsing Opal's private YAML
+    # representation.
+    getter source_path : String?
+
     class Error < Exception
     end
 
@@ -27,15 +33,19 @@ module LF
 
     def initialize
       if path = ENV["OPAL_CONFIG"]?
+        @source_path = path
         @root = load(path, explicit: true)
       elsif File.exists?(DEFAULT_PATH)
+        @source_path = DEFAULT_PATH
         @root = load(DEFAULT_PATH, explicit: false)
       else
+        @source_path = nil
         @root = YAML.parse("{}")
       end
     end
 
     def initialize(path : String)
+      @source_path = path
       @root = load(path, explicit: true)
     end
 

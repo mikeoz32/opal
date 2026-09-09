@@ -108,13 +108,33 @@ module LF::Microservices
         payload: JSON.parse(event.to_json),
         limits: codec.limits,
       )
+
+      publish_envelope(definition, envelope, routing_key: routing_key)
+    rescue error : StreamError
+      raise error
+    rescue error : Exception
+      raise StreamPublishError.new(message_id, error.message || error.class.to_s, error)
+    end
+
+    # Publishes an already materialized wire envelope. This is the replay-safe
+    # entrypoint for transactional outbox relays: the original message id,
+    # timestamp, correlation, causation, and payload are preserved instead of
+    # being regenerated after a process restart.
+    def publish_envelope(
+      definition : StreamTopologyDefinition,
+      envelope : EventEnvelope,
+      *,
+      routing_key : String? = nil,
+    ) : StreamPublishReceipt
+      ensure_open
+      identity = EventIdentity.new(envelope.source, envelope.event, envelope.schema_version)
       message = ::Crabbit::Message.new(
         codec.encode_event(envelope),
         header: ::Crabbit::Header.new(durable: true),
         properties: ::Crabbit::Properties.new(
-          message_id: message_id.to_s,
+          message_id: envelope.message_id.to_s,
           subject: identity.routing_key,
-          correlation_id: correlation_id.try(&.to_s),
+          correlation_id: envelope.correlation_id.try(&.to_s),
           content_type: codec.profile.event_content_type,
           creation_time: envelope.occurred_at,
           group_id: routing_key,
@@ -128,7 +148,7 @@ module LF::Microservices
         handle = super_producer(definition).publish(message, key)
         track(handle.handles)
         StreamPublishReceipt.new(
-          message_id,
+          envelope.message_id,
           identity,
           definition.name,
           handle.handles,
@@ -136,12 +156,12 @@ module LF::Microservices
       else
         handle = producer(definition).publish(message, identity.routing_key)
         track([handle])
-        StreamPublishReceipt.new(message_id, identity, definition.name, [handle])
+        StreamPublishReceipt.new(envelope.message_id, identity, definition.name, [handle])
       end
     rescue error : StreamError
       raise error
     rescue error : Exception
-      raise StreamPublishError.new(message_id, error.message || error.class.to_s, error)
+      raise StreamPublishError.new(envelope.message_id, error.message || error.class.to_s, error)
     end
 
     def drain(deadline : Time::Instant) : Bool

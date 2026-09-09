@@ -21,9 +21,37 @@ private def compile_crabbit_streams_fixture(
   {status: status, output: output.to_s, error: error.to_s}
 end
 
+private def run_crabbit_streams_fixture(
+  name : String,
+) : NamedTuple(status: Process::Status, output: String, error: String)
+  output = IO::Memory.new
+  error = IO::Memory.new
+  cache_dir = ENV.fetch("CRYSTAL_CACHE_DIR", "/tmp/opal-crabbit-streams-compile-cache")
+  Dir.mkdir_p(cache_dir)
+  fixture = File.expand_path("fixtures/microservices/#{name}.cr", __DIR__)
+  status = Process.run(
+    "crystal",
+    ["run", "--no-debug", fixture],
+    env: {
+      "CRYSTAL_CACHE_DIR" => cache_dir,
+      "LIBRARY_PATH"      => ENV.fetch("LIBRARY_PATH", "/tmp"),
+    },
+    output: output,
+    error: error,
+  )
+  {status: status, output: output.to_s, error: error.to_s}
+end
+
 describe "Crabbit Streams compiler" do
   it "compiles typed publishers, handlers, topology, and autoconfiguration" do
     result = compile_crabbit_streams_fixture("crabbit_streams_application")
+
+    result[:status].success?.should be_true
+    result[:error].should eq("")
+  end
+
+  it "forwards load-balancer mode to the Crabbit environment factory" do
+    result = run_crabbit_streams_fixture("crabbit_streams_load_balancer")
 
     result[:status].success?.should be_true
     result[:error].should eq("")

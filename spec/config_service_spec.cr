@@ -21,6 +21,7 @@ describe LF::ConfigService do
       YAML
       config = LF::ConfigService.new(path)
 
+      config.source_path.should eq(path)
       config.get("http.host").as_s.should eq("127.0.0.1")
       config.get("http.port").as_i.should eq(9090)
       config.section("http")["port"].as_i.should eq(9090)
@@ -78,7 +79,9 @@ describe LF::ConfigService do
 
     with_config_file("name: selected\n") do |path|
       ENV["OPAL_CONFIG"] = path
-      LF::ConfigService.new.get("name").as_s.should eq("selected")
+      config = LF::ConfigService.new
+      config.source_path.should eq(path)
+      config.get("name").as_s.should eq("selected")
     end
   ensure
     if previous
@@ -98,6 +101,7 @@ describe LF::ConfigService do
 
     config = LF::ConfigService.new
 
+    config.source_path.should be_nil
     config.get("missing", "default").should eq("default")
     expect_raises(LF::ConfigService::MissingKeyError) do
       config.get("missing")

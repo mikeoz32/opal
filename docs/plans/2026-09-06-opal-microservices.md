@@ -139,6 +139,9 @@ environment before treating the adapter as release-ready.
 - Persist domain changes and outbox rows in one Opal Data transaction.
 - Claim work safely across replicas with PostgreSQL locking.
 - Publish stable event IDs and mark publication only after broker confirmation.
+- For Movie event-sourced entities, reuse Movie's existing atomic outbox and
+  `OutboxDispatcher` through `opal-movie`; do not duplicate those tables or
+  lease semantics in Opal Data.
 
 ### 9. Inbox and idempotency
 

@@ -166,6 +166,7 @@ microservices:
   streams:
     url: rabbitmq-stream://opal:opal@rabbitmq:5552/opal
     producer_name: orders-service
+    load_balancer: false
     create_topology: false
     initial_offset: first
     initial_credit: 10
@@ -183,6 +184,7 @@ microservices:
 | --- | --- | --- |
 | `url` | local guest stream URL | Crabbit connection URI |
 | `producer_name` | `opal` | Stable producer prefix used for broker deduplication |
+| `load_balancer` | `false` | Connect producer/consumer sockets through configured entrypoints instead of broker-advertised addresses |
 | `create_topology` | `false` | Create missing development/test topology |
 | `initial_offset` | `first` | Start point without a checkpoint: `first`, `next`, `last`, or `timestamp` |
 | `initial_timestamp_ms` | none | Positive Unix milliseconds required with `timestamp` |
@@ -197,6 +199,9 @@ Keep `producer_name` stable across restarts of one logical producer and distinct
 between independent producers. The low-level `StreamPublisher` accepts custom
 `Crabbit::ProducerOptions`, but they must retain a stable name and event filter
 extractor.
+
+Set `load_balancer: true` when `url` points to a Docker port mapping or TCP load
+balancer and RabbitMQ metadata advertises an internal broker hostname.
 
 ## Checkpoints and delivery guarantees
 

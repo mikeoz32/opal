@@ -120,7 +120,7 @@ end
 if STREAM_TEST_URL
   describe "Crabbit StreamHandler integration" do
     it "publishes, projects, checkpoints, and resumes an ordinary stream" do
-      environment = Crabbit::Environment.connect(STREAM_TEST_URL.not_nil!)
+      environment = Crabbit::Environment.connect(STREAM_TEST_URL.not_nil!, load_balancer: true)
       definition = IntegrationOrdersStream.stream_definition
       environment.delete_stream(definition.name) if environment.stream_exists?(definition.name)
       container, context = stream_application_context
@@ -184,7 +184,7 @@ if STREAM_TEST_URL
     end
 
     it "routes and checkpoints events across super-stream partitions" do
-      environment = Crabbit::Environment.connect(STREAM_TEST_URL.not_nil!)
+      environment = Crabbit::Environment.connect(STREAM_TEST_URL.not_nil!, load_balancer: true)
       definition = IntegrationOrdersSuperStream.stream_definition
       begin
         environment.delete_super_stream(definition.name)
@@ -232,7 +232,7 @@ if STREAM_TEST_URL
     end
 
     it "stops a poison partition without advancing its checkpoint and resumes it explicitly" do
-      environment = Crabbit::Environment.connect(STREAM_TEST_URL.not_nil!)
+      environment = Crabbit::Environment.connect(STREAM_TEST_URL.not_nil!, load_balancer: true)
       definition = IntegrationPoisonStream.stream_definition
       environment.delete_stream(definition.name) if environment.stream_exists?(definition.name)
       container, context = stream_application_context
