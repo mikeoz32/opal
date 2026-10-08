@@ -156,3 +156,19 @@ oidc = LF::Security::OIDCAuthenticator.new(
 expiry, not-before, issuer, and audience. `OIDCAuthenticator` delegates OIDC
 discovery and HTTPS JWKS caching to the JWT shard; its validated `scope` claim
 becomes the Opal authority set by default.
+
+HTTPS is required by default. For local development with an HTTP identity
+provider, explicitly opt in on the authenticator; the configured hostname may
+be a Docker service name rather than `localhost`:
+
+```crystal
+oidc = LF::Security::OIDCAuthenticator.new(
+  "http://keycloak:8080/realms/dev",
+  "opal-api",
+  allow_insecure_http: true,
+)
+```
+
+This opts into HTTP transport only for the configured issuer origin. It does
+not disable JWT signature, issuer, audience, expiry, or not-before validation.
+Do not enable it for production issuers.
