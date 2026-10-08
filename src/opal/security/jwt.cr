@@ -1,6 +1,7 @@
 require "jwt"
 require "jwt/jwks"
 require "./authentication"
+require "./jwt/oidc_validator"
 
 module LF::Security
   # JWT adapters are deliberately opt-in. Applications that use them add
@@ -86,9 +87,8 @@ module LF::Security
     end
   end
 
-  # Uses the maintained JWT shard's HTTPS-only OIDC discovery and JWKS cache.
-  # It accepts only bearer tokens and validates issuer, audience, signature,
-  # expiry, and not-before claims before producing an Opal principal.
+  # Uses the maintained JWT shard for OIDC discovery, JWKS caching, and token
+  # validation. HTTP is available only through explicit opt-in for local setups.
   class OIDCAuthenticator < Authenticator
     def initialize(
       @issuer : String,
@@ -96,8 +96,17 @@ module LF::Security
       @authority_claim = "scope",
       cache_ttl = JWT::JWKS::DEFAULT_CACHE_TTL,
       leeway = JWT::JWKS::DEFAULT_LEEWAY,
+      allow_insecure_http = false,
     )
-      @validator = JWT::JWKS.new(cache_ttl: cache_ttl, leeway: leeway)
+      issuer_uri = URI.parse(@issuer)
+      unless issuer_uri.scheme == "https" || (issuer_uri.scheme == "http" && allow_insecure_http)
+        raise ConfigurationError.new("OIDC issuer must use HTTPS unless allow_insecure_http is enabled")
+      end
+      unless issuer_uri.host && !issuer_uri.host.not_nil!.empty?
+        raise ConfigurationError.new("OIDC issuer must include a hostname")
+      end
+
+      @validator = OIDCValidator.new(@issuer, allow_insecure_http, cache_ttl, leeway)
     end
 
     def authenticate(request : ::HTTP::Request) : Authentication?
